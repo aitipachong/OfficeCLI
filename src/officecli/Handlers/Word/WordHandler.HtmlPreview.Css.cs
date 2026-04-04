@@ -703,7 +703,214 @@ public partial class WordHandler
         if (rProps.RightToLeftText != null && (rProps.RightToLeftText.Val == null || rProps.RightToLeftText.Val.Value))
             parts.Add("direction:rtl;unicode-bidi:bidi-override");
 
+        // w14 text effects (textFill, textOutline, glow, shadow, reflection)
+        AppendW14CssEffects(rProps, parts);
+
         return string.Join(";", parts);
+    }
+
+    private static string HexToRgba(string hexColor, double opacity)
+    {
+        if (hexColor.Length == 7 && int.TryParse(hexColor.AsSpan(1),
+            System.Globalization.NumberStyles.HexNumber, null, out var rgb))
+            return $"rgba({(rgb >> 16) & 0xFF},{(rgb >> 8) & 0xFF},{rgb & 0xFF},{opacity:0.##})";
+        return hexColor;
+    }
+
+    private static void AppendW14CssEffects(RunProperties rProps, List<string> parts)
+    {
+        var textShadows = new List<string>();
+
+        foreach (var child in rProps.ChildElements)
+        {
+            if (child.NamespaceUri != W14Ns) continue;
+
+            switch (child.LocalName)
+            {
+                case "textFill":
+                {
+                    var innerXml = child.InnerXml;
+                    if (innerXml.Contains("gradFill"))
+                    {
+                        var colors = new List<string>();
+                        foreach (System.Text.RegularExpressions.Match m in
+                            System.Text.RegularExpressions.Regex.Matches(innerXml, @"val=""([0-9A-Fa-f]{6})"""))
+                            colors.Add($"#{m.Groups[1].Value}");
+
+                        if (colors.Count >= 2)
+                        {
+                            var isRadial = innerXml.Contains("<w14:path");
+                            var angleMatch = System.Text.RegularExpressions.Regex.Match(innerXml, @"ang=""(\d+)""");
+                            var angle = angleMatch.Success ? int.Parse(angleMatch.Groups[1].Value) / 60000.0 : 0.0;
+
+                            parts.RemoveAll(p => p.StartsWith("color:"));
+
+                            if (isRadial)
+                            {
+                                parts.Add($"background:radial-gradient(circle,{colors[0]},{colors[1]})");
+                            }
+                            else
+                            {
+                                // OOXML: 0°=left→right, 90°=top→bottom
+                                // CSS:   0°=bottom→top,  90°=left→right, 180°=top→bottom
+                                var cssAngle = angle + 90;
+                                parts.Add($"background:linear-gradient({cssAngle:0.##}deg,{colors[0]},{colors[1]})");
+                            }
+                            parts.Add("-webkit-background-clip:text");
+                            parts.Add("background-clip:text");
+                            parts.Add("-webkit-text-fill-color:transparent");
+                        }
+                        else if (colors.Count == 1)
+                        {
+                            parts.RemoveAll(p => p.StartsWith("color:"));
+                            parts.Add($"color:{colors[0]}");
+                        }
+                    }
+                    else if (innerXml.Contains("solidFill"))
+                    {
+                        var colorMatch = System.Text.RegularExpressions.Regex.Match(
+                            innerXml, @"val=""([0-9A-Fa-f]{6})""");
+                        if (colorMatch.Success)
+                        {
+                            parts.RemoveAll(p => p.StartsWith("color:"));
+                            parts.Add($"color:#{colorMatch.Groups[1].Value}");
+                        }
+                    }
+                    break;
+                }
+                case "textOutline":
+                {
+                    var wAttr = child.GetAttributes().FirstOrDefault(a => a.LocalName == "w");
+                    var widthEmu = long.TryParse(wAttr.Value, out var w) ? w : 0;
+                    var widthPt = Math.Max(0.5, widthEmu / 12700.0);
+                    var colorMatch = System.Text.RegularExpressions.Regex.Match(
+                        child.InnerXml, @"val=""([0-9A-Fa-f]{6})""");
+                    var color = colorMatch.Success ? $"#{colorMatch.Groups[1].Value}" : "currentColor";
+                    parts.Add($"-webkit-text-stroke:{widthPt:0.##}pt {color}");
+                    break;
+                }
+                case "shadow":
+                {
+                    var attrs = child.GetAttributes().ToDictionary(a => a.LocalName, a => a.Value);
+                    var colorMatch = System.Text.RegularExpressions.Regex.Match(
+                        child.InnerXml, @"val=""([0-9A-Fa-f]{6})""");
+                    var color = colorMatch.Success ? $"#{colorMatch.Groups[1].Value}" : "#000000";
+                    var blurEmu = attrs.TryGetValue("blurRad", out var br) && long.TryParse(br, out var blurVal) ? blurVal : 0;
+                    var blurPx = blurEmu / 12700.0 * 1.333;
+                    var distEmu = attrs.TryGetValue("dist", out var dist) && long.TryParse(dist, out var distLong) ? distLong : 0;
+                    var dirVal = attrs.TryGetValue("dir", out var dir) && long.TryParse(dir, out var dirLong) ? dirLong : 0;
+                    var angleRad = dirVal / 60000.0 * Math.PI / 180.0;
+                    var distPx = distEmu / 12700.0 * 1.333;
+                    var xPx = distPx * Math.Sin(angleRad);
+                    var yPx = distPx * Math.Cos(angleRad);
+                    var alphaMatch = System.Text.RegularExpressions.Regex.Match(
+                        child.InnerXml, @"alpha[^>]*val=""(\d+)""");
+                    if (alphaMatch.Success && double.TryParse(alphaMatch.Groups[1].Value, out var alphaVal) && alphaVal < 100000)
+                        color = HexToRgba(color, alphaVal / 100000.0);
+                    textShadows.Add($"{xPx:0.#}px {yPx:0.#}px {blurPx:0.#}px {color}");
+                    break;
+                }
+                case "glow":
+                {
+                    var radAttr = child.GetAttributes().FirstOrDefault(a => a.LocalName == "rad");
+                    var radiusEmu = long.TryParse(radAttr.Value, out var r) ? r : 0;
+                    var radiusPx = radiusEmu / 12700.0 * 1.333;
+                    var colorMatch = System.Text.RegularExpressions.Regex.Match(
+                        child.InnerXml, @"val=""([0-9A-Fa-f]{6})""");
+                    var color = colorMatch.Success ? $"#{colorMatch.Groups[1].Value}" : "#000000";
+                    var alphaMatch = System.Text.RegularExpressions.Regex.Match(
+                        child.InnerXml, @"alpha[^>]*val=""(\d+)""");
+                    var alpha = alphaMatch.Success && double.TryParse(alphaMatch.Groups[1].Value, out var av) ? av / 100000.0 : 1.0;
+                    // Multiple stacked text-shadow layers to approximate Word glow spread
+                    // Word glow is a soft halo that extends from text edges; simulate with
+                    // tight + medium + wide shadow layers at decreasing opacity
+                    var c1 = HexToRgba(color, Math.Min(1.0, alpha * 0.9));
+                    var c2 = HexToRgba(color, Math.Min(1.0, alpha * 0.8));
+                    var c3 = HexToRgba(color, Math.Min(1.0, alpha * 0.5));
+                    var c4 = HexToRgba(color, Math.Min(1.0, alpha * 0.25));
+                    textShadows.Add($"0 0 {Math.Max(1, radiusPx * 0.15):0.#}px {c1}");
+                    textShadows.Add($"0 0 {Math.Max(2, radiusPx * 0.5):0.#}px {c2}");
+                    textShadows.Add($"0 0 {Math.Max(4, radiusPx * 1.0):0.#}px {c3}");
+                    textShadows.Add($"0 0 {Math.Max(8, radiusPx * 2.0):0.#}px {c4}");
+                    break;
+                }
+                case "reflection":
+                    // Reflection handled at paragraph level via GetW14ReflectionCss()
+                    // because -webkit-box-reflect on inline spans overlaps content below
+                    break;
+            }
+        }
+
+        if (textShadows.Count > 0)
+            parts.Add($"text-shadow:{string.Join(",", textShadows)}");
+    }
+
+    private static bool HasW14Reflection(Paragraph para)
+    {
+        foreach (var run in para.Elements<Run>())
+        {
+            var rProps = run.RunProperties;
+            if (rProps == null) continue;
+            if (rProps.ChildElements.Any(c => c.NamespaceUri == W14Ns && c.LocalName == "reflection"))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// If any run in the paragraph has w14:reflection, appends a flipped duplicate
+    /// block element below the original to simulate the reflection effect.
+    /// This approach reserves proper layout space (unlike -webkit-box-reflect).
+    /// </summary>
+    private void AppendW14ReflectionBlock(StringBuilder sb, Paragraph para, string tag, string? baseStyle)
+    {
+        // Find the first run with w14:reflection
+        OpenXmlElement? reflectionEl = null;
+        foreach (var run in para.Elements<Run>())
+        {
+            var rProps = run.RunProperties;
+            if (rProps == null) continue;
+            foreach (var child in rProps.ChildElements)
+            {
+                if (child.NamespaceUri == W14Ns && child.LocalName == "reflection")
+                { reflectionEl = child; break; }
+            }
+            if (reflectionEl != null) break;
+        }
+        if (reflectionEl == null) return;
+
+        var attrs = reflectionEl.GetAttributes().ToDictionary(a => a.LocalName, a => a.Value);
+        var stA = attrs.TryGetValue("stA", out var sa) && int.TryParse(sa, out var saVal) ? saVal / 1000.0 : 50.0;
+        var endA = attrs.TryGetValue("endA", out var ea) && int.TryParse(ea, out var eaVal) ? eaVal / 1000.0 : 0.0;
+        var endPos = attrs.TryGetValue("endPos", out var ep) && int.TryParse(ep, out var epVal) ? epVal / 1000.0 : 90.0;
+        var distEmu = attrs.TryGetValue("dist", out var d) && long.TryParse(d, out var dVal) ? dVal : 0;
+        var blurEmu = attrs.TryGetValue("blurRad", out var br) && long.TryParse(br, out var brVal) ? brVal : 0;
+        var distPx = distEmu / 12700.0 * 1.333;
+        var blurPx = blurEmu / 12700.0 * 1.333;
+
+        // Build the reflection element: flipped, fading, non-interactive
+        var reflectStyle = new List<string>();
+        if (!string.IsNullOrEmpty(baseStyle)) reflectStyle.Add(baseStyle);
+        reflectStyle.Add("transform:scaleY(-1)");
+        reflectStyle.Add("margin:0");
+        reflectStyle.Add($"padding-top:{distPx:0.#}px");
+        reflectStyle.Add("overflow:hidden");
+        reflectStyle.Add("pointer-events:none");
+        reflectStyle.Add("user-select:none");
+        reflectStyle.Add("text-shadow:none");
+        // Gradient mask: opaque at bottom (nearest to original text) → transparent at top
+        // Since the element is scaleY(-1) with transform-origin:top, the visual top is the
+        // reflected bottom of the text (closest to original). Mask goes from fully opaque
+        // at bottom to transparent at top in the element's own coordinate space.
+        var maskPct = 100.0 - endPos;  // where full transparency starts
+        reflectStyle.Add($"-webkit-mask-image:linear-gradient(to top,rgba(0,0,0,{stA / 100.0:0.##}) {maskPct:0.#}%,rgba(0,0,0,{endA / 100.0:0.###}) 100%)");
+        reflectStyle.Add($"mask-image:linear-gradient(to top,rgba(0,0,0,{stA / 100.0:0.##}) {maskPct:0.#}%,rgba(0,0,0,{endA / 100.0:0.###}) 100%)");
+        if (blurPx > 0)
+            reflectStyle.Add($"filter:blur({blurPx:0.#}px)");
+
+        sb.Append($"<{tag} aria-hidden=\"true\" style=\"{string.Join(";", reflectStyle)}\">");
+        RenderParagraphContentHtml(sb, para);
+        sb.AppendLine($"</{tag}>");
     }
 
     private string GetTableCellInlineCss(TableCell cell, bool tableBordersNone, TableBorders? tblBorders = null,

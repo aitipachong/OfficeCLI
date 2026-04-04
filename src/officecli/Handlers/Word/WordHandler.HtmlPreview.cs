@@ -1012,13 +1012,19 @@ public partial class WordHandler
 
                 if (headingLevel > 0)
                 {
+                    var hasReflect = HasW14Reflection(para);
                     sb.Append($"<h{headingLevel}");
                     var hStyle = GetParagraphInlineCss(para);
+                    // Remove bottom spacing when reflection follows immediately
+                    if (hasReflect)
+                        hStyle = string.IsNullOrEmpty(hStyle) ? "margin-bottom:0" : $"{hStyle};margin-bottom:0";
                     if (!string.IsNullOrEmpty(hStyle))
                         sb.Append($" style=\"{hStyle}\"");
                     sb.Append(">");
                     RenderParagraphContentHtml(sb, para);
                     sb.AppendLine($"</h{headingLevel}>");
+                    if (hasReflect)
+                        AppendW14ReflectionBlock(sb, para, $"h{headingLevel}", GetParagraphInlineCss(para));
                 }
                 else
                 {
@@ -1067,6 +1073,7 @@ public partial class WordHandler
                     sb.Append(">");
                     RenderParagraphContentHtml(sb, para);
                     sb.AppendLine("</p>");
+                    AppendW14ReflectionBlock(sb, para, "p", pStyle);
                 }
             }
             else if (element.LocalName == "oMathPara" || element is M.Paragraph)

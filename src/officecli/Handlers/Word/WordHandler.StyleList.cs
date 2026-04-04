@@ -141,6 +141,17 @@ public partial class WordHandler
             target.RemoveAllChildren<Border>();
             target.AppendChild(srcBdr.CloneNode(true));
         }
+
+        // w14 text effects (textFill, textOutline, glow, shadow, reflection)
+        foreach (var child in source.ChildElements)
+        {
+            if (child.NamespaceUri != "http://schemas.microsoft.com/office/word/2010/wordml") continue;
+            // Remove existing w14 element with same local name, then add the new one
+            var existing = target.ChildElements.FirstOrDefault(
+                e => e.NamespaceUri == child.NamespaceUri && e.LocalName == child.LocalName);
+            if (existing != null) target.RemoveChild(existing);
+            target.AppendChild(child.CloneNode(true));
+        }
     }
 
     private static string? GetFontFromProperties(RunProperties? rProps)
