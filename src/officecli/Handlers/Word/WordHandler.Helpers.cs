@@ -1744,6 +1744,20 @@ public partial class WordHandler
                 para.TextId = newId;
             }
         }
+
+        // Ensure mc:Ignorable includes "w14" so Word 2007 skips w14:paraId/textId attributes
+        var doc = mainPart.Document;
+        const string mcNs = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+        if (doc.LookupNamespace("mc") == null)
+            doc.AddNamespaceDeclaration("mc", mcNs);
+        if (doc.LookupNamespace("w14") == null)
+            doc.AddNamespaceDeclaration("w14", "http://schemas.microsoft.com/office/word/2010/wordml");
+        var ignorable = doc.MCAttributes?.Ignorable?.Value ?? "";
+        if (!ignorable.Contains("w14"))
+        {
+            doc.MCAttributes ??= new DocumentFormat.OpenXml.MarkupCompatibilityAttributes();
+            doc.MCAttributes.Ignorable = string.IsNullOrEmpty(ignorable) ? "w14" : $"{ignorable} w14";
+        }
     }
 
     // ==================== DocPr IDs (pictures, charts) ====================
