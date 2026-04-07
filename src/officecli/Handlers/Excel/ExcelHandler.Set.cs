@@ -1168,10 +1168,20 @@ public partial class ExcelHandler
                     break;
                 }
                 default:
-                    if (!GenericXmlQuery.SetGenericAttribute(cell, key, value))
+                    // Check for known flat-key misuse first, even before generic
+                    // attribute fallback — otherwise user typos like `size=14`
+                    // would be silently written as unknown XML attributes.
+                    var cellHint = CellPropHints.TryGetHint(key);
+                    if (cellHint != null)
+                    {
+                        unsupported.Add(cellHint);
+                    }
+                    else if (!GenericXmlQuery.SetGenericAttribute(cell, key, value))
+                    {
                         unsupported.Add(unsupported.Count == 0
                             ? $"{key} (valid cell props: value, formula, arrayformula, type, clear, link, bold, italic, strike, underline, superscript, subscript, font.color, font.size, font.name, fill, border.all, alignment.horizontal, numfmt, locked, formulahidden)"
                             : key);
+                    }
                     break;
             }
         }
