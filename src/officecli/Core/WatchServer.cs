@@ -1186,10 +1186,14 @@ public class WatchServer : IDisposable
         await stream.WriteAsync(header, token);
 
         _lastActivityTime = DateTime.UtcNow;
-        lock (_sseLock) { _sseClients.Add(stream); }
 
         // Send the current selection immediately so the new client can highlight
-        // any elements that are already selected by other browsers viewing the same file.
+        // any elements that are already selected by other browsers viewing the same
+        // file. CRITICAL: this write must happen BEFORE adding the stream to
+        // _sseClients. Otherwise BroadcastSse (running on another thread under
+        // _sseLock) could write to the same stream at the same time we are writing
+        // the initial event here, and NetworkStream is not safe for concurrent writes
+        // — interleaved bytes would corrupt SSE framing.
         try
         {
             string[] snapshot;
@@ -1206,6 +1210,10 @@ public class WatchServer : IDisposable
             await stream.WriteAsync(initEvt, token);
         }
         catch { }
+
+        // Now safe to register: any subsequent BroadcastSse will serialize against
+        // future writes via _sseLock.
+        lock (_sseLock) { _sseClients.Add(stream); }
 
         try
         {
