@@ -461,6 +461,22 @@ internal static class PivotTableHelper
         if (pivotCaches != null)
             cacheId = pivotCaches.Elements<PivotCache>().Select(pc => pc.CacheId?.Value ?? 0u).DefaultIfEmpty(0u).Max() + 1;
 
+        // 3b. Collect all existing pivot names in the workbook so we can
+        // reject duplicates (user-supplied) or auto-increment past collisions
+        // (default name). Excel auto-renames on open to avoid the clash, but
+        // the file as written with a duplicate is confusing and breaks any
+        // downstream consumer keying pivots by name. R6-1.
+        var existingPivotNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var wsp in workbookPart.WorksheetParts)
+        {
+            foreach (var ptp in wsp.PivotTableParts)
+            {
+                var existingName = ptp.PivotTableDefinition?.Name?.Value;
+                if (!string.IsNullOrEmpty(existingName))
+                    existingPivotNames.Add(existingName);
+            }
+        }
+
         // 4. Create PivotTableCacheDefinitionPart at workbook level
         var cachePart = workbookPart.AddNewPart<PivotTableCacheDefinitionPart>();
         var cacheRelId = workbookPart.GetIdOfPart(cachePart);
@@ -521,7 +537,30 @@ internal static class PivotTableHelper
         // Link pivot table to cache definition
         pivotPart.AddPart(cachePart);
 
-        var pivotName = properties.GetValueOrDefault("name", $"PivotTable{cacheId + 1}");
+        string pivotName;
+        if (properties.TryGetValue("name", out var explicitName) && !string.IsNullOrEmpty(explicitName))
+        {
+            // R6-1: user-supplied name must be unique within the workbook.
+            // Throw ArgumentException rather than silently allowing the
+            // collision (Excel would auto-rename on open, but the on-disk
+            // file would still carry two pivots with the same name).
+            if (existingPivotNames.Contains(explicitName))
+                throw new ArgumentException($"Pivot name '{explicitName}' already exists in workbook");
+            pivotName = explicitName;
+        }
+        else
+        {
+            // R6-1: auto-generated default names must also avoid collisions
+            // (two pivots on different sheets otherwise both pick
+            // PivotTable{cacheId+1} with the same cacheId path).
+            pivotName = $"PivotTable{cacheId + 1}";
+            int bump = 1;
+            while (existingPivotNames.Contains(pivotName))
+            {
+                bump++;
+                pivotName = $"PivotTable{cacheId + bump}";
+            }
+        }
         var style = properties.GetValueOrDefault("style", "PivotStyleLight16");
 
         // Resolve per-column numFmtId from the source StyleIndex so we can stamp
