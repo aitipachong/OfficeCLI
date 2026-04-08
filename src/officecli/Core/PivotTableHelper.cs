@@ -3256,6 +3256,15 @@ internal static class PivotTableHelper
 
         var startColIdx = ColToIndex(startCol);
         var endColIdx = ColToIndex(endCol);
+        // R6-3: reject columns beyond Excel's hard max (XFD = 16384). Previously
+        // XFE / XFZ / ZZZZ silently parsed into oversized indices, produced a
+        // giant colCount, and either crashed deep in the renderer or wrote an
+        // invalid source range into the cache.
+        const int ExcelMaxColumn = 16384; // XFD
+        if (startColIdx > ExcelMaxColumn)
+            throw new ArgumentException($"Column {startCol} out of range (max: XFD)");
+        if (endColIdx > ExcelMaxColumn)
+            throw new ArgumentException($"Column {endCol} out of range (max: XFD)");
         var colCount = endColIdx - startColIdx + 1;
 
         // Read all rows in range. We also capture the StyleIndex of the first
