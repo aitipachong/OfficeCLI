@@ -376,11 +376,16 @@ internal static class UpdateChecker
         catch { return new AppConfig(); }
     }
 
-    private static void SaveConfig(AppConfig config)
+    internal static void SaveConfig(AppConfig config)
     {
+        Directory.CreateDirectory(ConfigDir);
         var json = JsonSerializer.Serialize(config, AppConfigContext.Default.AppConfig);
         File.WriteAllText(ConfigPath, json);
     }
+
+    internal static string? GetCurrentVersionPublic() => GetCurrentVersion();
+
+    internal static bool IsNewerPublic(string latest, string current) => IsNewer(latest, current);
 }
 
 internal class AppConfig
@@ -389,6 +394,7 @@ internal class AppConfig
     public string? LatestVersion { get; set; }
     public bool AutoUpdate { get; set; } = true;
     public bool Log { get; set; }
+    public string? InstalledBinaryVersion { get; set; }
 }
 
 [JsonSerializable(typeof(AppConfig))]

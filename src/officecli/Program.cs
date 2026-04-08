@@ -104,6 +104,10 @@ if (args.Length >= 2 && args[0] == "config")
 // Log command
 OfficeCli.Core.CliLogger.LogCommand(args);
 
+// Auto-install: if running outside ~/.local/bin/officecli, copy self there.
+// Fresh install → full Run() (binary + skills + MCP). Upgrade → binary only.
+OfficeCli.Core.Installer.MaybeAutoInstall(args);
+
 // Non-blocking update check: spawns background upgrade if stale
 if (Environment.GetEnvironmentVariable("OFFICECLI_SKIP_UPDATE") != "1")
     OfficeCli.Core.UpdateChecker.CheckInBackground();
