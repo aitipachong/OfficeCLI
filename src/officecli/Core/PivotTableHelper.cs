@@ -34,7 +34,7 @@ internal static class PivotTableHelper
         Dictionary<string, string> properties)
     {
         // 1. Read source data to build cache
-        var (headers, columnData) = ReadSourceData(sourceSheet, sourceRef);
+        var (headers, columnData, columnStyleIds) = ReadSourceData(sourceSheet, sourceRef);
         if (headers.Length == 0)
             throw new ArgumentException("Source range has no data");
 
@@ -110,9 +110,17 @@ internal static class PivotTableHelper
         var pivotName = properties.GetValueOrDefault("name", $"PivotTable{cacheId + 1}");
         var style = properties.GetValueOrDefault("style", "PivotStyleLight16");
 
+        // Resolve per-column numFmtId from the source StyleIndex so we can stamp
+        // it onto DataField elements below. Excel uses DataField.NumberFormatId
+        // as the PRIMARY display driver for pivot values — the cell-level
+        // StyleIndex alone is not enough; without this, Excel renders pivot
+        // values as plain General-format numbers even though the rendered cells
+        // carry the correct style.
+        var columnNumFmtIds = ResolveColumnNumFmtIds(workbookPart, columnStyleIds);
+
         var pivotDef = BuildPivotTableDefinition(
             pivotName, cacheId, position, headers, columnData,
-            rowFields, colFields, filterFields, valueFields, style);
+            rowFields, colFields, filterFields, valueFields, style, columnNumFmtIds);
         pivotPart.PivotTableDefinition = pivotDef;
         pivotPart.PivotTableDefinition.Save();
 
@@ -136,7 +144,7 @@ internal static class PivotTableHelper
         // Those configs are tracked as a v2 expansion.
         RenderPivotIntoSheet(
             targetSheet, position, headers, columnData,
-            rowFields, colFields, valueFields, filterFields);
+            rowFields, colFields, valueFields, filterFields, columnStyleIds);
 
         // Return 1-based index
         return targetSheet.PivotTableParts.ToList().IndexOf(pivotPart) + 1;
@@ -591,8 +599,24 @@ internal static class PivotTableHelper
         string[] headers, List<string[]> columnData,
         List<int> rowFieldIndices, List<int> colFieldIndices,
         List<(int idx, string func, string name)> valueFields,
-        List<int>? filterFieldIndices = null)
+        List<int>? filterFieldIndices = null,
+        uint?[]? columnStyleIds = null)
     {
+        // Per-data-field style index: pivot value cells for data field d inherit
+        // the source column's StyleIndex (number format). A null entry means the
+        // source cell had no explicit style → pivot cell stays General.
+        int dataFieldCount = Math.Max(1, valueFields.Count);
+        var valueStyleIds = new uint?[dataFieldCount];
+        if (columnStyleIds != null)
+        {
+            for (int d = 0; d < valueFields.Count; d++)
+            {
+                var srcIdx = valueFields[d].idx;
+                if (srcIdx >= 0 && srcIdx < columnStyleIds.Length)
+                    valueStyleIds[d] = columnStyleIds[srcIdx];
+            }
+        }
+
         // v3 limits: dispatch based on field-count combinations.
         //   1 row × 1 col × K data → single-row K-data renderer below
         //   2 row × 1 col × 1 data → multi-row renderer (RenderMultiRowPivot)
@@ -604,26 +628,26 @@ internal static class PivotTableHelper
         if (rowFieldIndices.Count >= 3 || colFieldIndices.Count >= 3)
         {
             RenderGeneralPivot(targetSheet, position, headers, columnData,
-                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices);
+                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices, valueStyleIds);
             return;
         }
 
         if (rowFieldIndices.Count == 2 && colFieldIndices.Count == 2 && valueFields.Count >= 1)
         {
             RenderMatrixPivot(targetSheet, position, headers, columnData,
-                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices);
+                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices, valueStyleIds);
             return;
         }
         if (rowFieldIndices.Count == 2 && colFieldIndices.Count == 1 && valueFields.Count >= 1)
         {
             RenderMultiRowPivot(targetSheet, position, headers, columnData,
-                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices);
+                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices, valueStyleIds);
             return;
         }
         if (rowFieldIndices.Count == 1 && colFieldIndices.Count == 2 && valueFields.Count >= 1)
         {
             RenderMultiColPivot(targetSheet, position, headers, columnData,
-                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices);
+                rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices, valueStyleIds);
             return;
         }
 
@@ -834,13 +858,13 @@ internal static class PivotTableHelper
                     int colIdx = anchorColIdx + 1 + c * K + d;
                     var v = matrix[r, c, d];
                     if (v.HasValue)
-                        dataRow.AppendChild(MakeNumericCell(colIdx, rowIdx, v.Value));
+                        dataRow.AppendChild(MakeNumericCell(colIdx, rowIdx, v.Value, valueStyleIds[d]));
                 }
             }
             // Row totals — K cells (one per data field).
             int rowTotalStart = anchorColIdx + 1 + uniqueCols.Count * K;
             for (int d = 0; d < K; d++)
-                dataRow.AppendChild(MakeNumericCell(rowTotalStart + d, rowIdx, rowTotals[r, d]));
+                dataRow.AppendChild(MakeNumericCell(rowTotalStart + d, rowIdx, rowTotals[r, d], valueStyleIds[d]));
             sheetData.AppendChild(dataRow);
         }
 
@@ -853,12 +877,12 @@ internal static class PivotTableHelper
             for (int d = 0; d < K; d++)
             {
                 int colIdx = anchorColIdx + 1 + c * K + d;
-                grandRow.AppendChild(MakeNumericCell(colIdx, grandRowIdx, colTotals[c, d]));
+                grandRow.AppendChild(MakeNumericCell(colIdx, grandRowIdx, colTotals[c, d], valueStyleIds[d]));
             }
         }
         int grandTotalStart = anchorColIdx + 1 + uniqueCols.Count * K;
         for (int d = 0; d < K; d++)
-            grandRow.AppendChild(MakeNumericCell(grandTotalStart + d, grandRowIdx, grandTotals[d]));
+            grandRow.AppendChild(MakeNumericCell(grandTotalStart + d, grandRowIdx, grandTotals[d], valueStyleIds[d]));
         sheetData.AppendChild(grandRow);
 
         // Page filter cells: rendered ABOVE the table at rows
@@ -938,7 +962,8 @@ internal static class PivotTableHelper
         string[] headers, List<string[]> columnData,
         List<int> rowFieldIndices, List<int> colFieldIndices,
         List<(int idx, string func, string name)> valueFields,
-        List<int>? filterFieldIndices)
+        List<int>? filterFieldIndices,
+        uint?[] valueStyleIds)
     {
         var outerFieldIdx = rowFieldIndices[0];
         var innerFieldIdx = rowFieldIndices[1];
@@ -1133,11 +1158,11 @@ internal static class PivotTableHelper
                 {
                     var v = OuterSubtotalForCol(outer, uniqueCols[c], d);
                     if (any || v != 0)
-                        subRow.AppendChild(MakeNumericCell(LeafColIdx(c, d), currentRow, v));
+                        subRow.AppendChild(MakeNumericCell(LeafColIdx(c, d), currentRow, v, valueStyleIds[d]));
                 }
             }
             for (int d = 0; d < K; d++)
-                subRow.AppendChild(MakeNumericCell(GrandTotalColIdx(d), currentRow, OuterRowTotal(outer, d)));
+                subRow.AppendChild(MakeNumericCell(GrandTotalColIdx(d), currentRow, OuterRowTotal(outer, d), valueStyleIds[d]));
             sheetData.AppendChild(subRow);
             currentRow++;
 
@@ -1152,11 +1177,11 @@ internal static class PivotTableHelper
                     {
                         var v = LeafCell(outer, inner, uniqueCols[c], d);
                         if (!double.IsNaN(v))
-                            leafRow.AppendChild(MakeNumericCell(LeafColIdx(c, d), currentRow, v));
+                            leafRow.AppendChild(MakeNumericCell(LeafColIdx(c, d), currentRow, v, valueStyleIds[d]));
                     }
                 }
                 for (int d = 0; d < K; d++)
-                    leafRow.AppendChild(MakeNumericCell(GrandTotalColIdx(d), currentRow, LeafRowTotal(outer, inner, d)));
+                    leafRow.AppendChild(MakeNumericCell(GrandTotalColIdx(d), currentRow, LeafRowTotal(outer, inner, d), valueStyleIds[d]));
                 sheetData.AppendChild(leafRow);
                 currentRow++;
             }
@@ -1167,10 +1192,10 @@ internal static class PivotTableHelper
         grandRow.AppendChild(MakeStringCell(anchorColIdx, currentRow, totalLabel));
         for (int c = 0; c < uniqueCols.Count; c++)
             for (int d = 0; d < K; d++)
-                grandRow.AppendChild(MakeNumericCell(LeafColIdx(c, d), currentRow, ColTotal(uniqueCols[c], d)));
+                grandRow.AppendChild(MakeNumericCell(LeafColIdx(c, d), currentRow, ColTotal(uniqueCols[c], d), valueStyleIds[d]));
         for (int d = 0; d < K; d++)
             grandRow.AppendChild(MakeNumericCell(GrandTotalColIdx(d), currentRow,
-                Reduce(perDataField[d], valueFields[d].func)));
+                Reduce(perDataField[d], valueFields[d].func), valueStyleIds[d]));
         sheetData.AppendChild(grandRow);
 
         // Page filter cells reuse the single-row path's logic — same shape, same
@@ -1230,7 +1255,8 @@ internal static class PivotTableHelper
         string[] headers, List<string[]> columnData,
         List<int> rowFieldIndices, List<int> colFieldIndices,
         List<(int idx, string func, string name)> valueFields,
-        List<int>? filterFieldIndices)
+        List<int>? filterFieldIndices,
+        uint?[] valueStyleIds)
     {
         var rowFieldIdx = rowFieldIndices[0];
         var outerColIdx = colFieldIndices[0];
@@ -1494,7 +1520,7 @@ internal static class PivotTableHelper
                     {
                         var v = LeafCell(uniqueRows[r], outer, inner, d);
                         if (!double.IsNaN(v))
-                            dataRow.AppendChild(MakeNumericCell(leafColPositions[(outer, inner, d)], rowIdx, v));
+                            dataRow.AppendChild(MakeNumericCell(leafColPositions[(outer, inner, d)], rowIdx, v, valueStyleIds[d]));
                     }
                 }
                 // Outer col subtotal cells (K per outer).
@@ -1503,12 +1529,12 @@ internal static class PivotTableHelper
                 {
                     var sub = OuterColSubtotalForRow(uniqueRows[r], outer, d);
                     if (sub != 0 || any)
-                        dataRow.AppendChild(MakeNumericCell(subtotalColPositions[(outer, d)], rowIdx, sub));
+                        dataRow.AppendChild(MakeNumericCell(subtotalColPositions[(outer, d)], rowIdx, sub, valueStyleIds[d]));
                 }
             }
 
             for (int d = 0; d < K; d++)
-                dataRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], rowIdx, RowGrandTotal(uniqueRows[r], d)));
+                dataRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], rowIdx, RowGrandTotal(uniqueRows[r], d), valueStyleIds[d]));
             sheetData.AppendChild(dataRow);
         }
 
@@ -1521,13 +1547,13 @@ internal static class PivotTableHelper
             foreach (var inner in inners)
                 for (int d = 0; d < K; d++)
                     grandRow.AppendChild(MakeNumericCell(leafColPositions[(outer, inner, d)], grandRowIdx,
-                        LeafColTotal(outer, inner, d)));
+                        LeafColTotal(outer, inner, d), valueStyleIds[d]));
             for (int d = 0; d < K; d++)
-                grandRow.AppendChild(MakeNumericCell(subtotalColPositions[(outer, d)], grandRowIdx, OuterColTotal(outer, d)));
+                grandRow.AppendChild(MakeNumericCell(subtotalColPositions[(outer, d)], grandRowIdx, OuterColTotal(outer, d), valueStyleIds[d]));
         }
         for (int d = 0; d < K; d++)
             grandRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], grandRowIdx,
-                Reduce(perDataField[d], valueFields[d].func)));
+                Reduce(perDataField[d], valueFields[d].func), valueStyleIds[d]));
         sheetData.AppendChild(grandRow);
 
         // Page filter cells (same logic as the single-row renderer).
@@ -1587,7 +1613,8 @@ internal static class PivotTableHelper
         string[] headers, List<string[]> columnData,
         List<int> rowFieldIndices, List<int> colFieldIndices,
         List<(int idx, string func, string name)> valueFields,
-        List<int>? filterFieldIndices)
+        List<int>? filterFieldIndices,
+        uint?[] valueStyleIds)
     {
         var rowOuterIdx = rowFieldIndices[0];
         var rowInnerIdx = rowFieldIndices[1];
@@ -1883,7 +1910,7 @@ internal static class PivotTableHelper
                     {
                         var v = OuterRowLeafCell(rowOuter, colOuter, colInner, d);
                         if (v != 0 || any)
-                            outerSubRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v));
+                            outerSubRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v, valueStyleIds[d]));
                     }
                 }
                 bool anyOuter = HasAnyValueInOuterRowOuterCol(rowOuter, colOuter, rowGroups, colGroups, bucket, K);
@@ -1891,11 +1918,11 @@ internal static class PivotTableHelper
                 {
                     var sub = OuterRowColSub(rowOuter, colOuter, d);
                     if (sub != 0 || anyOuter)
-                        outerSubRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub));
+                        outerSubRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub, valueStyleIds[d]));
                 }
             }
             for (int d = 0; d < K; d++)
-                outerSubRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx, OuterRowGrandTotal(rowOuter, d)));
+                outerSubRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx, OuterRowGrandTotal(rowOuter, d), valueStyleIds[d]));
             sheetData.AppendChild(outerSubRow);
             currentRowIdx++;
 
@@ -1912,7 +1939,7 @@ internal static class PivotTableHelper
                         {
                             var v = LeafCell(rowOuter, rowInner, colOuter, colInner, d);
                             if (!double.IsNaN(v))
-                                leafRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v));
+                                leafRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v, valueStyleIds[d]));
                         }
                     }
                     bool any = HasAnyValueInLeafRowCol(rowOuter, rowInner, colOuter, colGroups, bucket, K);
@@ -1920,11 +1947,11 @@ internal static class PivotTableHelper
                     {
                         var sub = LeafRowColSub(rowOuter, rowInner, colOuter, d);
                         if (sub != 0 || any)
-                            leafRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub));
+                            leafRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub, valueStyleIds[d]));
                     }
                 }
                 for (int d = 0; d < K; d++)
-                    leafRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx, LeafRowGrandTotal(rowOuter, rowInner, d)));
+                    leafRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx, LeafRowGrandTotal(rowOuter, rowInner, d), valueStyleIds[d]));
                 sheetData.AppendChild(leafRow);
                 currentRowIdx++;
             }
@@ -1938,13 +1965,13 @@ internal static class PivotTableHelper
             foreach (var colInner in colInners)
                 for (int d = 0; d < K; d++)
                     grandRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx,
-                        GrandRowLeafCol(colOuter, colInner, d)));
+                        GrandRowLeafCol(colOuter, colInner, d), valueStyleIds[d]));
             for (int d = 0; d < K; d++)
-                grandRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, GrandRowColSub(colOuter, d)));
+                grandRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, GrandRowColSub(colOuter, d), valueStyleIds[d]));
         }
         for (int d = 0; d < K; d++)
             grandRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx,
-                Reduce(perDataField[d], valueFields[d].func)));
+                Reduce(perDataField[d], valueFields[d].func), valueStyleIds[d]));
         sheetData.AppendChild(grandRow);
 
         // Page filter cells (same logic as the other renderers).
@@ -2001,7 +2028,8 @@ internal static class PivotTableHelper
         string[] headers, List<string[]> columnData,
         List<int> rowFieldIndices, List<int> colFieldIndices,
         List<(int idx, string func, string name)> valueFields,
-        List<int>? filterFieldIndices)
+        List<int>? filterFieldIndices,
+        uint?[] valueStyleIds)
     {
         int K = Math.Max(1, valueFields.Count);
         var rowTree = BuildAxisTree(rowFieldIndices, columnData);
@@ -2305,7 +2333,7 @@ internal static class PivotTableHelper
                     // Skip 0-value cells when there are no underlying values to
                     // mirror Excel's behavior of leaving sparse intersections blank.
                     if (any || v != 0)
-                        row.AppendChild(MakeNumericCell(colIdxByPosition[cp, d], rowIdx, v));
+                        row.AppendChild(MakeNumericCell(colIdxByPosition[cp, d], rowIdx, v, valueStyleIds[d]));
                 }
             }
 
@@ -2313,7 +2341,7 @@ internal static class PivotTableHelper
             var grandRowNode = new AxisNode(string.Empty, 0, Array.Empty<string>());
             for (int d = 0; d < K; d++)
                 row.AppendChild(MakeNumericCell(grandTotalColStart + d, rowIdx,
-                    ComputeCell(rowNode, grandRowNode, d)));
+                    ComputeCell(rowNode, grandRowNode, d), valueStyleIds[d]));
             sheetData.AppendChild(row);
         }
 
@@ -2328,12 +2356,12 @@ internal static class PivotTableHelper
             for (int d = 0; d < K; d++)
             {
                 var v = ComputeCell(grandRowNodeFinal, colNode, d);
-                grandRow.AppendChild(MakeNumericCell(colIdxByPosition[cp, d], grandRowIdx, v));
+                grandRow.AppendChild(MakeNumericCell(colIdxByPosition[cp, d], grandRowIdx, v, valueStyleIds[d]));
             }
         }
         for (int d = 0; d < K; d++)
             grandRow.AppendChild(MakeNumericCell(grandTotalColStart + d, grandRowIdx,
-                ComputeCell(grandRowNodeFinal, grandRowNodeFinal, d)));
+                ComputeCell(grandRowNodeFinal, grandRowNodeFinal, d), valueStyleIds[d]));
         sheetData.AppendChild(grandRow);
 
         // Page filter cells (same logic as the other renderers).
@@ -2484,24 +2512,33 @@ internal static class PivotTableHelper
         };
     }
 
-    /// <summary>Numeric cell with the value serialized using invariant culture.</summary>
-    private static Cell MakeNumericCell(int colIdx, int rowIdx, double value)
+    /// <summary>
+    /// Numeric cell with the value serialized using invariant culture.
+    /// When <paramref name="styleIndex"/> is provided, the cell carries that
+    /// styles.xml cellXfs index — used to inherit the source column's number
+    /// format (currency, percentage, custom format) onto pivot value cells so
+    /// the pivot displays "¥1,234.50" rather than the raw "1234.5".
+    /// </summary>
+    private static Cell MakeNumericCell(int colIdx, int rowIdx, double value, uint? styleIndex = null)
     {
-        return new Cell
+        var cell = new Cell
         {
             CellReference = $"{IndexToCol(colIdx)}{rowIdx}",
             CellValue = new CellValue(value.ToString("R", System.Globalization.CultureInfo.InvariantCulture))
         };
+        if (styleIndex.HasValue)
+            cell.StyleIndex = styleIndex.Value;
+        return cell;
     }
 
     // ==================== Source Data Reader ====================
 
-    private static (string[] headers, List<string[]> columnData) ReadSourceData(
+    private static (string[] headers, List<string[]> columnData, uint?[] columnStyleIds) ReadSourceData(
         WorksheetPart sourceSheet, string sourceRef)
     {
         var ws = sourceSheet.Worksheet ?? throw new InvalidOperationException("Worksheet missing");
         var sheetData = ws.GetFirstChild<SheetData>();
-        if (sheetData == null) return (Array.Empty<string>(), new List<string[]>());
+        if (sheetData == null) return (Array.Empty<string>(), new List<string[]>(), Array.Empty<uint?>());
 
         // Parse range "A1:D100"
         var parts = sourceRef.Replace("$", "").Split(':');
@@ -2514,8 +2551,13 @@ internal static class PivotTableHelper
         var endColIdx = ColToIndex(endCol);
         var colCount = endColIdx - startColIdx + 1;
 
-        // Read all rows in range
+        // Read all rows in range. We also capture the StyleIndex of the first
+        // non-empty data cell per column (skipping the header row) so pivot
+        // value cells can inherit the source column's number format. This
+        // mirrors how Excel's pivot engine picks the column format: it looks
+        // at the data-area formatting, not the header.
         var rows = new List<string[]>();
+        var columnStyleIds = new uint?[colCount];
         var sst = sourceSheet.OpenXmlPackage is SpreadsheetDocument doc
             ? doc.WorkbookPart?.GetPartsOfType<SharedStringTablePart>().FirstOrDefault()
             : null;
@@ -2534,11 +2576,17 @@ internal static class PivotTableHelper
                 if (ci < 0 || ci >= colCount) continue;
 
                 values[ci] = GetCellText(cell, sst);
+
+                // Capture style from first non-header data cell per column.
+                // rowIdx > startRow skips the header row; we keep the first
+                // one we encounter and ignore subsequent rows.
+                if (rowIdx > startRow && columnStyleIds[ci] == null && cell.StyleIndex?.Value is uint sIdx && sIdx != 0)
+                    columnStyleIds[ci] = sIdx;
             }
             rows.Add(values);
         }
 
-        if (rows.Count == 0) return (Array.Empty<string>(), new List<string[]>());
+        if (rows.Count == 0) return (Array.Empty<string>(), new List<string[]>(), Array.Empty<uint?>());
 
         // First row = headers (ensure no nulls)
         var headers = rows[0].Select(h => h ?? "").ToArray();
@@ -2552,7 +2600,7 @@ internal static class PivotTableHelper
             columnDataList.Add(colVals);
         }
 
-        return (headers, columnDataList);
+        return (headers, columnDataList, columnStyleIds);
     }
 
     private static string GetCellText(Cell cell, SharedStringTablePart? sst)
@@ -2751,12 +2799,39 @@ internal static class PivotTableHelper
 
     // ==================== Pivot Table Definition Builder ====================
 
+    /// <summary>
+    /// Resolve each source column's StyleIndex into the numFmtId that Excel
+    /// actually needs on DataField. Returns null entries for columns whose
+    /// source cell had no explicit style (→ General) so the caller can leave
+    /// DataField.NumberFormatId unset.
+    /// </summary>
+    private static uint?[] ResolveColumnNumFmtIds(WorkbookPart workbookPart, uint?[] columnStyleIds)
+    {
+        var result = new uint?[columnStyleIds.Length];
+        var stylesPart = workbookPart.WorkbookStylesPart;
+        var cellXfs = stylesPart?.Stylesheet?.CellFormats?.Elements<CellFormat>().ToList();
+        if (cellXfs == null) return result;
+        for (int i = 0; i < columnStyleIds.Length; i++)
+        {
+            var sIdx = columnStyleIds[i];
+            if (!sIdx.HasValue) continue;
+            if (sIdx.Value >= cellXfs.Count) continue;
+            var xf = cellXfs[(int)sIdx.Value];
+            var numFmtId = xf.NumberFormatId?.Value;
+            // numFmtId == 0 is General → no-op, skip so DataField stays plain
+            if (numFmtId.HasValue && numFmtId.Value != 0)
+                result[i] = numFmtId.Value;
+        }
+        return result;
+    }
+
     private static PivotTableDefinition BuildPivotTableDefinition(
         string name, uint cacheId, string position,
         string[] headers, List<string[]> columnData,
         List<int> rowFieldIndices, List<int> colFieldIndices,
         List<int> filterFieldIndices, List<(int idx, string func, string name)> valueFields,
-        string styleName)
+        string styleName,
+        uint?[]? columnNumFmtIds = null)
     {
         var pivotDef = new PivotTableDefinition
         {
@@ -2931,14 +3006,25 @@ internal static class PivotTableHelper
                 // Following the verified pattern rather than my earlier "omit them"
                 // theory — being closer to what real producers write reduces the risk
                 // of triggering picky consumers.
-                df.AppendChild(new DataField
+                var dataField = new DataField
                 {
                     Name = displayName,
                     Field = (uint)idx,
                     Subtotal = ParseSubtotal(func),
                     BaseField = 0,
                     BaseItem = 0u
-                });
+                };
+                // Inherit the source column's numFmtId so Excel displays
+                // pivot values using the same format as the source (currency,
+                // percent, etc.). DataField.NumberFormatId is the primary
+                // display driver — cell-level StyleIndex alone is ignored by
+                // Excel for pivot values.
+                if (columnNumFmtIds != null && idx >= 0 && idx < columnNumFmtIds.Length
+                    && columnNumFmtIds[idx] is uint nfid)
+                {
+                    dataField.NumberFormatId = nfid;
+                }
+                df.AppendChild(dataField);
             }
             pivotDef.DataFields = df;
         }
@@ -3018,6 +3104,15 @@ internal static class PivotTableHelper
                 SetAxisCount(container, 1);
             }
             return container;
+        }
+
+        // N≥3 axis: route to tree-based items writer that uses LCP encoding
+        // (longest common prefix) to compress arbitrary-depth path encoding.
+        // Falls back to specialized N=2 path below for byte-level backward
+        // compat with the regression baseline.
+        if (fieldIndices.Count >= 3)
+        {
+            return BuildTreeAxisItems(fieldIndices, columnData, isRow, dataFieldCount);
         }
 
         // Multi-col case (N>=2 col fields, only used for ColumnItems).
@@ -3384,6 +3479,145 @@ internal static class PivotTableHelper
         return container;
     }
 
+    /// <summary>
+    /// Generic axis-items writer for N≥3 row or col fields. Walks the AxisTree
+    /// in display order and emits RowItem entries with longest-common-prefix
+    /// (LCP) compression for the &lt;i r="K"&gt; repeat attribute.
+    ///
+    /// Pattern (verified by extending the N=2 patterns recursively):
+    ///   - Each entry has 1 logical "path" of length = entry depth (subtotals
+    ///     have shorter paths than leaves).
+    ///   - r = LCP(this.path, prev.path). x children = path elements after the LCP.
+    ///   - For N=2 cases this naturally collapses to the existing
+    ///     BuildMultiRowItems / BuildMultiColItems output (verified by hand).
+    ///   - Row axis: subtotals are bare &lt;i&gt; entries. They sit BEFORE their
+    ///     children in walk order.
+    ///   - Col axis: subtotals are &lt;i t="default"&gt; entries that always emit
+    ///     r=0 + 1 x child for the path's last (and only) element. They sit
+    ///     AFTER their children in walk order. This matches the empirical
+    ///     observation that Excel "resets" the inheritance chain at every
+    ///     col-axis subtotal.
+    ///   - Grand total: &lt;i t="grand"&gt; with bare &lt;x/&gt;, always r=0.
+    ///
+    /// K=1 only in this implementation; multi-data + N≥3 col fields would
+    /// further multiply the col positions and require additional encoding
+    /// (the i="d" attribute on each repeated entry). Tracked as future work.
+    /// </summary>
+    private static OpenXmlElement BuildTreeAxisItems(
+        List<int> fieldIndices, List<string[]> columnData, bool isRow, int dataFieldCount)
+    {
+        var container = isRow
+            ? (OpenXmlCompositeElement)new RowItems()
+            : new ColumnItems();
+
+        var tree = BuildAxisTree(fieldIndices, columnData);
+
+        // Pre-compute per-level value→index maps so the emitted <x v="N"/>
+        // references match the corresponding pivotField items list (which
+        // we sort with StringComparer.Ordinal in AppendFieldItems).
+        var perLevelOrder = new Dictionary<string, int>[fieldIndices.Count];
+        for (int level = 0; level < fieldIndices.Count; level++)
+        {
+            var fi = fieldIndices[level];
+            if (fi < 0 || fi >= columnData.Count) { perLevelOrder[level] = new Dictionary<string, int>(); continue; }
+            perLevelOrder[level] = columnData[fi]
+                .Where(v => !string.IsNullOrEmpty(v))
+                .Distinct()
+                .OrderBy(v => v, StringComparer.Ordinal)
+                .Select((v, i) => (v, i))
+                .ToDictionary(t => t.v, t => t.i, StringComparer.Ordinal);
+        }
+
+        // Collect entries by walking the tree in display order. Each entry is a
+        // (path, type) pair where type ∈ {leaf, subtotal, grand}.
+        var entries = new List<(string[] path, string kind)>(); // kind: "leaf" | "subtotal" | "grand"
+        void Walk(AxisNode node)
+        {
+            if (node.IsLeaf)
+            {
+                entries.Add((node.Path, "leaf"));
+                return;
+            }
+            // Skip the synthetic root (Depth=0).
+            if (!isRow && node.Depth > 0)
+            {
+                // Col axis: children before subtotal.
+                foreach (var c in node.Children) Walk(c);
+                entries.Add((node.Path, "subtotal"));
+            }
+            else if (isRow && node.Depth > 0)
+            {
+                // Row axis: subtotal before children.
+                entries.Add((node.Path, "subtotal"));
+                foreach (var c in node.Children) Walk(c);
+            }
+            else
+            {
+                // Synthetic root, just recurse.
+                foreach (var c in node.Children) Walk(c);
+            }
+        }
+        Walk(tree);
+        entries.Add((Array.Empty<string>(), "grand"));
+
+        // Emit entries with LCP compression. Col-axis subtotals are special-cased
+        // to always emit r=0 + 1 x child for the outer index (Excel's empirical
+        // convention — col subtotals "reset" the inheritance chain).
+        string[] prevPath = Array.Empty<string>();
+        foreach (var (path, kind) in entries)
+        {
+            var item = new RowItem();
+
+            if (kind == "grand")
+            {
+                item.ItemType = ItemValues.Grand;
+                item.AppendChild(new MemberPropertyIndex());
+                container.AppendChild(item);
+                prevPath = path;
+                continue;
+            }
+
+            if (kind == "subtotal" && !isRow)
+            {
+                // Col-axis subtotal: always r=0 + 1 x child for the deepest
+                // index in the path (the immediate-parent value). Verified
+                // against multi_col_authored.xlsx.
+                item.ItemType = ItemValues.Default;
+                int lastLevel = path.Length - 1;
+                int lastIdx = perLevelOrder[lastLevel].TryGetValue(path[lastLevel], out var li) ? li : 0;
+                if (lastIdx == 0) item.AppendChild(new MemberPropertyIndex());
+                else item.AppendChild(new MemberPropertyIndex { Val = lastIdx });
+                container.AppendChild(item);
+                // Reset prev so the next entry doesn't try to inherit through
+                // the subtotal's truncated path. The next leaf in a new outer
+                // group will write a fresh path from r=0.
+                prevPath = path;
+                continue;
+            }
+
+            // Leaf entries (both row and col) and row subtotals use LCP encoding.
+            int lcp = 0;
+            while (lcp < path.Length && lcp < prevPath.Length && path[lcp] == prevPath[lcp]) lcp++;
+            if (lcp > 0) item.RepeatedItemCount = (uint)lcp;
+            for (int i = lcp; i < path.Length; i++)
+            {
+                int idx = perLevelOrder[i].TryGetValue(path[i], out var pi) ? pi : 0;
+                if (idx == 0) item.AppendChild(new MemberPropertyIndex());
+                else item.AppendChild(new MemberPropertyIndex { Val = idx });
+            }
+            // Defensive: an entry with no x children (e.g. an empty path with
+            // no LCP slack) would be malformed. Always ensure at least one.
+            if (!item.Elements<MemberPropertyIndex>().Any())
+                item.AppendChild(new MemberPropertyIndex());
+
+            container.AppendChild(item);
+            prevPath = path;
+        }
+
+        SetAxisCount(container, entries.Count);
+        return container;
+    }
+
     /// <summary>Set the count attribute on RowItems / ColumnItems uniformly.</summary>
     private static void SetAxisCount(OpenXmlCompositeElement container, int count)
     {
@@ -3640,6 +3874,33 @@ internal static class PivotTableHelper
             pivotDef.PageFields = null;
         }
 
+        // Re-read the source sheet's column styles so both (a) the DataField's
+        // NumberFormatId (Excel's primary pivot-value display driver) and
+        // (b) the value-cell StyleIndex stay in sync with the source column's
+        // currency/percent/custom format across Set operations.
+        uint?[]? sourceColumnStyleIds = null;
+        uint?[]? sourceColumnNumFmtIds = null;
+        var wbPart = pivotPart.GetParentParts().OfType<WorksheetPart>().FirstOrDefault()
+            ?.GetParentParts().OfType<WorkbookPart>().FirstOrDefault();
+        var wsSource = cachePart.PivotCacheDefinition.CacheSource?.WorksheetSource;
+        if (wbPart != null && wsSource?.Sheet?.Value is string srcSheetName
+            && wsSource.Reference?.Value is string srcRef)
+        {
+            var sheetRef = wbPart.Workbook?.Sheets?.Elements<Sheet>()
+                .FirstOrDefault(s => s.Name?.Value == srcSheetName);
+            if (sheetRef?.Id?.Value is string relId
+                && wbPart.GetPartById(relId) is WorksheetPart srcWsPart)
+            {
+                try
+                {
+                    var (_, _, ids) = ReadSourceData(srcWsPart, srcRef);
+                    sourceColumnStyleIds = ids;
+                    sourceColumnNumFmtIds = ResolveColumnNumFmtIds(wbPart, ids);
+                }
+                catch { /* best-effort: Set still succeeds with General format */ }
+            }
+        }
+
         // DataFields
         if (valueFields.Count > 0)
         {
@@ -3652,14 +3913,20 @@ internal static class PivotTableHelper
                 // Following the verified pattern rather than my earlier "omit them"
                 // theory — being closer to what real producers write reduces the risk
                 // of triggering picky consumers.
-                df.AppendChild(new DataField
+                var dataField = new DataField
                 {
                     Name = displayName,
                     Field = (uint)idx,
                     Subtotal = ParseSubtotal(func),
                     BaseField = 0,
                     BaseItem = 0u
-                });
+                };
+                if (sourceColumnNumFmtIds != null && idx >= 0 && idx < sourceColumnNumFmtIds.Length
+                    && sourceColumnNumFmtIds[idx] is uint nfid)
+                {
+                    dataField.NumberFormatId = nfid;
+                }
+                df.AppendChild(dataField);
             }
             pivotDef.DataFields = df;
         }
@@ -3731,7 +3998,8 @@ internal static class PivotTableHelper
 
                 RenderPivotIntoSheet(
                     hostSheet, anchorRefForGeometry, cacheHeaders, cacheColumnData,
-                    rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices);
+                    rowFieldIndices, colFieldIndices, valueFields, filterFieldIndices,
+                    sourceColumnStyleIds);
             }
         }
     }
