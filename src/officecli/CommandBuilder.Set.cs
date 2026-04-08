@@ -29,6 +29,37 @@ static partial class CommandBuilder
             var props = result.GetValue(propsOpt);
             var force = result.GetValue(forceOption);
 
+            // BUG-BT-R5-01: support the `selected` pseudo-path (mark and get
+            // already do). Expand to the first selected path and recursively
+            // re-invoke set for any additional paths after the main set
+            // completes. CONSISTENCY(selected-pseudo): grep for the same
+            // pseudo-path handling in CommandBuilder.Mark.cs / GetQuery.cs.
+            List<string>? extraSelectedPaths = null;
+            if (string.Equals(path, "selected", StringComparison.Ordinal))
+            {
+                var selection = WatchNotifier.QuerySelection(file.FullName);
+                if (selection == null)
+                {
+                    var err = $"No watch process is running for {file.Name}. Start one with: officecli watch {file.Name}";
+                    if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeError(err));
+                    else Console.Error.WriteLine(err);
+                    return 1;
+                }
+                if (selection.Length == 0)
+                {
+                    var err = "No elements are currently selected. Click or drag-select in the watch browser first.";
+                    if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeError(err));
+                    else Console.Error.WriteLine(err);
+                    return 1;
+                }
+                path = selection[0];
+                if (selection.Length > 1)
+                {
+                    extraSelectedPaths = new List<string>(selection.Length - 1);
+                    for (int i = 1; i < selection.Length; i++) extraSelectedPaths.Add(selection[i]);
+                }
+            }
+
             // Check document protection for .docx files
             // Skip protection check if the user is changing the protection mode itself
             var isProtectionChange = props?.Any(p => p.StartsWith("protection=", StringComparison.OrdinalIgnoreCase)) == true;
@@ -206,6 +237,30 @@ static partial class CommandBuilder
                     Console.Error.WriteLine(FormatUnsupported(stillUnsupported));
             }
             NotifyWatch(handler, file.FullName, path);
+
+            // BUG-BT-R5-01: apply the same prop set to the remaining selected
+            // paths. Each call goes through handler.Set independently so each
+            // path gets its own auto-correct, find-count, and unsupported list,
+            // matching the per-path semantics that mark already uses for
+            // `mark <file> selected`. We collect any non-zero return as an
+            // error escalation but keep going so partial application is at
+            // least observable.
+            if (extraSelectedPaths is not null && extraSelectedPaths.Count > 0)
+            {
+                var extraStillUnsupported = false;
+                foreach (var extraPath in extraSelectedPaths)
+                {
+                    var extraResult = handler.Set(extraPath, properties);
+                    if (extraResult.Count > 0)
+                    {
+                        extraStillUnsupported = true;
+                        if (!json)
+                            Console.Error.WriteLine($"  {extraPath}: {FormatUnsupported(extraResult)}");
+                    }
+                    NotifyWatch(handler, file.FullName, extraPath);
+                }
+                if (extraStillUnsupported && stillUnsupported.Count == 0) return 2;
+            }
 
             if (stillUnsupported.Count > 0) return 2;
             return 0;
