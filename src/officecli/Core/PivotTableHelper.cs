@@ -318,6 +318,13 @@ internal static class PivotTableHelper
         var (headers, columnData, columnStyleIds) = ReadSourceData(sourceSheet, sourceRef);
         if (headers.Length == 0)
             throw new ArgumentException("Source range has no data");
+        // CONSISTENCY(empty-pivot-source): a header row with zero data rows
+        // (e.g. A1:D1) silently produces an empty pivot whose cache has no
+        // records — Excel opens it but renders nothing. Reject it with the
+        // same family of ArgumentException as the no-headers case so callers
+        // get a single, predictable error path. Bt#8 / fuzzer baseline.
+        if (columnData.Count == 0 || columnData[0].Length == 0)
+            throw new ArgumentException("Source range has no data rows");
 
         // 1b. Date auto-grouping preprocessing. Scans rows/cols/filters props
         // for `fieldName:grouping` syntax (e.g. `rows='日期:month,城市'`) and
