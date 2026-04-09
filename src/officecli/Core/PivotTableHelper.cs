@@ -5607,6 +5607,33 @@ internal static class PivotTableHelper
         // 'colGrandTotals') per CLAUDE.md canonical Format rules.
         node.Format["rowGrandTotals"] = (pivotDef.RowGrandTotals?.Value ?? true) ? "true" : "false";
         node.Format["colGrandTotals"] = (pivotDef.ColumnGrandTotals?.Value ?? true) ? "true" : "false";
+
+        // R20-1: subtotals readback. Inspect axis pivotFields (those with
+        // Axis != null) and aggregate their DefaultSubtotal flags.
+        // - All false  → "off"  (user set subtotals=off)
+        // - All true / missing → "on"  (default OOXML behaviour)
+        // - Mixed       → omit key  (per-field subtotals is a v2 feature)
+        // Canonical key "subtotals" matches Add/Set input form.
+        if (pivotFields != null)
+        {
+            var axisFields = pivotFields.Elements<PivotField>()
+                .Where(pf => pf.Axis != null)
+                .ToList();
+            if (axisFields.Count > 0)
+            {
+                // DefaultSubtotal attribute defaults to true when absent (ECMA-376 § 18.10.1.69).
+                var defaultSubtotalValues = axisFields
+                    .Select(pf => pf.DefaultSubtotal?.Value ?? true)
+                    .ToList();
+                bool allOff = defaultSubtotalValues.All(v => !v);
+                bool allOn  = defaultSubtotalValues.All(v => v);
+                if (allOff)
+                    node.Format["subtotals"] = "off";
+                else if (allOn)
+                    node.Format["subtotals"] = "on";
+                // mixed: omit key (v2 per-field subtotals feature)
+            }
+        }
     }
 
     /// <summary>
