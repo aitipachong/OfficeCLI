@@ -768,7 +768,9 @@ Paths:
   /Sheet1/cf[N]        Conditional formatting
   /Sheet1/autofilter   AutoFilter range
   /Sheet1/pivottable[N] Pivot table (rows, cols, values, filters, aggregate,
-                         showDataAs, style, sort, grandTotals, name)
+                         showDataAs, style, sort, grandTotals, name,
+                         showRowStripes, showColStripes, showRowHeaders,
+                         showColHeaders, showLastColumn)
   /namedrange[N]       Named range by index or name
 
 PivotTable attributes (Get readback keys — canonical):
@@ -782,7 +784,14 @@ PivotTable attributes (Get readback keys — canonical):
   dataFieldCount    Number of data (value) fields
   dataField{N}      Data field info, format: "name:func:fieldIdx"
   dataField{N}.showAs  showAs token (percent_of_row / percent_of_col / ...)
+  grandTotals       Grand total visibility: both | rows | cols | none
+  subtotals         Subtotal rows for row/col fields: on | off
   style             Applied pivot table style name
+  showRowHeaders    Row headers visible (true/false, default true)
+  showColHeaders    Column headers visible (true/false, default true)
+  showRowStripes    Row banding/stripes enabled (true/false, default false)
+  showColStripes    Column banding/stripes enabled (true/false, default false)
+  showLastColumn    Special formatting on last column (true/false, default true)
 
 Example pivot readback:
   /Sheet1/pivottable[1]
@@ -1001,6 +1010,11 @@ PivotTable (/SheetName/pivottable[N]):
                          percent_of_col, running_total
   sort         Axis sort: asc | desc | locale | locale-desc
   grandTotals  Row/column grand totals: both | rows | cols | none
+  showRowStripes   Row banding (true/false, default false)
+  showColStripes   Column banding (true/false, default false)
+  showRowHeaders   Row headers visible (true/false, default true)
+  showColHeaders   Column headers visible (true/false, default true)
+  showLastColumn   Last column special format (true/false, default true)
 
 Workbook properties (via set / path):
   workbook.date1904          Use 1904 date system (true/false)
@@ -1113,7 +1127,16 @@ Types and properties:
     cols: column fields
     values: data fields with aggregation ("Sales:sum,Qty:count")
       Functions: sum, count, average, max, min, product, stddev, var
+      Inline showDataAs: "Sales:sum:percent_of_row,Qty:count"
     filters: page/filter fields
+    aggregate: positional func override (e.g. "sum,count")
+    showDataAs: positional showAs override
+                  values: normal, percent_of_total, percent_of_row,
+                          percent_of_col, running_total
+    sort: axis sort applied at render time (not persisted as OOXML sortType — v2 candidate)
+            asc | desc | locale | locale-desc
+    grandTotals: row/column grand totals: both | rows | cols | none
+    subtotals: subtotal rows for row/col fields: on | off
     name: pivot table name (auto-generated if omitted)
     style: style name (default: PivotStyleLight16)
 
