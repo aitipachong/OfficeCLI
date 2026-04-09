@@ -2666,6 +2666,11 @@ internal static class PivotTableHelper
         bool emitRowGrand = ActiveRowGrandTotals;
         bool emitColGrand = ActiveColGrandTotals;
 
+        // CONSISTENCY(subtotals-opts): cached once per render call. When off,
+        // skip per-group outer subtotal row and column position allocation,
+        // header labels, and cell writes in all 9 intersections below.
+        bool emitSubtotals = ActiveDefaultSubtotal;
+
         // Pre-compute K-aware col positions: each (outer, inner) leaf gets K
         // cells, each outer subtotal gets K cells, K final grand total cells.
         // Grand total column block is skipped entirely when emitRowGrand=false.
@@ -2683,10 +2688,13 @@ internal static class PivotTableHelper
                     currentCol++;
                 }
             }
-            for (int d = 0; d < K; d++)
+            if (emitSubtotals)
             {
-                subtotalColPositions[(outer, d)] = currentCol;
-                currentCol++;
+                for (int d = 0; d < K; d++)
+                {
+                    subtotalColPositions[(outer, d)] = currentCol;
+                    currentCol++;
+                }
             }
         }
         if (emitRowGrand)
@@ -2728,7 +2736,8 @@ internal static class PivotTableHelper
                 foreach (var inner in inners)
                     innerHdrRow.AppendChild(MakeStringCell(leafColPositions[(outer, inner, 0)],
                         innerHdrRowIdx, inner));
-                innerHdrRow.AppendChild(MakeStringCell(subtotalColPositions[(outer, 0)], innerHdrRowIdx, outer + " Total"));
+                if (emitSubtotals)
+                    innerHdrRow.AppendChild(MakeStringCell(subtotalColPositions[(outer, 0)], innerHdrRowIdx, outer + " Total"));
             }
             if (emitRowGrand)
                 innerHdrRow.AppendChild(MakeStringCell(grandTotalColPositions[0], innerHdrRowIdx, totalLabel));
@@ -2749,9 +2758,12 @@ internal static class PivotTableHelper
             {
                 int firstLeafCol = leafColPositions[(outer, inners[0], 0)];
                 outerHdrRow.AppendChild(MakeStringCell(firstLeafCol, outerHdrRowIdx, outer));
-                for (int d = 0; d < K; d++)
-                    outerHdrRow.AppendChild(MakeStringCell(subtotalColPositions[(outer, d)],
-                        outerHdrRowIdx, $"{outer} {valueFields[d].name}"));
+                if (emitSubtotals)
+                {
+                    for (int d = 0; d < K; d++)
+                        outerHdrRow.AppendChild(MakeStringCell(subtotalColPositions[(outer, d)],
+                            outerHdrRowIdx, $"{outer} {valueFields[d].name}"));
+                }
             }
             if (emitRowGrand)
             {
@@ -2791,42 +2803,52 @@ internal static class PivotTableHelper
         int currentRowIdx = firstDataRow;
         foreach (var (rowOuter, rowInners) in rowGroups)
         {
-            // Outer subtotal row.
-            var outerSubRow = new Row { RowIndex = (uint)currentRowIdx };
-            outerSubRow.AppendChild(MakeStringCell(anchorColIdx, currentRowIdx, rowOuter));
-            foreach (var (colOuter, colInners) in colGroups)
+            if (emitSubtotals)
             {
-                foreach (var colInner in colInners)
+                // Outer subtotal row.
+                var outerSubRow = new Row { RowIndex = (uint)currentRowIdx };
+                outerSubRow.AppendChild(MakeStringCell(anchorColIdx, currentRowIdx, rowOuter));
+                foreach (var (colOuter, colInners) in colGroups)
                 {
-                    bool any = HasAnyValueInOuterRowCol(rowOuter, colOuter, colInner, rowGroups, bucket, K);
+                    foreach (var colInner in colInners)
+                    {
+                        bool any = HasAnyValueInOuterRowCol(rowOuter, colOuter, colInner, rowGroups, bucket, K);
+                        for (int d = 0; d < K; d++)
+                        {
+                            var v = OuterRowLeafCell(rowOuter, colOuter, colInner, d);
+                            if (v != 0 || any)
+                                outerSubRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v, valueStyleIds[d]));
+                        }
+                    }
+                    bool anyOuter = HasAnyValueInOuterRowOuterCol(rowOuter, colOuter, rowGroups, colGroups, bucket, K);
                     for (int d = 0; d < K; d++)
                     {
-                        var v = OuterRowLeafCell(rowOuter, colOuter, colInner, d);
-                        if (v != 0 || any)
-                            outerSubRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v, valueStyleIds[d]));
+                        var sub = OuterRowColSub(rowOuter, colOuter, d);
+                        if (sub != 0 || anyOuter)
+                            outerSubRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub, valueStyleIds[d]));
                     }
                 }
-                bool anyOuter = HasAnyValueInOuterRowOuterCol(rowOuter, colOuter, rowGroups, colGroups, bucket, K);
-                for (int d = 0; d < K; d++)
+                if (emitRowGrand)
                 {
-                    var sub = OuterRowColSub(rowOuter, colOuter, d);
-                    if (sub != 0 || anyOuter)
-                        outerSubRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub, valueStyleIds[d]));
+                    for (int d = 0; d < K; d++)
+                        outerSubRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx, OuterRowGrandTotal(rowOuter, d), valueStyleIds[d]));
                 }
+                sheetData.AppendChild(outerSubRow);
+                currentRowIdx++;
             }
-            if (emitRowGrand)
-            {
-                for (int d = 0; d < K; d++)
-                    outerSubRow.AppendChild(MakeNumericCell(grandTotalColPositions[d], currentRowIdx, OuterRowGrandTotal(rowOuter, d), valueStyleIds[d]));
-            }
-            sheetData.AppendChild(outerSubRow);
-            currentRowIdx++;
 
             // Leaf rows for each existing inner of this row outer.
+            // When subtotals are off, prefix the first leaf with the outer label
+            // so users can still identify which group the row belongs to.
+            bool firstLeafOfGroup = true;
             foreach (var rowInner in rowInners)
             {
                 var leafRow = new Row { RowIndex = (uint)currentRowIdx };
-                leafRow.AppendChild(MakeStringCell(anchorColIdx, currentRowIdx, rowInner));
+                var label = (!emitSubtotals && firstLeafOfGroup)
+                    ? $"{rowOuter} / {rowInner}"
+                    : rowInner;
+                leafRow.AppendChild(MakeStringCell(anchorColIdx, currentRowIdx, label));
+                firstLeafOfGroup = false;
                 foreach (var (colOuter, colInners) in colGroups)
                 {
                     foreach (var colInner in colInners)
@@ -2838,12 +2860,15 @@ internal static class PivotTableHelper
                                 leafRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx, v, valueStyleIds[d]));
                         }
                     }
-                    bool any = HasAnyValueInLeafRowCol(rowOuter, rowInner, colOuter, colGroups, bucket, K);
-                    for (int d = 0; d < K; d++)
+                    if (emitSubtotals)
                     {
-                        var sub = LeafRowColSub(rowOuter, rowInner, colOuter, d);
-                        if (sub != 0 || any)
-                            leafRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub, valueStyleIds[d]));
+                        bool any = HasAnyValueInLeafRowCol(rowOuter, rowInner, colOuter, colGroups, bucket, K);
+                        for (int d = 0; d < K; d++)
+                        {
+                            var sub = LeafRowColSub(rowOuter, rowInner, colOuter, d);
+                            if (sub != 0 || any)
+                                leafRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, sub, valueStyleIds[d]));
+                        }
                     }
                 }
                 if (emitRowGrand)
@@ -2867,8 +2892,11 @@ internal static class PivotTableHelper
                     for (int d = 0; d < K; d++)
                         grandRow.AppendChild(MakeNumericCell(leafColPositions[(colOuter, colInner, d)], currentRowIdx,
                             GrandRowLeafCol(colOuter, colInner, d), valueStyleIds[d]));
-                for (int d = 0; d < K; d++)
-                    grandRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, GrandRowColSub(colOuter, d), valueStyleIds[d]));
+                if (emitSubtotals)
+                {
+                    for (int d = 0; d < K; d++)
+                        grandRow.AppendChild(MakeNumericCell(subtotalColPositions[(colOuter, d)], currentRowIdx, GrandRowColSub(colOuter, d), valueStyleIds[d]));
+                }
             }
             if (emitRowGrand)
             {
