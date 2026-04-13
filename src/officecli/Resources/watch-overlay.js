@@ -538,8 +538,10 @@
         _editingCell = td;
         var originalText = td.textContent || '';
         // Strip data-bar/icon overlays — get just the text node content
+        // Show formula if cell has one, otherwise show displayed text
+        var formula = td.getAttribute('data-formula');
         var textSpan = td.querySelector('.cell-text') || td;
-        var editText = textSpan.textContent || '';
+        var editText = formula || textSpan.textContent || '';
 
         var input = document.createElement('input');
         input.type = 'text';

@@ -513,7 +513,7 @@ public partial class ExcelHandler
                     var cell = cellMap.TryGetValue((r, c), out var mc) ? mc : null;
                     var style = GetCellStyleCss(cell, stylesheet, frozenRows, frozenCols, r, c, frozenLeftOffsets, frozenTopOffsets, cfMap, dataBarMap, iconSetMap);
                     var value = cell != null ? GetFormattedCellValue(cell, stylesheet, evaluator) : "";
-                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
+                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{GetFormulaAttr(cell)}{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
                 }
                 // Chart cell spanning multiple rows and columns
                 if (chartColSpan > 0)
@@ -544,7 +544,7 @@ public partial class ExcelHandler
                     var cell = cellMap.TryGetValue((r, c), out var mc) ? mc : null;
                     var style = GetCellStyleCss(cell, stylesheet, frozenRows, frozenCols, r, c, frozenLeftOffsets, frozenTopOffsets, cfMap, dataBarMap, iconSetMap);
                     var value = cell != null ? GetFormattedCellValue(cell, stylesheet, evaluator) : "";
-                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
+                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{GetFormulaAttr(cell)}{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
                 }
                 sb.AppendLine("</tr>");
                 continue;
@@ -592,14 +592,14 @@ public partial class ExcelHandler
                     if (adjColSpan > 1) spanAttrs += $" colspan=\"{adjColSpan}\"";
                     if (mergeInfo.RowSpan > 1) spanAttrs += $" rowspan=\"{mergeInfo.RowSpan}\"";
 
-                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{spanAttrs}{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
+                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{GetFormulaAttr(cell)}{spanAttrs}{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
                 }
                 else
                 {
                     var cell = cellMap.TryGetValue((r, c), out var nc) ? nc : null;
                     var style = GetCellStyleCss(cell, stylesheet, frozenRows, frozenCols, r, c, frozenLeftOffsets, frozenTopOffsets, cfMap, dataBarMap, iconSetMap);
                     var value = cell != null ? GetFormattedCellValue(cell, stylesheet, evaluator) : "";
-                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
+                    sb.Append($"<td data-path=\"/{HtmlEncode(sheetName)}/{cellRef}\"{GetFormulaAttr(cell)}{style}>{BuildCellContent(cellRef, value, dataBarMap, iconSetMap)}</td>");
                 }
             }
             sb.AppendLine("</tr>");
@@ -1992,6 +1992,14 @@ public partial class ExcelHandler
     {
         var encoded = HtmlEncode(text);
         return encoded.Contains('\n') ? encoded.Replace("\n", "<br>") : encoded;
+    }
+
+    /// <summary>Get data-formula attribute for cells with formulas (for inline editing).</summary>
+    private static string GetFormulaAttr(Cell? cell)
+    {
+        var formula = cell?.CellFormula?.Text;
+        if (string.IsNullOrEmpty(formula)) return "";
+        return $" data-formula=\"={HtmlEncode(formula)}\"";
     }
 
     private static string BuildCellContent(string cellRef, string value,
