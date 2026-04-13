@@ -206,8 +206,9 @@ public partial class PowerPointHandler
                 if (!properties.TryGetValue("path", out var mediaPath)
                     && !properties.TryGetValue("src", out mediaPath))
                     throw new ArgumentException("'src' property is required for media type");
-                if (!File.Exists(mediaPath))
-                    throw new FileNotFoundException($"Media file not found: {mediaPath}");
+
+                var (mediaStream, ext) = OfficeCli.Core.FileSource.Resolve(mediaPath);
+                using var mediaStreamDispose = mediaStream;
 
                 var mediaSlideIdx = int.Parse(mediaSlideMatch.Groups[1].Value);
                 var mediaSlideParts = GetSlideParts().ToList();
@@ -218,7 +219,6 @@ public partial class PowerPointHandler
                 var mediaShapeTree = GetSlide(mediaSlidePart).CommonSlideData?.ShapeTree
                     ?? throw new InvalidOperationException("Slide has no shape tree");
 
-                var ext = Path.GetExtension(mediaPath).ToLowerInvariant();
                 var isVideo = type.ToLowerInvariant() == "video" ||
                     (type.ToLowerInvariant() == "media" && ext is ".mp4" or ".avi" or ".wmv" or ".mpg" or ".mov");
 
@@ -232,8 +232,7 @@ public partial class PowerPointHandler
 
                 // 1. Create MediaDataPart and feed binary data
                 var mediaDataPart = _doc.CreateMediaDataPart(contentType, ext);
-                using (var mediaStream = File.OpenRead(mediaPath))
-                    mediaDataPart.FeedData(mediaStream);
+                mediaDataPart.FeedData(mediaStream);
 
                 // 2. Create relationships: Video/Audio + Media
                 string videoRelId, mediaRelId;
