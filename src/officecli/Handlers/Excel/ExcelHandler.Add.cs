@@ -143,14 +143,23 @@ public partial class ExcelHandler
 
                 if (properties.TryGetValue("value", out var value))
                 {
-                    // R2-2: strip XML-illegal chars (e.g. U+0000) from the cell
-                    // value before it gets serialized to sheet1.xml. Without
-                    // this, a NUL byte from upstream data would crash every
-                    // downstream save (including the pivot cache write).
-                    var safeValue = OfficeCli.Core.PivotTableHelper.SanitizeXmlText(value);
-                    cell.CellValue = new CellValue(safeValue);
-                    if (!double.TryParse(safeValue, out _))
-                        cell.DataType = new EnumValue<CellValues>(CellValues.String);
+                    // Auto-detect formula: value starting with '=' is treated as formula
+                    if (value.StartsWith('=') && value.Length > 1)
+                    {
+                        cell.CellFormula = new CellFormula(value.TrimStart('='));
+                        cell.CellValue = null;
+                    }
+                    else
+                    {
+                        // R2-2: strip XML-illegal chars (e.g. U+0000) from the cell
+                        // value before it gets serialized to sheet1.xml. Without
+                        // this, a NUL byte from upstream data would crash every
+                        // downstream save (including the pivot cache write).
+                        var safeValue = OfficeCli.Core.PivotTableHelper.SanitizeXmlText(value);
+                        cell.CellValue = new CellValue(safeValue);
+                        if (!double.TryParse(safeValue, out _))
+                            cell.DataType = new EnumValue<CellValues>(CellValues.String);
+                    }
                 }
                 if (properties.TryGetValue("formula", out var formula))
                 {

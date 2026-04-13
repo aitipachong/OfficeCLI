@@ -1214,6 +1214,9 @@ public partial class ExcelHandler
             switch (key.ToLowerInvariant())
             {
                 case "value" or "text":
+                    // Auto-detect formula: value starting with '=' is treated as formula
+                    if (value.StartsWith('=') && value.Length > 1)
+                        goto case "formula";
                     var cellValue = value.Replace("\\n", "\n"); // Support escaped newlines
                     cell.CellFormula = null; // Clear formula when explicit value is set
                     // If cell is already boolean type, convert true/false to 1/0
