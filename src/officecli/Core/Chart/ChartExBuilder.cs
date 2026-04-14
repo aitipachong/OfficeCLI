@@ -62,7 +62,7 @@ internal static partial class ChartExBuilder
         for (int si = 0; si < seriesData.Count; si++)
         {
             CX.Data data = normalized == "boxwhisker"
-                ? BuildBoxWhiskerGroupDataBlock((uint)si, seriesData[si].values)
+                ? BuildBoxWhiskerGroupDataBlock((uint)si, seriesData[si].values, seriesData[si].name)
                 : BuildDataBlock((uint)si, normalized, categories, seriesData[si].values);
             chartData.AppendChild(data);
         }
@@ -676,12 +676,22 @@ internal static partial class ChartExBuilder
 
     /// <summary>
     /// Build a single cx:data block for one boxWhisker group.
-    /// Native Excel format: one cx:data per group, numDim type="val" only (no strDim).
-    /// The category axis positions groups automatically by series order.
+    /// Includes a strDim type="cat" with the group name repeated once per data
+    /// point so the X axis shows the group label. The strDim is per-data-block
+    /// (not shared across series), so each group stays at its own X position.
     /// </summary>
-    private static CX.Data BuildBoxWhiskerGroupDataBlock(uint id, double[] values)
+    private static CX.Data BuildBoxWhiskerGroupDataBlock(uint id, double[] values, string groupName)
     {
         var data = new CX.Data { Id = id };
+
+        // strDim provides the X-axis label for this group.
+        // Repeat the group name once per data point (required: ptCount must equal numDim ptCount).
+        var strDim = new CX.StringDimension { Type = CX.StringDimensionType.Cat };
+        var strLvl = new CX.StringLevel { PtCount = (uint)values.Length };
+        for (int i = 0; i < values.Length; i++)
+            strLvl.AppendChild(new CX.ChartStringValue(groupName) { Index = (uint)i });
+        strDim.AppendChild(strLvl);
+        data.AppendChild(strDim);
 
         var numDim = new CX.NumericDimension { Type = CX.NumericDimensionType.Val };
         var numLvl = new CX.NumericLevel { PtCount = (uint)values.Length, FormatCode = "General" };
