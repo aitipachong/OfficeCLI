@@ -2136,6 +2136,26 @@ public partial class ExcelHandler
                     throw new InvalidOperationException(
                         "Cannot sort range containing shared formulas. Rewrite them as per-cell formulas first.");
 
+        // CONSISTENCY(sort-rejects-formulas): same shape as the shared-formula reject above.
+        // Sort rewrites each cell's CellReference to the new row index, but the formula text
+        // (e.g. "=A2+1000") still encodes the *old* relative addresses. After sort, Excel
+        // recalculates against the rewritten ref and silently produces wrong values — a
+        // data-corruption bug. A full fix would require parsing every formula and rewriting
+        // relative row numbers per the row's new position (handling A1 / $A$1 / A$1 / $A1 /
+        // A:B / Sheet!A1 / named ranges), which is high risk for partial-correctness
+        // regressions. Until that lands, refuse sort when any data row carries a formula.
+        // Known limitation: this does NOT catch formulas *outside* the sort range that
+        // reference cells *inside* it; those will also go stale on sort. Same scope as the
+        // shared-formula check above (per-row scan only).
+        foreach (var r in rowsInRange)
+            foreach (var c in r.Elements<Cell>())
+                if (c.CellFormula != null)
+                    throw new InvalidOperationException(
+                        $"Cannot sort range containing formulas (cell {c.CellReference?.Value}). " +
+                        "Sort would rewrite cell references but leave formula text encoding the old row " +
+                        "numbers, silently corrupting results. Rewrite formulas as literal values first " +
+                        "(or evaluate and paste-as-values) before sorting.");
+
         // Materialize sort keys once (O(rows × keys × cells) → O(rows × keys))
         var keyed = rowsInRange.Select(r =>
         {
