@@ -1921,6 +1921,22 @@ public partial class ExcelHandler
         // after cell-level props are processed.
         string? sortSpec = null;
         bool sortHeader = false;
+        // R4-4: reject merge+sort combo up front. SortRangeRows rejects any range
+        // containing merged cells, but if merge is applied first in this same call
+        // the merge write succeeds, then sort throws, leaving the file in a half-
+        // written state. Fail fast before touching the document.
+        bool hasMerge = false;
+        bool hasSort = false;
+        foreach (var (k, _) in properties)
+        {
+            var kl = k.ToLowerInvariant();
+            if (kl == "merge") hasMerge = true;
+            else if (kl == "sort") hasSort = true;
+        }
+        if (hasMerge && hasSort)
+            throw new ArgumentException(
+                "Cannot apply 'merge' and 'sort' in the same call. Sort rejects merged cells; " +
+                "applying both in one call would leave the file half-written. Split into two calls.");
         foreach (var (key, value) in properties)
         {
             switch (key.ToLowerInvariant())
