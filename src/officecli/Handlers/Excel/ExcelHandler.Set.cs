@@ -2066,6 +2066,23 @@ public partial class ExcelHandler
         var sd = ws.GetFirstChild<SheetData>();
         if (sd == null) return;
 
+        // Reject malformed row layout: rows lacking RowIndex, or duplicate RowIndex values.
+        // Both cases would cause silent data loss or silent skipped rows in the sort below
+        // (RowIndex?.Value >= ... filter drops null; duplicate RowIndex means two rows get
+        // mapped to the same target slot). Surface the corruption instead of running.
+        {
+            var seen = new HashSet<uint>();
+            foreach (var r in sd.Elements<Row>())
+            {
+                if (r.RowIndex?.Value is not uint ri)
+                    throw new InvalidOperationException(
+                        "Cannot sort: sheet contains a <row> element without a RowIndex. File is malformed.");
+                if (!seen.Add(ri))
+                    throw new InvalidOperationException(
+                        $"Cannot sort: sheet contains duplicate <row r=\"{ri}\"> entries. File is malformed.");
+            }
+        }
+
         // Reject if any merged cell intersects sort range
         var mergeCells = ws.GetFirstChild<MergeCells>();
         if (mergeCells != null)
