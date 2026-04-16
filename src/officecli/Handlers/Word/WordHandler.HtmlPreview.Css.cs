@@ -220,7 +220,8 @@ public partial class WordHandler
         if (jc == null) jc = ResolveJustificationFromStyle(styleId);
         if (jc != null)
         {
-            var align = jc.InnerText switch
+            var jcVal = jc.InnerText;
+            var align = jcVal switch
             {
                 "center" => "center",
                 "right" or "end" => "right",
@@ -228,6 +229,12 @@ public partial class WordHandler
                 _ => (string?)null
             };
             if (align != null) parts.Add($"text-align:{align}");
+            // w:jc="distribute" stretches EVERY line (including single/last)
+            // to full width with inter-character spacing. Plain CSS justify
+            // leaves the last line unstretched, so add text-align-last
+            // and text-justify hints for closer fidelity.
+            if (jcVal == "distribute")
+                parts.Add("text-align-last:justify;text-justify:inter-character");
         }
 
         // Paragraph-level RTL (w:bidi) — flips the paragraph direction
