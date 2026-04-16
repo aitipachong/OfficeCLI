@@ -897,6 +897,17 @@ officecli add doc.docx /body --type pagenum --prop alignment=center
 # Merge field (for mail merge templates)
 officecli add doc.docx "/body/p[1]" --type mergefield --prop fieldName=CustomerName
 officecli add doc.docx "/body/p[1]" --type mergefield --prop fieldName=CompanyName --prop text="[Company]"
+
+# Cross-reference (REF / PAGEREF)
+officecli add doc.docx "/body/p[1]" --type ref --prop bookmarkName=MyBookmark --prop hyperlink=true
+officecli add doc.docx "/body/p[1]" --type pageref --prop bookmarkName=MyBookmark
+
+# Sequence numbering (Figure 1, Table 2, etc.)
+officecli add doc.docx "/body/p[1]" --type seq --prop identifier=Figure
+officecli add doc.docx "/body/p[1]" --type seq --prop identifier=Table
+
+# Conditional field (IF)
+officecli add doc.docx "/body/p[1]" --type if --prop expression="MERGEFIELD Gender = \"Male\"" --prop trueText=Mr. --prop falseText=Ms.
 ```
 
 ### Comments

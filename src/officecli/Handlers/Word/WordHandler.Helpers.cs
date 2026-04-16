@@ -980,6 +980,7 @@ public partial class WordHandler
     {
         "run", "r", "picture", "image", "img", "hyperlink", "link",
         "field", "pagenum", "pagenumber", "page", "numpages", "date", "author", "mergefield",
+        "ref", "pageref", "seq", "if",
         "pagebreak", "columnbreak", "break", "footnote", "endnote",
         "equation", "formula", "math", "bookmark", "formfield"
     };
