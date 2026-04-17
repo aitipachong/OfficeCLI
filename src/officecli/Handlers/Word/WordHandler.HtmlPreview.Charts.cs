@@ -64,8 +64,10 @@ public partial class WordHandler
             // above or below the plot area. Right/left legends share the
             // full SVG height.
             var legendAbove = info.LegendPos == "t";
-            var legendBelow = info.LegendPos == "b" || string.IsNullOrEmpty(info.LegendPos);
             var legendSide  = info.LegendPos is "r" or "l" or "tr";
+            // Any remaining value (including "ctr" overlay and unknown) or
+            // empty string → below, so HasLegend=true + ctr doesn't vanish.
+            var legendBelow = !legendAbove && !legendSide;
             var legendH = info.HasLegend && (legendAbove || legendBelow) ? 24 : 0;
             var chartSvgH = svgH - titleH - legendH;
 
