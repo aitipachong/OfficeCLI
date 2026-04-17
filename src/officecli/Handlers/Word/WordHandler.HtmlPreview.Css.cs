@@ -159,7 +159,10 @@ public partial class WordHandler
 
         string? color = null;
         var rgb = solidFill.Elements().FirstOrDefault(e => e.LocalName == "srgbClr");
-        if (rgb != null) color = $"#{rgb.GetAttributes().FirstOrDefault(a => a.LocalName == "val").Value}";
+        if (rgb != null) {
+            var rv = rgb.GetAttributes().FirstOrDefault(a => a.LocalName == "val").Value;
+            if (rv != null && IsHexColor(rv)) color = $"#{rv}";
+        }
         var scheme = solidFill.Elements().FirstOrDefault(e => e.LocalName == "schemeClr");
         if (scheme != null) color = ResolveSchemeColor(scheme);
 
@@ -839,7 +842,8 @@ public partial class WordHandler
                     parts.Add("text-decoration-thickness:2px");
                 // Per-underline color via w:u w:color="RRGGBB"
                 var ulColor = rProps.Underline.Color?.Value;
-                if (!string.IsNullOrEmpty(ulColor) && !ulColor.Equals("auto", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(ulColor) && !ulColor.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                    && IsHexColor(ulColor))
                     parts.Add($"text-decoration-color:#{ulColor}");
             }
         }
@@ -938,7 +942,7 @@ public partial class WordHandler
                 var bdrSz = runBdr.Size?.Value ?? 4;
                 var bdrColor = runBdr.Color?.Value;
                 var px = Math.Max(1, bdrSz / 8.0);
-                var color = (bdrColor != null && bdrColor != "auto") ? $"#{bdrColor}" : "#000";
+                var color = (bdrColor != null && bdrColor != "auto" && IsHexColor(bdrColor)) ? $"#{bdrColor}" : "#000";
                 parts.Add($"border:{px:0.#}px solid {color};padding:0 2px");
             }
         }
@@ -1414,7 +1418,7 @@ public partial class WordHandler
     {
         if (color == null) return null;
         var colorVal = color.Val?.Value;
-        if (colorVal != null && colorVal != "auto")
+        if (colorVal != null && colorVal != "auto" && IsHexColor(colorVal))
             return $"#{colorVal}";
         var tcName = color.ThemeColor?.InnerText;
         if (tcName != null && GetThemeColors().TryGetValue(tcName, out var tcHex))
@@ -1513,7 +1517,7 @@ public partial class WordHandler
                 ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
             if (style == null) break;
             var cv = style.StyleRunProperties?.Color?.Val?.Value;
-            if (cv != null && cv != "auto") return $"#{cv}";
+            if (cv != null && cv != "auto" && IsHexColor(cv)) return $"#{cv}";
             var tc = style.StyleRunProperties?.Color?.ThemeColor?.InnerText;
             if (tc != null && GetThemeColors().TryGetValue(tc, out var tcHex)) return $"#{tcHex}";
             current = style.BasedOn?.Val?.Value;

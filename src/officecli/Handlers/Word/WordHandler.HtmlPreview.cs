@@ -76,7 +76,16 @@ public partial class WordHandler
     {
         _ctx = new HtmlRenderContext();
         ResolveThemeCjkFont();
-        var body = _doc.MainDocumentPart?.Document?.Body;
+        // Malformed docx (e.g. <!DOCTYPE> prolog, bogus encoding= attribute
+        // on the XML declaration) makes accessing the lazily-parsed Document
+        // throw XmlException. Tolerate it as an empty-body preview rather
+        // than crashing the command.
+        Body? body;
+        try { body = _doc.MainDocumentPart?.Document?.Body; }
+        catch (System.Xml.XmlException)
+        {
+            return "<html><body><p>(document xml malformed)</p></body></html>";
+        }
         if (body == null) return "<html><body><p>(empty document)</p></body></html>";
 
         var sb = new StringBuilder();
@@ -915,8 +924,8 @@ public partial class WordHandler
         // Default text color: docDefaults → theme dk1
         var color = "#000000";
         var cv = rPr?.Color?.Val?.Value;
-        if (cv != null && cv != "auto") color = $"#{cv}";
-        else if (GetThemeColors().TryGetValue("dk1", out var dk1)) color = $"#{dk1}";
+        if (cv != null && cv != "auto" && IsHexColor(cv)) color = $"#{cv}";
+        else if (GetThemeColors().TryGetValue("dk1", out var dk1) && IsHexColor(dk1)) color = $"#{dk1}";
 
         // Space after: Normal style pPr → docDefaults pPr → 0
         double spaceAfterPt = 0;
@@ -1886,35 +1895,22 @@ public partial class WordHandler
             if (mediaType is "text/html" or "application/xhtml+xml"
                 || mediaType.EndsWith("+xml") && mediaType.Contains("xhtml"))
             {
+                // Regex-based HTML sanitization has too many bypasses:
+                // unclosed <script>, HTML-entity-encoded javascript: URLs,
+                // case-mangled <StYlE>, style="background:url(javascript:)"
+                // etc. Since we can't guarantee safety against an
+                // adversarial altChunk author, render the HTML payload as
+                // escaped text instead so nothing ever enters the DOM as
+                // live HTML. Callers that need rich inline HTML should use
+                // Word's native insert-content features, not altChunk.
                 var bodyMatch = Regex.Match(content,
                     @"<body[^>]*>(.*?)</body>",
                     RegexOptions.Singleline | RegexOptions.IgnoreCase);
                 var inner = bodyMatch.Success ? bodyMatch.Groups[1].Value : content;
-                inner = Regex.Replace(inner,
-                    @"<script[^>]*>.*?</script>",
-                    "",
-                    RegexOptions.Singleline | RegexOptions.IgnoreCase);
-                // <style> can override preview-wide CSS; strip alongside the
-                // other navigational/embed tags. on*= handlers and
-                // javascript:/data: URLs in href/src are XSS vectors that
-                // run when the preview opens in the user's browser.
-                inner = Regex.Replace(inner,
-                    @"<style[^>]*>.*?</style>",
-                    "",
-                    RegexOptions.Singleline | RegexOptions.IgnoreCase);
-                inner = Regex.Replace(inner,
-                    @"<(?:link|meta|iframe|object|embed)[^>]*>",
-                    "",
-                    RegexOptions.IgnoreCase);
-                inner = Regex.Replace(inner,
-                    @"\son[a-z]+\s*=\s*(?:""[^""]*""|'[^']*'|[^\s>]+)",
-                    "",
-                    RegexOptions.IgnoreCase);
-                inner = Regex.Replace(inner,
-                    @"(\s(?:href|src|action|formaction)\s*=\s*['""]?)\s*(?:javascript|vbscript|data):[^'""\s>]*",
-                    "$1about:blank",
-                    RegexOptions.IgnoreCase);
-                sb.AppendLine($"<div class=\"alt-chunk-html\">{inner}</div>");
+                sb.AppendLine(
+                    $"<pre class=\"alt-chunk-html-escaped\" " +
+                    $"style=\"white-space:pre-wrap;background:#f7f7f7;padding:8px;border:1px dashed #bbb;\">" +
+                    $"{HtmlEncode(inner)}</pre>");
             }
             else if (mediaType is "text/plain" or "text/css")
             {
