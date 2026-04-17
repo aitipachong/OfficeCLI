@@ -96,7 +96,7 @@ public partial class WordHandler
             if (rgb != null)
             {
                 var val = rgb.GetAttributes().FirstOrDefault(a => a.LocalName == "val").Value;
-                if (val != null) return $"background-color:#{val}";
+                if (val != null && IsHexColor(val)) return $"background-color:#{val}";
             }
             var scheme = solidFill.Elements().FirstOrDefault(e => e.LocalName == "schemeClr");
             if (scheme != null)
@@ -441,7 +441,7 @@ public partial class WordHandler
         // docGrid snap: when type="lines" and paragraph doesn't opt out via snapToGrid=false,
         // snap line-height to the nearest multiple of linePitch that fits the text.
         {
-            var snapToGrid = pProps?.SnapToGrid?.Val?.Value ?? true;
+            var snapToGrid = pProps.SnapToGrid?.Val?.Value ?? true;
             if (snapToGrid)
             {
                 var sectPr = _doc.MainDocumentPart?.Document?.Body?.GetFirstChild<SectionProperties>();
@@ -835,7 +835,7 @@ public partial class WordHandler
                 if (style != null)
                     parts.Add($"text-decoration-style:{style}");
                 // Thickness: "thick" and any *Heavy variant
-                if (ulVal == "thick" || ulVal.EndsWith("Heavy"))
+                if (ulVal == "thick" || (ulVal?.EndsWith("Heavy") ?? false))
                     parts.Add("text-decoration-thickness:2px");
                 // Per-underline color via w:u w:color="RRGGBB"
                 var ulColor = rProps.Underline.Color?.Value;
@@ -924,7 +924,7 @@ public partial class WordHandler
         if (runShd != null && highlight == null) // don't override highlight
         {
             var fill = runShd.Fill?.Value;
-            if (fill != null && fill != "auto")
+            if (fill != null && fill != "auto" && IsHexColor(fill))
                 parts.Add($"background-color:#{fill}");
         }
 
@@ -1637,6 +1637,8 @@ public partial class WordHandler
             transform-origin: left top; transition: transform 0.15s ease;
             }}
         .page-body {{ flex: 1; display: flex; flex-direction: column; text-autospace: ideograph-alpha ideograph-numeric; overflow-wrap: anywhere; {hyphensCss} }}
+        /* Multi-column sections: flex ignores column-count; switch to block. */
+        .page-body[style*=""column-count""] {{ display: block; }}
         .page-body > :first-child {{ margin-top: 0 !important; }}
         .page-body > img + h1, .page-body > img + img + h1 {{ margin-top: 0 !important; }}
         .doc-header, .doc-footer {{ font-size: {dd.SizePt:0.##}pt; }}
