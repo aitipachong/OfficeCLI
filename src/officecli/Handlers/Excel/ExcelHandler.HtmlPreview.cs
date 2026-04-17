@@ -1231,6 +1231,10 @@ public partial class ExcelHandler
                 styles[existing] = styles[existing] + " underline";
             else
                 styles.Add("text-decoration:underline");
+            // Render double / doubleAccounting as a true double underline.
+            var ulVal = font.Underline.Val?.Value;
+            if (ulVal == UnderlineValues.Double || ulVal == UnderlineValues.DoubleAccounting)
+                styles.Add("text-decoration-style:double");
         }
 
         // Superscript/Subscript via VerticalTextAlignment
