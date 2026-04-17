@@ -235,8 +235,21 @@ public partial class WordHandler
         {
             var fnId = (int)fnRef.Id.Value;
             _ctx.FootnoteRefs.Add(fnId);
-            var fnNum = _ctx.FootnoteRefs.Count;
-            var fnLabel = FormatNoteNumber(fnNum, GetFootnoteNumFmt());
+            // #8a: when the current section has numRestart=eachSect, the
+            // displayed number counts from 1 within that section; otherwise
+            // it's the document-wide running total.
+            int displayNum;
+            if (_ctx.FnRestartEachSection)
+            {
+                _ctx.FnCountInSection++;
+                displayNum = _ctx.FnCountInSection;
+            }
+            else
+            {
+                displayNum = _ctx.FootnoteRefs.Count;
+            }
+            var fnLabel = FormatNoteNumber(displayNum, GetFootnoteNumFmt());
+            _ctx.FnLabels[fnId] = fnLabel;
             sb.Append($"<sup class=\"fn-ref\"><a href=\"#fn{fnId}\" id=\"fnref{fnId}\">{fnLabel}</a></sup>");
         }
         var enRef = run.GetFirstChild<EndnoteReference>();
@@ -527,7 +540,13 @@ public partial class WordHandler
             var fn = fnPart.Footnotes.Elements<Footnote>().FirstOrDefault(f => f.Id?.Value == fnId);
             if (fn == null) continue;
 
-            var fnLabel = FormatNoteNumber(num, fnFmt);
+            // #8a: reuse the label that was stored at ref-emit time so the
+            // bottom list matches the superscript. Falls back to the flat
+            // running number when the ref emitter didn't cache a label
+            // (e.g. footnote referenced from header/footer).
+            var fnLabel = _ctx.FnLabels.TryGetValue(fnId, out var cached)
+                ? cached
+                : FormatNoteNumber(num, fnFmt);
             sb.Append($"<div id=\"fn{fnId}\" style=\"margin:0.3em 0\"><sup>{fnLabel}</sup> ");
             var fnParas = fn.Elements<Paragraph>().ToList();
             for (int pi = 0; pi < fnParas.Count; pi++)

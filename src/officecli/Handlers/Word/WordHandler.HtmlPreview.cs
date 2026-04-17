@@ -24,6 +24,16 @@ public partial class WordHandler
         public PageLayout? CachedPageLayout { get; set; }
         public bool RenderingBody { get; set; }
 
+        // #8a: section-relative footnote numbering. When a section's
+        // FootnoteProperties.NumberingRestart = eachSect, the fn counter
+        // resets at that section boundary. FnLabels persists the displayed
+        // label per fnId so the bottom-of-page <div class="footnotes">
+        // list can emit the same number as the superscript ref.
+        public int CurrentSectionIdx { get; set; }
+        public int FnCountInSection { get; set; }
+        public bool FnRestartEachSection { get; set; }
+        public Dictionary<int, string> FnLabels { get; } = new();
+
         // CJK line-break tracking: accumulate character widths and insert <br> at Word-compatible positions
         public double LineWidthPt { get; set; }      // available width for current line
         public double LineAccumPt { get; set; }       // accumulated width on current line
@@ -976,6 +986,8 @@ public partial class WordHandler
         // width/height/margins.
         int currentSectionIdx = 0;
         sb.Append($"<!--SECT:{currentSectionIdx}-->");
+        var allSections = CollectSections(body);
+        ApplySectionFnSettings(allSections, currentSectionIdx);
 
         // Drop cap wrapping (#7c): a framePr dropCap paragraph and the
         // paragraph that follows must sit inside a non-flex container so
@@ -1004,6 +1016,26 @@ public partial class WordHandler
                     sb.Append("</div>");
                     dropCapWrapRemaining = 0;
                 }
+            }
+
+            // #8a / #7a00: a paragraph whose pPr carries an inline sectPr
+            // is the *last* paragraph of that section — it still belongs to
+            // the current section's context. So advance the section index
+            // AFTER that paragraph emitted, i.e. at the top of the NEXT
+            // iteration.
+            if (ei > 0 && elements[ei - 1] is Paragraph prevP
+                && prevP.ParagraphProperties?.GetFirstChild<SectionProperties>() is SectionProperties prevInlineSectPr)
+            {
+                var sectType = prevInlineSectPr.GetFirstChild<SectionType>();
+                if (sectType?.Val?.Value == SectionMarkValues.NextPage
+                    || sectType?.Val?.Value == SectionMarkValues.EvenPage
+                    || sectType?.Val?.Value == SectionMarkValues.OddPage)
+                {
+                    sb.Append("<!--PAGE_BREAK-->");
+                }
+                currentSectionIdx++;
+                sb.Append($"<!--SECT:{currentSectionIdx}-->");
+                ApplySectionFnSettings(allSections, currentSectionIdx);
             }
 
             // Emit invisible anchors for watch scroll targeting
@@ -1043,21 +1075,12 @@ public partial class WordHandler
                 pendingBlockClose = wBlockCount;
             }
 
-            // Check for inline section break (sectPr inside paragraph pPr) — handle page breaks and column changes
+            // Check for inline section break (sectPr inside paragraph pPr) — handle column changes.
+            // PAGE_BREAK + SECT advance are emitted at the TOP of the next
+            // iteration so the section-closing paragraph is still attributed
+            // to the section it terminates.
             if (element is Paragraph sectPara && sectPara.ParagraphProperties?.GetFirstChild<SectionProperties>() is SectionProperties inlineSectPr)
             {
-                var sectType = inlineSectPr.GetFirstChild<SectionType>();
-                if (sectType?.Val?.Value == SectionMarkValues.NextPage
-                    || sectType?.Val?.Value == SectionMarkValues.EvenPage
-                    || sectType?.Val?.Value == SectionMarkValues.OddPage)
-                {
-                    sb.Append("<!--PAGE_BREAK-->");
-                }
-                // Advance section index whether or not a page break fires,
-                // so the continuous-section layout still updates.
-                currentSectionIdx++;
-                sb.Append($"<!--SECT:{currentSectionIdx}-->");
-
                 var nextCols = GetNextSectionColumnCount(elements, ei, bodyColCount);
                 if (nextCols > 1 && !inMultiColumn)
                 {
@@ -1428,6 +1451,31 @@ public partial class WordHandler
         if (inMultiColumn) sb.AppendLine("</div>");
         if (dropCapWrapRemaining > 0) sb.Append("</div>");
         CloseAllLists(sb, listStack, ref currentListType, ref pendingLiClose);
+    }
+
+    /// <summary>
+    /// #8a: update <see cref="HtmlRenderContext.FnRestartEachSection"/> and
+    /// reset the per-section counter when a section with
+    /// <c>&lt;w:footnotePr&gt;&lt;w:numRestart w:val="eachSect"/&gt;</c>
+    /// begins. Called from RenderBodyHtml at every SECT marker emit.
+    /// </summary>
+    private void ApplySectionFnSettings(List<SectionProperties> sections, int idx)
+    {
+        _ctx.CurrentSectionIdx = idx;
+        if (idx < 0 || idx >= sections.Count) return;
+        var sectPr = sections[idx];
+        var fnPr = sectPr.GetFirstChild<FootnoteProperties>();
+        var restart = fnPr?.GetFirstChild<NumberingRestart>()?.Val?.InnerText;
+        var eachSect = restart == "eachSect";
+        if (eachSect)
+        {
+            _ctx.FnRestartEachSection = true;
+            _ctx.FnCountInSection = 0;
+        }
+        else
+        {
+            _ctx.FnRestartEachSection = false;
+        }
     }
 
     /// <summary>
