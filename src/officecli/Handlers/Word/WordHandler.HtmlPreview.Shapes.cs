@@ -559,8 +559,22 @@ public partial class WordHandler
         else if (prst == "roundRect")
             style += ";border-radius:12px";
 
-        if (!string.IsNullOrEmpty(fillCss)) style += $";{fillCss}";
-        if (!string.IsNullOrEmpty(borderCss)) style += $";{borderCss}";
+        // #7a: for complex preset geometries (line, arrows, callouts) the
+        // background/border approach collapses to a plain rect. Render
+        // those as inline SVG overlays using the shape's fill/border colors.
+        var svgPrst = prst is "line" or "straightConnector1"
+            or "rightArrow" or "leftArrow" or "upArrow" or "downArrow"
+            or "wedgeRoundRectCallout";
+        if (svgPrst)
+        {
+            // Defer fill/border to the SVG so the host div stays transparent.
+            style += ";overflow:visible";
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(fillCss)) style += $";{fillCss}";
+            if (!string.IsNullOrEmpty(borderCss)) style += $";{borderCss}";
+        }
 
         // Body properties: text layout + padding
         var bodyPr = shape.Elements().FirstOrDefault(e => e.LocalName == "bodyPr");
@@ -576,6 +590,15 @@ public partial class WordHandler
         style += $";padding:{tIns / 9525}px {rIns / 9525}px {bIns / 9525}px {lIns / 9525}px";
 
         sb.Append($"<div style=\"{style}\">");
+
+        // #7a: paint the geometry via inline SVG overlay when the preset
+        // needs real polygon/path geometry (line, arrows, callouts).
+        if (svgPrst)
+        {
+            var svgFill = ExtractCssColor(fillCss, "background-color") ?? "transparent";
+            var (borderColor, borderWidth) = ExtractBorderParts(borderCss);
+            RenderPrstGeomSvg(sb, prst!, svgFill, borderColor ?? "#000", borderWidth ?? 1);
+        }
 
         if (txbx != null)
         {
@@ -651,6 +674,83 @@ public partial class WordHandler
         }
 
         sb.Append("</div>");
+    }
+
+    // ==================== #7a prstGeom SVG helpers ====================
+
+    /// <summary>
+    /// Pull a CSS property's color value out of strings like
+    /// <c>background-color:#FF0000</c> or
+    /// <c>background:linear-gradient(...)</c>. Returns null if not present.
+    /// </summary>
+    private static string? ExtractCssColor(string css, string prop)
+    {
+        if (string.IsNullOrEmpty(css)) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(
+            css, $@"{prop}\s*:\s*(#[0-9A-Fa-f]{{3,8}}|[a-zA-Z]+)");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    private static (string? color, double? width) ExtractBorderParts(string css)
+    {
+        if (string.IsNullOrEmpty(css)) return (null, null);
+        // e.g. "border:1.5px solid #336699"
+        var m = System.Text.RegularExpressions.Regex.Match(
+            css, @"border\s*:\s*([\d.]+)px\s+\w+\s+(#[0-9A-Fa-f]{3,8}|[a-zA-Z]+)");
+        if (!m.Success) return (null, null);
+        return (m.Groups[2].Value,
+            double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var w) ? w : 1);
+    }
+
+    /// <summary>
+    /// Emit an inline SVG overlay rendering the given preset geometry.
+    /// The SVG uses viewBox="0 0 100 100" and preserveAspectRatio="none"
+    /// so it stretches to the host div's full size.
+    /// </summary>
+    private static void RenderPrstGeomSvg(
+        StringBuilder sb, string prst, string fill, string stroke, double strokeW)
+    {
+        // Normalize stroke width to viewBox coordinates: at 100-unit viewBox
+        // and typical host size ~150px, 1px ≈ 0.67 units. Keep as-is since
+        // preserveAspectRatio=none scales X/Y differently anyway; ok for
+        // approximation.
+        // Display:block + width/height:100% makes the SVG fill the host
+        // <div> without needing position:absolute (which would anchor to
+        // the nearest positioned ancestor and cause all shapes on a page
+        // to stack on top of each other).
+        sb.Append(
+            "<svg style=\"display:block;width:100%;height:100%;overflow:visible\" " +
+            "viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\" xmlns=\"http://www.w3.org/2000/svg\">");
+        var sw = strokeW.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        switch (prst)
+        {
+            case "line":
+            case "straightConnector1":
+                // Diagonal from top-left to bottom-right.
+                sb.Append($"<line x1=\"0\" y1=\"0\" x2=\"100\" y2=\"100\" stroke=\"{stroke}\" stroke-width=\"{sw}\" vector-effect=\"non-scaling-stroke\"/>");
+                break;
+            case "rightArrow":
+                // Classic block arrow pointing right: body 0..70, head 70..100.
+                sb.Append($"<polygon points=\"0,30 70,30 70,10 100,50 70,90 70,70 0,70\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\" vector-effect=\"non-scaling-stroke\"/>");
+                break;
+            case "leftArrow":
+                sb.Append($"<polygon points=\"100,30 30,30 30,10 0,50 30,90 30,70 100,70\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\" vector-effect=\"non-scaling-stroke\"/>");
+                break;
+            case "downArrow":
+                sb.Append($"<polygon points=\"30,0 70,0 70,70 90,70 50,100 10,70 30,70\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\" vector-effect=\"non-scaling-stroke\"/>");
+                break;
+            case "upArrow":
+                sb.Append($"<polygon points=\"30,100 70,100 70,30 90,30 50,0 10,30 30,30\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\" vector-effect=\"non-scaling-stroke\"/>");
+                break;
+            case "wedgeRoundRectCallout":
+                // Rounded rect (80% height) + triangular pointer down-left.
+                // Rect corners rounded at 10 units; pointer tip at (15, 95).
+                sb.Append($"<path d=\"M 10,0 L 90,0 Q 100,0 100,10 L 100,70 Q 100,80 90,80 L 45,80 L 15,95 L 30,80 L 10,80 Q 0,80 0,70 L 0,10 Q 0,0 10,0 Z\" " +
+                          $"fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\" vector-effect=\"non-scaling-stroke\"/>");
+                break;
+        }
+        sb.Append("</svg>");
     }
 
 }
