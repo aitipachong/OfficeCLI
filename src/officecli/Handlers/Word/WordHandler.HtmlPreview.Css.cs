@@ -800,12 +800,19 @@ public partial class WordHandler
         // Font
         var fonts = rProps.RunFonts;
         var font = fonts?.EastAsia?.Value ?? fonts?.Ascii?.Value ?? fonts?.HighAnsi?.Value;
-        if (font != null)
+        // Skip theme font references (e.g. "+mn-lt", "+mj-ea") — those are shorthand
+        // markers, not real font names; the theme-resolved value would already be in
+        // AsciiTheme etc. which we don't read here.
+        if (font != null && !font.StartsWith("+", StringComparison.Ordinal))
         {
             var fallback = GetChineseFontFallback(font);
+            // Always append a generic family so the run still renders with the right
+            // serif/sans-serif class when neither the primary nor the CJK fallback
+            // is installed (matters in headless browsers like Playwright).
+            var generic = IsLikelySerif(font) ? "serif" : "sans-serif";
             parts.Add(fallback != null
-                ? $"font-family:'{CssSanitize(font)}',{fallback}"
-                : $"font-family:'{CssSanitize(font)}'");
+                ? $"font-family:'{CssSanitize(font)}',{fallback},{generic}"
+                : $"font-family:'{CssSanitize(font)}',{generic}");
         }
 
         // Size (stored as half-points)
@@ -1460,6 +1467,28 @@ public partial class WordHandler
         "white" => "#FFFFFF",
         _ => null
     };
+
+    /// <summary>
+    /// Heuristic: does this typeface name belong to the serif family?
+    /// Used to pick the generic CSS fallback (serif vs sans-serif) when neither
+    /// the primary font nor the CJK fallback is installed.
+    /// </summary>
+    private static bool IsLikelySerif(string font)
+    {
+        var f = font.ToLowerInvariant();
+        // Western serif faces
+        if (f.Contains("times") || f.Contains("serif") || f.Contains("georgia")
+            || f.Contains("cambria") || f.Contains("garamond") || f.Contains("palatino")
+            || f.Contains("book antiqua") || f.Contains("constantia") || f.Contains("didot")
+            || f.Contains("baskerville") || f.Contains("minion"))
+            return true;
+        // CJK serif (宋体 / Song / Ming / Mincho)
+        if (f.Contains("song") || f.Contains("ming") || f.Contains("mincho")
+            || f.Contains("fangsong") || font.Contains("宋") || font.Contains("仿宋")
+            || font.Contains("明朝"))
+            return true;
+        return false;
+    }
 
     /// <summary>
     /// Returns CSS fallback fonts for common Windows Chinese fonts that are unavailable on Mac.
