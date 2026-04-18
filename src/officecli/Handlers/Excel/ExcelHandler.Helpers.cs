@@ -2259,6 +2259,53 @@ public partial class ExcelHandler
     }
 
     /// <summary>
+    /// Parse an <c>anchor=</c> prop value as a cell-reference or cell-range
+    /// (e.g. <c>"B2"</c> or <c>"B2:F7"</c>) into 0-based XDR column/row
+    /// coordinates. Returns <c>false</c> for anchor-mode strings like
+    /// <c>oneCell</c>/<c>twoCell</c>/<c>absolute</c>, which the caller should
+    /// route to the anchorMode path instead. Throws <see cref="ArgumentException"/>
+    /// for syntactically invalid range strings.
+    ///
+    /// When only a single cell is supplied, <c>toCol</c>/<c>toRow</c> are set
+    /// to <c>-1</c> so callers can fall back to a size-derived extent (e.g.
+    /// width/height × EMU-per-cell). The regex mirrors the OLE branch grammar.
+    ///
+    /// CONSISTENCY(xdr-coords): XDR ColumnId/RowId are 0-based; ColumnNameToIndex
+    /// returns 1-based, so this helper subtracts 1 on the way out.
+    /// </summary>
+    internal static bool TryParseCellRangeAnchor(
+        string? value, out int fromCol, out int fromRow, out int toCol, out int toRow)
+    {
+        fromCol = fromRow = 0;
+        toCol = toRow = -1;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var m = System.Text.RegularExpressions.Regex.Match(
+            value, @"^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!m.Success) return false;
+        fromCol = ColumnNameToIndex(m.Groups[1].Value) - 1;
+        fromRow = int.Parse(m.Groups[2].Value) - 1;
+        if (m.Groups[3].Success)
+        {
+            toCol = ColumnNameToIndex(m.Groups[3].Value) - 1;
+            toRow = int.Parse(m.Groups[4].Value) - 1;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Return true if the given anchor= value is one of the recognized
+    /// anchorMode tokens (oneCell/twoCell/absolute). Used by the picture
+    /// branch to disambiguate mode-strings from cell-range strings.
+    /// </summary>
+    internal static bool IsAnchorModeToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var v = value.Trim().ToLowerInvariant();
+        return v is "onecell" or "twocell" or "absolute";
+    }
+
+    /// <summary>
     /// Apply `x` / `y` / `width` / `height` to the N-th chart's
     /// <see cref="XDR.TwoCellAnchor"/> in a drawings part. Accepts the same
     /// value grammar as OLE objects and chart Add: integer cell counts, or

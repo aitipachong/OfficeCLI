@@ -1511,8 +1511,35 @@ public partial class ExcelHandler
                 // absolute → <xdr:absoluteAnchor> with pos (x/y EMU) + ext; picture
                 //            does not move or resize with cells.
                 // twoCell  → <xdr:twoCellAnchor> with from + to markers (default).
-                var picAnchorMode = (properties.GetValueOrDefault("anchorMode")
-                    ?? properties.GetValueOrDefault("anchor")
+                //
+                // CONSISTENCY(ole-width-units): `anchor=B2:E6` (cell-range) is
+                // parsed here the same way as the OLE and shape branches; it
+                // implies anchorMode=twoCell. `anchor=oneCell|twoCell|absolute`
+                // is still honored as the mode for back-compat. Explicit
+                // `anchorMode=` always wins. When both `anchor=<range>` and
+                // `x/y/width/height` are supplied, anchor wins with a warning
+                // (same convention as the shape/OLE branches).
+                var picAnchorRaw = properties.GetValueOrDefault("anchor");
+                var picAnchorModeExplicit = properties.GetValueOrDefault("anchorMode");
+                bool picHasRange = false;
+                int picRangeFromCol = 0, picRangeFromRow = 0, picRangeToCol = -1, picRangeToRow = -1;
+                // `anchor=` is either a cell-range ("B2" / "B2:E6") or an
+                // anchorMode token ("oneCell"/"twoCell"/"absolute"). Prefer the
+                // cell-range interpretation; fall back to mode-token only when
+                // the value is a recognized token. Explicit `anchorMode=` wins
+                // the mode selection regardless.
+                if (!string.IsNullOrWhiteSpace(picAnchorRaw) && !IsAnchorModeToken(picAnchorRaw))
+                {
+                    if (!TryParseCellRangeAnchor(picAnchorRaw, out picRangeFromCol, out picRangeFromRow, out picRangeToCol, out picRangeToRow))
+                        throw new ArgumentException($"Invalid anchor: '{picAnchorRaw}'. Expected e.g. 'B2', 'B2:E6', or one of 'oneCell'/'twoCell'/'absolute'.");
+                    picHasRange = true;
+                    if (properties.ContainsKey("width") || properties.ContainsKey("height")
+                        || properties.ContainsKey("x") || properties.ContainsKey("y"))
+                        Console.Error.WriteLine(
+                            "Warning: 'x'/'y'/'width'/'height' are ignored when 'anchor' is a cell range (anchor defines the full rectangle).");
+                }
+                var picAnchorMode = (picAnchorModeExplicit
+                    ?? (picHasRange ? "twoCell" : picAnchorRaw)
                     ?? "twoCell").Trim().ToLowerInvariant();
 
                 var picShape = BuildPictureElementWithTransform(picId, alt ?? "", imgRelId, xlSvgRelId, properties);
@@ -1538,11 +1565,13 @@ public partial class ExcelHandler
                 {
                     case "onecell":
                     {
+                        int oneFromCol = picHasRange ? picRangeFromCol : px;
+                        int oneFromRow = picHasRange ? picRangeFromRow : py;
                         var oneAnchor = new XDR.OneCellAnchor(
                             new XDR.FromMarker(
-                                new XDR.ColumnId(px.ToString()),
+                                new XDR.ColumnId(oneFromCol.ToString()),
                                 new XDR.ColumnOffset("0"),
-                                new XDR.RowId(py.ToString()),
+                                new XDR.RowId(oneFromRow.ToString()),
                                 new XDR.RowOffset("0")
                             ),
                             new XDR.Extent { Cx = pwEmu, Cy = phEmu },
@@ -1572,18 +1601,49 @@ public partial class ExcelHandler
                     }
                     default:
                     {
+                        int twoFromCol, twoFromRow, twoToCol, twoToRow;
+                        long twoToColOff, twoToRowOff;
+                        if (picHasRange)
+                        {
+                            twoFromCol = picRangeFromCol;
+                            twoFromRow = picRangeFromRow;
+                            if (picRangeToCol >= 0)
+                            {
+                                twoToCol = picRangeToCol;
+                                twoToRow = picRangeToRow;
+                                twoToColOff = 0;
+                                twoToRowOff = 0;
+                            }
+                            else
+                            {
+                                // Single-cell range in twoCell mode: fall back to width/height extent.
+                                twoToCol = twoFromCol + (int)picWholeCols;
+                                twoToRow = twoFromRow + (int)picWholeRows;
+                                twoToColOff = picRemCols;
+                                twoToRowOff = picRemRows;
+                            }
+                        }
+                        else
+                        {
+                            twoFromCol = px;
+                            twoFromRow = py;
+                            twoToCol = px + (int)picWholeCols;
+                            twoToRow = py + (int)picWholeRows;
+                            twoToColOff = picRemCols;
+                            twoToRowOff = picRemRows;
+                        }
                         anchor = new XDR.TwoCellAnchor(
                             new XDR.FromMarker(
-                                new XDR.ColumnId(px.ToString()),
+                                new XDR.ColumnId(twoFromCol.ToString()),
                                 new XDR.ColumnOffset("0"),
-                                new XDR.RowId(py.ToString()),
+                                new XDR.RowId(twoFromRow.ToString()),
                                 new XDR.RowOffset("0")
                             ),
                             new XDR.ToMarker(
-                                new XDR.ColumnId((px + (int)picWholeCols).ToString()),
-                                new XDR.ColumnOffset(picRemCols.ToString()),
-                                new XDR.RowId((py + (int)picWholeRows).ToString()),
-                                new XDR.RowOffset(picRemRows.ToString())
+                                new XDR.ColumnId(twoToCol.ToString()),
+                                new XDR.ColumnOffset(twoToColOff.ToString()),
+                                new XDR.RowId(twoToRow.ToString()),
+                                new XDR.RowOffset(twoToRowOff.ToString())
                             ),
                             picShape,
                             new XDR.ClientData()
@@ -1680,24 +1740,11 @@ public partial class ExcelHandler
                         || properties.ContainsKey("x") || properties.ContainsKey("y"))
                         Console.Error.WriteLine(
                             "Warning: 'x'/'y'/'width'/'height' are ignored when 'anchor' is provided (anchor defines the full rectangle).");
-                    var shpAnchorMatch = Regex.Match(shpAnchorStr, @"^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$", RegexOptions.IgnoreCase);
-                    if (!shpAnchorMatch.Success)
+                    if (!TryParseCellRangeAnchor(shpAnchorStr, out var sxFrom, out var syFrom, out var sxTo, out var syTo))
                         throw new ArgumentException($"Invalid anchor: '{shpAnchorStr}'. Expected e.g. 'B2' or 'B2:F7'.");
-                    // CONSISTENCY(xdr-coords): XDR ColumnId/RowId are 0-based;
-                    // ColumnNameToIndex returns 1-based, so subtract 1 here.
-                    sx = ColumnNameToIndex(shpAnchorMatch.Groups[1].Value) - 1;
-                    sy = int.Parse(shpAnchorMatch.Groups[2].Value) - 1;
-                    int sxTo, syTo;
-                    if (shpAnchorMatch.Groups[3].Success)
-                    {
-                        sxTo = ColumnNameToIndex(shpAnchorMatch.Groups[3].Value) - 1;
-                        syTo = int.Parse(shpAnchorMatch.Groups[4].Value) - 1;
-                    }
-                    else
-                    {
-                        sxTo = sx + 4;
-                        syTo = sy + 2;
-                    }
+                    sx = sxFrom;
+                    sy = syFrom;
+                    if (sxTo < 0) { sxTo = sx + 4; syTo = sy + 2; }
                     sw = sxTo - sx;
                     sh = syTo - sy;
                 }
