@@ -171,12 +171,20 @@ static partial class CommandBuilder
         // spawning, then restore.  This prevents the shell's pipe handles
         // from leaking into the resident while still allowing .NET's internal
         // handle plumbing to work.
+        //
+        // On macOS/Linux, posix_spawn inherits fds unless the child's
+        // stdout/stderr are explicitly redirected.  RedirectStandardOutput /
+        // RedirectStandardError = true makes .NET plumb a fresh pipe from
+        // parent to child, so the caller's shell pipe (e.g. `| tail -1`,
+        // $(...)) is NOT inherited and EOFs promptly when the client exits.
+        // See ResidentStdoutInheritanceTests for the regression lock-in.
         var startInfo = new ProcessStartInfo
         {
             FileName = exePath,
             Arguments = $"__resident-serve__ \"{filePath}\"",
             UseShellExecute = false,
             CreateNoWindow = true,
+            RedirectStandardOutput = true,
             RedirectStandardError = true
         };
 
