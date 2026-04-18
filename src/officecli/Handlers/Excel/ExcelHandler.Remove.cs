@@ -6,7 +6,6 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using C = DocumentFormat.OpenXml.Drawing.Charts;
-using X14 = DocumentFormat.OpenXml.Office2010.Excel;
 using XDR = DocumentFormat.OpenXml.Drawing.Spreadsheet;
 
 namespace OfficeCli.Handlers;
