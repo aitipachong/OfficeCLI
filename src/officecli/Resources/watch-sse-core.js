@@ -67,34 +67,6 @@
         });
     }
 
-    function _excelPatchChangesStructure(msg) {
-        if (!msg.patches) return false;
-        for (var i = 0; i < msg.patches.length; i++) {
-            var patch = msg.patches[i];
-            if (patch.op === 'style' || patch.op === 'remove') continue;
-            if (!patch.html) return true;
-
-            var tmp = document.createElement('tbody');
-            tmp.innerHTML = patch.html;
-            var newRow = tmp.firstElementChild;
-            if (!newRow) return true;
-
-            var newCellCount = newRow.children.length;
-            var existing = document.querySelector('tr[data-row="' + patch.row + '"]');
-            if (existing) {
-                if (existing.children.length !== newCellCount) return true;
-                continue;
-            }
-
-            var parts = patch.row.split('-');
-            var sheetDiv = document.querySelector('.sheet-content[data-sheet="' + parts[0] + '"]');
-            var referenceRow = sheetDiv ? sheetDiv.querySelector('tbody tr[data-row]') : null;
-            if (!referenceRow) return true;
-            if (referenceRow.children.length !== newCellCount) return true;
-        }
-        return false;
-    }
-
     function scrollToSlide(num) {
         clearTimeout(_scrollTimer);
         _scrollTimer = setTimeout(function() {
@@ -329,14 +301,6 @@
             // Skip when prevVersion===0 (fresh client — no messages seen yet)
             if (prevVersion > 0 && msg.baseVersion !== 0 && msg.baseVersion !== prevVersion) {
                 location.reload();
-                return;
-            }
-            // Row-level patching only updates <tr> nodes. If a patch changes row
-            // shape, then table chrome such as <colgroup>, <thead>, or table
-            // width also changed. Fall back to a full body swap so new columns
-            // and widths appear without requiring a manual refresh.
-            if (_excelPatchChangesStructure(msg)) {
-                _replaceDocumentBody(msg);
                 return;
             }
             // Apply style patch if present

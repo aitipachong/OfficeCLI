@@ -585,9 +585,13 @@ internal class WatchServer : IDisposable
                 }
             }
 
-            // Excel: try row-level diff instead of full refresh
+            // Excel: try row-level diff instead of full refresh.
+            // Skip when table chrome (colgroup/thead/table width) changed —
+            // row patches can't express those changes, so fall through to
+            // full-action so the browser rebuilds the whole body.
             if (msg.Action == "full" && !string.IsNullOrEmpty(msg.FullHtml)
-                && !string.IsNullOrEmpty(oldHtml) && oldHtml.Contains("data-row=\""))
+                && !string.IsNullOrEmpty(oldHtml) && oldHtml.Contains("data-row=\"")
+                && TableChromeSignature(oldHtml) == TableChromeSignature(msg.FullHtml))
             {
                 var excelPatches = ComputeExcelPatches(oldHtml, msg.FullHtml);
                 var oldStyle = ExtractStyleBlock(oldHtml);
@@ -1296,6 +1300,33 @@ internal class WatchServer : IDisposable
         var rx = new System.Text.RegularExpressions.Regex(@"data-from-(?:row|col)=""(\d+)""");
         foreach (System.Text.RegularExpressions.Match m in rx.Matches(html))
             sb.Append(m.Value).Append(',');
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Signature of Excel table chrome — concatenates each sheet's &lt;colgroup&gt;,
+    /// &lt;thead&gt;, and the &lt;table&gt; open tag (which carries table width style).
+    /// Row-level patches only swap &lt;tr&gt; nodes, so if this signature changes
+    /// between old and new HTML (column added/removed, column width changed,
+    /// thead style changed) the browser needs a full body refresh — otherwise
+    /// new headers/widths stay stale until a manual reload.
+    /// </summary>
+    private static string TableChromeSignature(string html)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (System.Text.RegularExpressions.Match m in
+            System.Text.RegularExpressions.Regex.Matches(
+                html, @"<colgroup>.*?</colgroup>",
+                System.Text.RegularExpressions.RegexOptions.Singleline))
+            sb.Append(m.Value).Append('|');
+        foreach (System.Text.RegularExpressions.Match m in
+            System.Text.RegularExpressions.Regex.Matches(
+                html, @"<thead>.*?</thead>",
+                System.Text.RegularExpressions.RegexOptions.Singleline))
+            sb.Append(m.Value).Append('|');
+        foreach (System.Text.RegularExpressions.Match m in
+            System.Text.RegularExpressions.Regex.Matches(html, @"<table[^>]*>"))
+            sb.Append(m.Value).Append('|');
         return sb.ToString();
     }
 
