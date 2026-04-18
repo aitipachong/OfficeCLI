@@ -551,23 +551,23 @@ public partial class WordHandler
                 props.RemoveAllChildren<Shading>();
                 var shdParts = value.Split(';');
                 if (shdParts.Length == 1)
-                    props.AppendChild(new Shading { Val = ShadingPatternValues.Clear, Fill = SanitizeHex(shdParts[0]) });
+                    InsertRunPropInSchemaOrder(props, new Shading { Val = ShadingPatternValues.Clear, Fill = SanitizeHex(shdParts[0]) });
                 else
                 {
                     var shd = new Shading { Val = new ShadingPatternValues(shdParts[0]), Fill = SanitizeHex(shdParts[1]) };
                     if (shdParts.Length >= 3) shd.Color = SanitizeHex(shdParts[2]);
-                    props.AppendChild(shd);
+                    InsertRunPropInSchemaOrder(props, shd);
                 }
                 break;
             case "superscript":
                 props.RemoveAllChildren<VerticalTextAlignment>();
                 if (IsTruthy(value))
-                    props.AppendChild(new VerticalTextAlignment { Val = VerticalPositionValues.Superscript });
+                    InsertRunPropInSchemaOrder(props, new VerticalTextAlignment { Val = VerticalPositionValues.Superscript });
                 break;
             case "subscript":
                 props.RemoveAllChildren<VerticalTextAlignment>();
                 if (IsTruthy(value))
-                    props.AppendChild(new VerticalTextAlignment { Val = VerticalPositionValues.Subscript });
+                    InsertRunPropInSchemaOrder(props, new VerticalTextAlignment { Val = VerticalPositionValues.Subscript });
                 break;
             case "caps":
                 props.RemoveAllChildren<Caps>();
@@ -614,7 +614,11 @@ public partial class WordHandler
             FontSizeComplexScript => 22,
             Highlight => 23,
             Underline => 24,
-            // effect, ...
+            // effect = 25, bdr = 26
+            Shading => 27,
+            // fitText = 28
+            VerticalTextAlignment => 29,
+            // rtl, cs, em, lang, ...
             _ => 100,
         };
 
