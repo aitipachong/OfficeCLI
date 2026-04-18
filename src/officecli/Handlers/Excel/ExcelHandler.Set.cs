@@ -1383,6 +1383,8 @@ public partial class ExcelHandler
             switch (key.ToLowerInvariant())
             {
                 case "value" or "text":
+                    // R13-1: enforce Excel's 32767-char per-cell limit.
+                    EnsureCellValueLength(value, cell.CellReference?.Value);
                     // Auto-detect formula: value starting with '=' is treated as formula
                     if (value.StartsWith('=') && value.Length > 1)
                         goto case "formula";

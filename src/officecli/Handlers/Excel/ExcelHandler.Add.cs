@@ -160,6 +160,9 @@ public partial class ExcelHandler
 
                 if (properties.TryGetValue("value", out var value))
                 {
+                    // R13-1: reject values longer than Excel's 32767-char limit
+                    // before doing any conversion/serialization.
+                    EnsureCellValueLength(value, cellRef);
                     // Auto-detect formula: value starting with '=' is treated as formula
                     if (value.StartsWith('=') && value.Length > 1)
                     {

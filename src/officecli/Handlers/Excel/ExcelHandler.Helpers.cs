@@ -3383,4 +3383,20 @@ public partial class ExcelHandler
         }
         return false;
     }
+
+    // R13-1: Excel rejects cell values longer than 32767 chars (2^15 - 1) with
+    // 0x800A03EC on save/open. Reject at write time with a clear error rather
+    // than silently writing a file Excel will refuse to open.
+    internal const int MaxCellTextLength = 32767;
+
+    internal static void EnsureCellValueLength(string? value, string? cellRef = null)
+    {
+        if (value == null) return;
+        if (value.Length > MaxCellTextLength)
+        {
+            var where = string.IsNullOrEmpty(cellRef) ? "" : $" at {cellRef}";
+            throw new ArgumentException(
+                $"Cell value{where} exceeds Excel's {MaxCellTextLength}-character limit (got {value.Length})");
+        }
+    }
 }
