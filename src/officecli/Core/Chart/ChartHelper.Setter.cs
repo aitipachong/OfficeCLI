@@ -310,6 +310,42 @@ internal static partial class ChartHelper
                     break;
                 }
 
+                // R15-4: tick-label rotation. Degrees (-90..90). Emits a
+                // <c:txPr> with <a:bodyPr rot="deg*60000"/> on the target
+                // axis so Excel rotates the tick labels on open.
+                case "labelrotation":
+                case "xaxis.labelrotation":
+                case "xaxislabelrotation":
+                case "valaxis.labelrotation":
+                case "valaxislabelrotation":
+                case "yaxis.labelrotation":
+                case "yaxislabelrotation":
+                {
+                    var plotArea2 = chart.GetFirstChild<C.PlotArea>();
+                    if (plotArea2 == null) { unsupported.Add(key); break; }
+                    if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var deg))
+                    { unsupported.Add(key); break; }
+                    var rotAttrVal = ((int)(deg * 60000)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var lowerKey = key.ToLowerInvariant();
+                    var targetCat = lowerKey is "labelrotation" or "xaxis.labelrotation" or "xaxislabelrotation";
+                    var targetVal = lowerKey is "labelrotation" or "valaxis.labelrotation" or "valaxislabelrotation"
+                        or "yaxis.labelrotation" or "yaxislabelrotation";
+                    if (targetCat)
+                    {
+                        foreach (var axis in plotArea2.Elements<C.CategoryAxis>())
+                            ApplyAxisLabelRotation(axis, rotAttrVal);
+                        foreach (var axis in plotArea2.Elements<C.DateAxis>())
+                            ApplyAxisLabelRotation(axis, rotAttrVal);
+                    }
+                    if (targetVal)
+                    {
+                        foreach (var axis in plotArea2.Elements<C.ValueAxis>())
+                            ApplyAxisLabelRotation(axis, rotAttrVal);
+                    }
+                    break;
+                }
+
                 case "colors":
                 {
                     var plotArea2 = chart.GetFirstChild<C.PlotArea>();

@@ -421,6 +421,9 @@ internal static partial class ChartHelper
         "datalabels.showsername", "datalabels.showseriesname", "datalabels.showseries",
         "datalabels.showlegendkey",
         "axisfont", "axis.font", "legendfont", "legend.font",
+        // R15-4: rotate tick labels on cat/val axis. Degrees (e.g. -45).
+        "labelrotation", "xaxis.labelrotation", "xaxislabelrotation",
+        "valaxis.labelrotation", "valaxislabelrotation", "yaxis.labelrotation", "yaxislabelrotation",
         // Title styling
         "title.font", "titlefont", "title.size", "titlesize",
         "title.color", "titlecolor", "title.bold", "titlebold",
@@ -982,6 +985,40 @@ internal static partial class ChartHelper
             axis.InsertBefore(tp, crossAxis);
         else
             axis.AppendChild(tp);
+    }
+
+    /// <summary>
+    /// R15-4: set tick-label rotation on a category/value/date axis. Reuses
+    /// the existing c:txPr subtree if any (preserves axisfont) and sets
+    /// a:bodyPr/@rot. Creates a minimal c:txPr otherwise.
+    /// </summary>
+    internal static void ApplyAxisLabelRotation(OpenXmlCompositeElement axis, string rotAttrVal)
+    {
+        var tp = axis.GetFirstChild<C.TextProperties>();
+        if (tp == null)
+        {
+            tp = new C.TextProperties(
+                new Drawing.BodyProperties { Rotation = int.Parse(rotAttrVal) },
+                new Drawing.ListStyle(),
+                new Drawing.Paragraph(new Drawing.ParagraphProperties(new Drawing.EndParagraphRunProperties { Language = "en-US" }))
+            );
+            var crossAxis = axis.GetFirstChild<C.CrossingAxis>();
+            if (crossAxis != null)
+                axis.InsertBefore(tp, crossAxis);
+            else
+                axis.AppendChild(tp);
+            return;
+        }
+        var bodyPr = tp.GetFirstChild<Drawing.BodyProperties>();
+        if (bodyPr == null)
+        {
+            bodyPr = new Drawing.BodyProperties { Rotation = int.Parse(rotAttrVal) };
+            tp.PrependChild(bodyPr);
+        }
+        else
+        {
+            bodyPr.Rotation = int.Parse(rotAttrVal);
+        }
     }
 
     /// <summary>
