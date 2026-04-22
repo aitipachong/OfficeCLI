@@ -417,13 +417,31 @@ public partial class WordHandler
         string resultPath;
         if (parent is Paragraph fieldPara)
         {
-            fieldPara.AppendChild(fieldRunBegin);
-            fieldPara.AppendChild(fieldRunInstr);
-            fieldPara.AppendChild(fieldRunSep);
-            fieldPara.AppendChild(fieldRunResult);
-            fieldPara.AppendChild(fieldRunEnd);
-            var runIdx = GetAllRuns(fieldPara).Count - 4;
-            resultPath = $"{parentPath}/r[{runIdx}]";
+            // index is a childElement-index (ResolveAnchorPosition counts pPr too).
+            // Insert the 5 field runs starting at that position, preserving order.
+            var childList = fieldPara.ChildElements.ToList();
+            if (index.HasValue && index.Value < childList.Count)
+            {
+                var refChild = childList[index.Value];
+                fieldPara.InsertBefore(fieldRunBegin, refChild);
+                fieldPara.InsertAfter(fieldRunInstr, fieldRunBegin);
+                fieldPara.InsertAfter(fieldRunSep, fieldRunInstr);
+                fieldPara.InsertAfter(fieldRunResult, fieldRunSep);
+                fieldPara.InsertAfter(fieldRunEnd, fieldRunResult);
+                // Count how many runs precede fieldRunResult to build result path
+                var runIdxAfterInsert = fieldPara.Elements<Run>().TakeWhile(r => r != fieldRunResult).Count();
+                resultPath = $"{parentPath}/r[{runIdxAfterInsert + 1}]";
+            }
+            else
+            {
+                fieldPara.AppendChild(fieldRunBegin);
+                fieldPara.AppendChild(fieldRunInstr);
+                fieldPara.AppendChild(fieldRunSep);
+                fieldPara.AppendChild(fieldRunResult);
+                fieldPara.AppendChild(fieldRunEnd);
+                var runIdx = GetAllRuns(fieldPara).Count - 4;
+                resultPath = $"{parentPath}/r[{runIdx}]";
+            }
         }
         else
         {
