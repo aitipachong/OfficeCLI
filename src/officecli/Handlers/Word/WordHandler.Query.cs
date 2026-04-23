@@ -999,7 +999,22 @@ public partial class WordHandler
         {
             var root = _doc.MainDocumentPart?.Document;
             if (root != null)
-                return GenericXmlQuery.Query(root, genericParsed.element ?? "", genericParsed.attrs, genericParsed.containsText);
+            {
+                var genericResults = GenericXmlQuery.Query(root, genericParsed.element ?? "", genericParsed.attrs, genericParsed.containsText);
+                // Canonicalize emitted paths so they resolve via `get` /
+                // `add --after`. The generic traversal starts at <w:document>
+                // and produces `/document[1]/body[1]/...` but Navigation
+                // expects paths rooted at `/body`. Strip the document prefix.
+                const string docPrefix = "/document[1]/body[1]";
+                foreach (var n in genericResults)
+                {
+                    if (n.Path != null && n.Path.StartsWith(docPrefix, StringComparison.Ordinal))
+                        n.Path = "/body" + n.Path[docPrefix.Length..];
+                    else if (n.Path == "/document[1]")
+                        n.Path = "/";
+                }
+                return genericResults;
+            }
             return results;
         }
 

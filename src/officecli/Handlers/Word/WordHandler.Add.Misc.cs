@@ -90,7 +90,18 @@ public partial class WordHandler
         if (string.IsNullOrEmpty(bkName))
             throw new ArgumentException("'name' property is required for bookmark");
 
-        var existingIds = body.Descendants<BookmarkStart>()
+        // Reject duplicate bookmark names. OOXML bookmark names are expected
+        // to be unique per document; tolerating duplicates makes
+        // /bookmark[@name=X] ambiguous (it picks the first), so the path
+        // returned by `add` may not identify the bookmark just inserted.
+        var existingStarts = body.Descendants<BookmarkStart>().ToList();
+        if (existingStarts.Any(b => string.Equals(b.Name?.Value, bkName, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException(
+                $"bookmark name '{bkName}' already exists; pick a unique name.");
+        }
+
+        var existingIds = existingStarts
             .Select(b => int.TryParse(b.Id?.Value, out var id) ? id : 0);
         var bkId = (existingIds.Any() ? existingIds.Max() + 1 : 1).ToString();
 
@@ -112,6 +123,15 @@ public partial class WordHandler
             {
                 var bkRun = new Run(new Text(bkText) { Space = SpaceProcessingModeValues.Preserve });
                 InsertIntoParagraph(bkPara, new OpenXmlElement[] { bookmarkStart, bkRun, bookmarkEnd }, index);
+            }
+            else if (parent is Body)
+            {
+                // Runs must live inside a paragraph; wrap Start+Run+End in a new
+                // <w:p> before inserting so we don't produce bare <w:r> as a
+                // direct body child (schema-invalid).
+                var bkRun = new Run(new Text(bkText) { Space = SpaceProcessingModeValues.Preserve });
+                var wrapPara = new Paragraph(bookmarkStart, bkRun, bookmarkEnd);
+                InsertAtIndexOrAppend(parent, wrapPara, index);
             }
             else
             {

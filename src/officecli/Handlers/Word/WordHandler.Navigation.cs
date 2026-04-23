@@ -398,6 +398,47 @@ public partial class WordHandler
 
         string parentPath = "/" + first.Name + (first.Index.HasValue ? $"[{first.Index}]" : "");
 
+        // Top-level /footnote[@footnoteId=N] / /footnote[N] routing. Mirrors
+        // WordHandler.Add.cs's TryResolveFootnoteOrEndnoteBody so that paths
+        // returned by `add` under a footnote/endnote are round-trippable via
+        // `get` and usable as --after/--before anchors.
+        if (current == null)
+        {
+            var fname = first.Name.ToLowerInvariant();
+            if (fname == "footnote")
+            {
+                int? fnId = first.Index;
+                if (fnId == null && first.StringIndex != null
+                    && first.StringIndex.StartsWith("@footnoteId=", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(first.StringIndex["@footnoteId=".Length..], out var idv))
+                {
+                    fnId = idv;
+                }
+                if (fnId != null)
+                {
+                    current = _doc.MainDocumentPart?.FootnotesPart?.Footnotes?
+                        .Elements<Footnote>().FirstOrDefault(f => f.Id?.Value == fnId.Value);
+                    parentPath = $"/footnote[@footnoteId={fnId}]";
+                }
+            }
+            else if (fname == "endnote")
+            {
+                int? enId = first.Index;
+                if (enId == null && first.StringIndex != null
+                    && first.StringIndex.StartsWith("@endnoteId=", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(first.StringIndex["@endnoteId=".Length..], out var idv))
+                {
+                    enId = idv;
+                }
+                if (enId != null)
+                {
+                    current = _doc.MainDocumentPart?.EndnotesPart?.Endnotes?
+                        .Elements<Endnote>().FirstOrDefault(e => e.Id?.Value == enId.Value);
+                    parentPath = $"/endnote[@endnoteId={enId}]";
+                }
+            }
+        }
+
         for (int i = 1; i < segments.Count && current != null; i++)
         {
             var seg = segments[i];

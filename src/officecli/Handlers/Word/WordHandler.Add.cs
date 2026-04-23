@@ -224,6 +224,13 @@ public partial class WordHandler
                 case "tableofcontents":
                     throw new ArgumentException(
                         $"Cannot add '{type}' under {parentPath}: a paragraph cannot contain another paragraph, table, section break, or TOC. Add at /body instead.");
+                case "sectpr":
+                    // Raw <w:sectPr> as a direct child of <w:p> is schema-invalid.
+                    // sectPr may only live inside <w:pPr> (paragraph-level break)
+                    // or at the end of <w:body> (document final section).
+                    // Block `--from` clones that would produce <w:p><w:sectPr/></w:p>.
+                    throw new ArgumentException(
+                        $"Cannot add '{type}' under {parentPath}: raw <w:sectPr> cannot be a direct child of a paragraph (it must live inside <w:pPr>). Use `--type section` to create a proper paragraph-level section break.");
             }
         }
 
