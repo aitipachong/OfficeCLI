@@ -656,15 +656,18 @@ public partial class PowerPointHandler
             var lastPart = colorParts.Last();
             var angleCandidate = lastPart.EndsWith("deg", StringComparison.OrdinalIgnoreCase)
                 ? lastPart[..^3] : lastPart;
+            // "deg" suffix is an angle even if out of range — always strip it.
+            var hasDegSuffix = lastPart.EndsWith("deg", StringComparison.OrdinalIgnoreCase);
             if (colorParts.Count >= 2 &&
                 int.TryParse(angleCandidate, out var angleDeg) &&
-                angleCandidate.Length <= 4 &&
-                angleDeg >= -360 && angleDeg <= 360)
+                (hasDegSuffix || angleCandidate.Length <= 4))
             {
                 // OOXML a:lin/@ang range is [0, 21600000) in 60000ths of a degree.
                 // Accept only [-360, 360] — anything outside is almost certainly a
-                // user typo (extra digit, mis-pasted value) and mod-wrapping it would
-                // silently bake in a fill the user did not ask for.
+                // user typo; mod-wrapping would silently bake in a different fill.
+                if (angleDeg < -360 || angleDeg > 360)
+                    throw new ArgumentException(
+                        $"gradient angle must be in [-360, 360], got {angleDeg}");
                 angleDeg = ((angleDeg % 360) + 360) % 360;
                 angle = angleDeg * 60000;
                 colorParts.RemoveAt(colorParts.Count - 1);
