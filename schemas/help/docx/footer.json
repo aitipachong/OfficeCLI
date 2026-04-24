@@ -1,0 +1,87 @@
+{
+  "$schema": "../_schema.json",
+  "format": "docx",
+  "element": "footer",
+  "parent": "section",
+  "operations": {
+    "add": true,
+    "set": true,
+    "get": true,
+    "query": true,
+    "remove": true
+  },
+  "paths": {
+    "positional": ["/footer[N]"]
+  },
+  "note": "Mirror of header.json — same surface, stored in FooterParts. Duplicate type per section rejected at Add.",
+  "properties": {
+    "type": {
+      "type": "enum",
+      "values": ["default", "first", "even"],
+      "aliases": ["kind", "ref"],
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop type=default"],
+      "readback": "innerText of HeaderFooterValues",
+      "enforcement": "strict"
+    },
+    "text": {
+      "type": "string",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop text=\"My Footer\""],
+      "readback": "concatenated Text.Descendants",
+      "enforcement": "strict"
+    },
+    "alignment": {
+      "type": "enum",
+      "values": ["left", "center", "right", "justify", "both", "distribute"],
+      "aliases": ["align"],
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop alignment=center"],
+      "readback": "first-paragraph Justification.Val.InnerText",
+      "enforcement": "strict"
+    },
+    "font": {
+      "type": "string",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop font=\"Arial\""],
+      "readback": "Ascii or HighAnsi font name",
+      "enforcement": "strict"
+    },
+    "size": {
+      "type": "length",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop size=12"],
+      "readback": "unit-qualified pt",
+      "enforcement": "strict"
+    },
+    "bold": {
+      "type": "bool",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop bold=true"],
+      "readback": "true when bold, key absent otherwise",
+      "enforcement": "strict"
+    },
+    "italic": {
+      "type": "bool",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop italic=true"],
+      "readback": "true when italic, key absent otherwise",
+      "enforcement": "strict"
+    },
+    "color": {
+      "type": "color",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop color=#FF0000"],
+      "readback": "#-prefixed uppercase hex",
+      "enforcement": "strict"
+    },
+    "field": {
+      "type": "enum",
+      "values": ["page", "pagenum", "pagenumber", "numpages", "date", "author", "title", "time", "filename"],
+      "add": true, "set": false, "get": false,
+      "examples": ["--prop field=page"],
+      "readback": "not surfaced as a distinct key",
+      "enforcement": "strict"
+    }
+  }
+}
