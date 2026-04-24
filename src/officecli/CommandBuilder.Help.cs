@@ -109,6 +109,8 @@ static partial class CommandBuilder
             Console.WriteLine();
             Console.WriteLine("Verbs: add, set, get, query, remove");
             Console.WriteLine("Aliases: word→docx, excel→xlsx, ppt/powerpoint→pptx");
+            Console.WriteLine();
+            Console.WriteLine("Tip: most shells expand [brackets] — quote paths: officecli get doc.docx \"/body/p[1]\"");
             return 0;
         }
 

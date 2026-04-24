@@ -33,7 +33,7 @@
     },
     "font": {
       "type": "string",
-      "description": "font family applied to every run in every paragraph in the cell.",
+      "description": "font family applied to every run in every paragraph in the cell (set-only; apply after add).",
       "aliases": ["fontname", "fontFamily"],
       "add": false, "set": true, "get": true,
       "examples": ["--prop font=\"Times New Roman\""],
@@ -42,7 +42,7 @@
     },
     "size": {
       "type": "font-size",
-      "description": "font size applied to every run in the cell. Accepts raw number (points), '14pt', '10.5pt'.",
+      "description": "font size applied to every run in the cell. Accepts raw number (points), '14pt', '10.5pt' (set-only; apply after add).",
       "aliases": ["fontsize"],
       "add": false, "set": true, "get": true,
       "examples": ["--prop size=14pt", "--prop size=10.5pt"],
@@ -51,7 +51,7 @@
     },
     "bold": {
       "type": "bool",
-      "description": "bold applied to every run in the cell.",
+      "description": "bold applied to every run in the cell (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop bold=true"],
       "readback": "true | (absent)",
@@ -59,7 +59,7 @@
     },
     "italic": {
       "type": "bool",
-      "description": "italic applied to every run in the cell.",
+      "description": "italic applied to every run in the cell (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop italic=true"],
       "readback": "true | (absent)",
@@ -68,7 +68,7 @@
     "underline": {
       "type": "enum",
       "values": ["none", "single", "double", "thick", "dotted", "dash", "wave", "words"],
-      "description": "underline style applied to every run in the cell.",
+      "description": "underline style applied to every run in the cell (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop underline=single", "--prop underline=double"],
       "readback": "one of values",
@@ -76,7 +76,7 @@
     },
     "strike": {
       "type": "bool",
-      "description": "strike-through applied to every run in the cell.",
+      "description": "strike-through applied to every run in the cell (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop strike=true"],
       "readback": "true | (absent)",
@@ -84,7 +84,7 @@
     },
     "color": {
       "type": "color",
-      "description": "run text color applied to every run in the cell.",
+      "description": "run text color applied to every run in the cell (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop color=FF0000", "--prop color=#FF0000", "--prop color=red"],
       "readback": "#RRGGBB uppercase",
@@ -92,7 +92,7 @@
     },
     "highlight": {
       "type": "color",
-      "description": "text highlight color. Mapped to Word's named highlight palette (yellow, green, cyan, magenta, blue, red, darkBlue, …).",
+      "description": "text highlight color. Mapped to Word's named highlight palette (yellow, green, cyan, magenta, blue, red, darkBlue, …) (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop highlight=yellow"],
       "readback": "highlight palette name",
@@ -100,7 +100,7 @@
     },
     "fill": {
       "type": "color",
-      "description": "cell background shading. Also accepts 'gradient;STARTCOLOR;ENDCOLOR[;ANGLE]' for a w14:gradFill gradient.",
+      "description": "cell background shading. Also accepts 'gradient;STARTCOLOR;ENDCOLOR[;ANGLE]' for a w14:gradFill gradient (set-only; apply after add).",
       "aliases": ["shd", "shading"],
       "add": false, "set": true, "get": true,
       "examples": ["--prop fill=FFFF00", "--prop fill=\"gradient;FF0000;0000FF;90\""],
@@ -110,7 +110,7 @@
     "alignment": {
       "type": "enum",
       "values": ["left", "center", "right", "justify", "both", "distribute"],
-      "description": "horizontal paragraph alignment applied to every paragraph in the cell.",
+      "description": "horizontal paragraph alignment applied to every paragraph in the cell (set-only; apply after add).",
       "aliases": ["halign", "align"],
       "add": false, "set": true, "get": true,
       "examples": ["--prop alignment=center"],
@@ -120,7 +120,7 @@
     "valign": {
       "type": "enum",
       "values": ["top", "center", "bottom"],
-      "description": "vertical alignment of cell contents.",
+      "description": "vertical alignment of cell contents (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop valign=center"],
       "readback": "one of values",
@@ -128,7 +128,7 @@
     },
     "colspan": {
       "type": "int",
-      "description": "number of grid columns this cell spans. Aliases: gridspan. Adjusts cell width to the sum of spanned grid columns and removes now-redundant trailing cells in the row.",
+      "description": "number of grid columns this cell spans. Aliases: gridspan. Adjusts cell width to the sum of spanned grid columns and removes now-redundant trailing cells in the row (set-only; apply after add).",
       "aliases": ["gridspan"],
       "add": false, "set": true, "get": true,
       "examples": ["--prop colspan=2"],
@@ -137,7 +137,7 @@
     },
     "fitText": {
       "type": "bool",
-      "description": "enable w:fitText on every run so text is squeezed to the cell width.",
+      "description": "enable w:fitText on every run so text is squeezed to the cell width (set-only; apply after add).",
       "aliases": ["fittext"],
       "add": false, "set": true, "get": false,
       "examples": ["--prop fitText=true"],
@@ -147,7 +147,7 @@
     "textDirection": {
       "type": "enum",
       "values": ["lrtb", "btlr", "tbrl", "horizontal", "vertical", "vertical-rl", "tbrl-r", "lrtb-r", "tblr-r"],
-      "description": "text flow direction inside the cell. Aliases: textdir.",
+      "description": "text flow direction inside the cell. Aliases: textdir (set-only; apply after add).",
       "aliases": ["textdir"],
       "add": false, "set": true, "get": true,
       "examples": ["--prop textDirection=btlr"],
@@ -156,7 +156,7 @@
     },
     "nowrap": {
       "type": "bool",
-      "description": "disable text wrapping inside the cell.",
+      "description": "disable text wrapping inside the cell (set-only; apply after add).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop nowrap=true"],
       "readback": "true | (absent)",

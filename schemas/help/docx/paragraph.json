@@ -73,6 +73,43 @@
       "examples": ["--prop indent=2cm"],
       "readback": "under canonical key 'leftIndent'",
       "enforcement": "report"
+    },
+    "listStyle": {
+      "type": "enum",
+      "values": ["bullet", "ordered", "none"],
+      "description": "high-level list type. 'bullet' (aliases: unordered, ul) creates a bulleted list; 'ordered' (or any other non-bullet value, e.g. 'decimal') creates a numbered list; 'none'/'remove'/'clear' strips list formatting. Preferred over raw numId. Continues a preceding list of the same type automatically unless 'start' is also given.",
+      "aliases": ["liststyle"],
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop listStyle=bullet --prop text=\"item\"", "--prop listStyle=ordered --prop text=\"step 1\""],
+      "readback": "'bullet' or 'ordered' (normalized from the numbering format)",
+      "enforcement": "strict"
+    },
+    "numId": {
+      "type": "int",
+      "description": "numbering definition id (w:numId). Low-level entry point — prefer 'listStyle' unless you specifically need to reference an existing numbering instance.",
+      "aliases": ["numid"],
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop numId=1"],
+      "readback": "numbering id as stored on the paragraph",
+      "enforcement": "strict"
+    },
+    "numLevel": {
+      "type": "int",
+      "description": "list indent level (w:ilvl), 0..8. Requires numId or listStyle to be effective; Get only surfaces numLevel when numId is present on the paragraph.",
+      "aliases": ["numlevel", "ilvl", "listLevel", "listlevel", "level"],
+      "requires": ["numId"],
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop numLevel=1 --prop numId=1", "--prop ilvl=1 --prop numId=1"],
+      "readback": "integer level as stored on the paragraph (only when numId is set)",
+      "enforcement": "strict"
+    },
+    "start": {
+      "type": "int",
+      "description": "starting number for an ordered list (w:start on level 0 of the numbering definition). Only meaningful together with liststyle=ordered or an existing numid.",
+      "add": true, "set": true, "get": true,
+      "examples": ["--prop liststyle=ordered --prop start=5 --prop text=\"item\""],
+      "readback": "under key 'start' when present on the numbering definition",
+      "enforcement": "report"
     }
   },
   "children": [
