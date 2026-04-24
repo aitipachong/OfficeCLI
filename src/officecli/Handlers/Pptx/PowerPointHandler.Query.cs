@@ -833,6 +833,14 @@ public partial class PowerPointHandler
         var slidePrefixMatch = Regex.Match(typeSource, @"^\s*/?slide\[\d+\]\s*[>/]?\s*");
         if (slidePrefixMatch.Success)
             typeSource = typeSource.Substring(slidePrefixMatch.Length);
+        else
+        {
+            // CONSISTENCY(query-slide-prefix): also strip unindexed `slide >` prefix
+            // so `slide > shape` resolves rawType to "shape" (not "slide").
+            var unindexedPrefix = Regex.Match(typeSource, @"^\s*slide\s*>\s*", RegexOptions.IgnoreCase);
+            if (unindexedPrefix.Success)
+                typeSource = typeSource.Substring(unindexedPrefix.Length);
+        }
         var typeMatch = Regex.Match(typeSource, @"^([\w]+)");
         var rawType = typeMatch.Success ? typeMatch.Groups[1].Value.ToLowerInvariant() : "";
         bool isKnownType = string.IsNullOrEmpty(rawType)

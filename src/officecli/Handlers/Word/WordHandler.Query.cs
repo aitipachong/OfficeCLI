@@ -1815,22 +1815,29 @@ public partial class WordHandler
                 }
                 else
                 {
-                    if (MatchesSelector(para, parsed, paraIdx))
-                    {
-                        results.Add(ElementToNode(para, $"/body/{BuildParaPathSegment(para, paraIdx + 1)}", 0));
-                    }
-
+                    // When ChildSelector is present (e.g. "paragraph[...] > run[...]"),
+                    // the user is asking for child runs whose parent matches, not
+                    // mixed parent+child results. Only emit child runs in that case.
                     if (parsed.ChildSelector != null)
                     {
-                        int runIdx = 0;
-                        foreach (var run in GetAllRuns(para))
+                        // MatchesSelector already gated the paragraph via its
+                        // ChildSelector-aware branch; iterate matching runs here.
+                        if (MatchesSelector(para, parsed, paraIdx))
                         {
-                            if (MatchesRunSelector(run, para, parsed.ChildSelector))
+                            int runIdx = 0;
+                            foreach (var run in GetAllRuns(para))
                             {
-                                results.Add(ElementToNode(run, $"/body/{BuildParaPathSegment(para, paraIdx + 1)}/r[{runIdx + 1}]", 0));
+                                if (MatchesRunSelector(run, para, parsed.ChildSelector))
+                                {
+                                    results.Add(ElementToNode(run, $"/body/{BuildParaPathSegment(para, paraIdx + 1)}/r[{runIdx + 1}]", 0));
+                                }
+                                runIdx++;
                             }
-                            runIdx++;
                         }
+                    }
+                    else if (MatchesSelector(para, parsed, paraIdx))
+                    {
+                        results.Add(ElementToNode(para, $"/body/{BuildParaPathSegment(para, paraIdx + 1)}", 0));
                     }
                 }
             }
