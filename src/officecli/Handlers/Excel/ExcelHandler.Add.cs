@@ -3088,11 +3088,26 @@ public partial class ExcelHandler
                 var colWorksheet = FindWorksheet(colSheetName)
                     ?? throw new ArgumentException($"Sheet not found: {colSheetName}");
 
-                // Determine insert column: index (1-based) or name from properties
+                // Determine insert column: index (1-based) or name/letter from properties
+                // CONSISTENCY(col-letter-prop): accept col=, letter=, column= as aliases of name=
+                // matching how `colbreak` (case "colbreak" above) accepts col/column/index.
                 string insertColName;
+                string? colLetterProp = null;
                 if (properties.TryGetValue("name", out var colNameProp) && !string.IsNullOrEmpty(colNameProp))
+                    colLetterProp = colNameProp;
+                else if (properties.TryGetValue("col", out var colProp) && !string.IsNullOrEmpty(colProp))
+                    colLetterProp = colProp;
+                else if (properties.TryGetValue("letter", out var letterProp) && !string.IsNullOrEmpty(letterProp))
+                    colLetterProp = letterProp;
+                else if (properties.TryGetValue("column", out var columnProp) && !string.IsNullOrEmpty(columnProp))
+                    colLetterProp = columnProp;
+
+                if (!string.IsNullOrEmpty(colLetterProp))
                 {
-                    insertColName = colNameProp.ToUpperInvariant();
+                    // Accept either column letter (e.g. "B") or numeric index (e.g. "2")
+                    insertColName = uint.TryParse(colLetterProp, out var colNumIdx)
+                        ? IndexToColumnName((int)colNumIdx)
+                        : colLetterProp.ToUpperInvariant();
                 }
                 else if (index.HasValue)
                 {
