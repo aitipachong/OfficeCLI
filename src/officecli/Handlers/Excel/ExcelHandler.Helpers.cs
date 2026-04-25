@@ -2548,14 +2548,13 @@ public partial class ExcelHandler
         if (long.TryParse(value, out var plainInt))
         {
             // Bare integers are interpreted as cell counts (original grammar),
-            // but values that exceed the sheet's column/row max are obviously
-            // meant as EMU — the cell-count interpretation would overflow the
-            // ToMarker coordinate and make Excel reject the file. Excel's hard
-            // limits: 16384 columns, 1048576 rows. Anything bigger is EMU.
-            const int MaxCols = 16384;
-            const int MaxRows = 1048576;
-            long boundary = (name == "height") ? MaxRows : MaxCols;
-            if (plainInt >= boundary)
+            // but values that exceed Excel's column max (16384) are clearly
+            // EMU — for either axis. Using a single threshold (instead of
+            // axis-specific MaxRows=1048576) keeps the heuristic symmetric
+            // with ParseAnchorOriginCell so x/y/width/height all flip to
+            // EMU at the same boundary.
+            const int MaxCellIndex = 16384;
+            if (plainInt >= MaxCellIndex)
                 return Math.Max(0, plainInt);
             long perCell = (name == "height") ? EmuPerRowApprox : EmuPerColApprox;
             return Math.Max(0, plainInt) * perCell;
