@@ -33,6 +33,25 @@ public partial class PowerPointHandler
         "dirty", "err", "smtClean", "smtId", "bmk",
     };
 
+    // Schema-typed sub-sets used for value validation in run-context Set.
+    // Without these, a non-numeric value for an int-typed attribute (e.g.
+    // kern=abc) would be silently written as invalid OOXML — the file then
+    // fails strict validation downstream. Source: ECMA-376 Part 1 21.1.2.3.9
+    // (a:rPr) — int attrs are sz/kern/spc/baseline/smtId; bool attrs are
+    // b/i/noProof/normalizeH/dirty/err/smtClean.
+    private static readonly System.Collections.Generic.HashSet<string> DrawingRunIntAttrs =
+        new(System.StringComparer.Ordinal) { "sz", "kern", "spc", "baseline", "smtId" };
+    private static readonly System.Collections.Generic.HashSet<string> DrawingRunBoolAttrs =
+        new(System.StringComparer.Ordinal) { "b", "i", "noProof", "normalizeH", "dirty", "err", "smtClean", "kumimoji" };
+
+    private static bool IsValidDrawingRunAttrValue(string key, string value)
+    {
+        if (DrawingRunIntAttrs.Contains(key)) return int.TryParse(value, out _);
+        if (DrawingRunBoolAttrs.Contains(key))
+            return value is "0" or "1" or "true" or "false" or "True" or "False";
+        return true; // string / enum attrs: pass through
+    }
+
     // runContext=true when the caller is a run-targeted Set path (e.g.
     // /slide[N]/shape[K]/r[R] or /slide[N]/shape[K]/p[P]/r[R]). Affects the
     // default branch only: long-tail unknown keys are routed to each run's
@@ -898,6 +917,11 @@ public partial class PowerPointHandler
                     bool handledByRun = false;
                     if (runContext && runs.Count > 0 && DrawingRunPropertyAttrs.Contains(key))
                     {
+                        if (!IsValidDrawingRunAttrValue(key, value))
+                        {
+                            unsupported.Add($"{key} (value '{value}' is not valid for OOXML rPr/{key} type)");
+                            break;
+                        }
                         handledByRun = true;
                         foreach (var run in runs)
                         {
