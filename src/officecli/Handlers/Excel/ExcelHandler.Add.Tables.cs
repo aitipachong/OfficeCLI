@@ -61,6 +61,13 @@ public partial class ExcelHandler
         var refVal = properties.GetValueOrDefault("ref",
             properties.GetValueOrDefault("refersTo",
                 properties.GetValueOrDefault("formula", "")));
+        // R15/bt-2: reject up-front when the required ref/refersTo/formula
+        // value is missing so an empty <x:definedName/> never gets written
+        // (the resulting zombie polluted the workbook and broke later Set
+        // calls). Unsupported aliases like `range=` previously silently
+        // landed here as empty and produced the zombie.
+        if (string.IsNullOrEmpty(refVal))
+            throw new ArgumentException("'ref' (or 'refersTo' / 'formula') property is required for namedrange");
         // R7-2: per ECMA-376 §18.2.5, <x:definedName> content must NOT
         // have a leading '=' (unlike the formula-bar form in Excel UI).
         // Excel rejects the file with 0x800A03EC if '=' is present.
