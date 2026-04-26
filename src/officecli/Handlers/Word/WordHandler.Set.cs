@@ -139,6 +139,15 @@ public partial class WordHandler
             path, @"^/numbering/abstractNum\[@id=(\d+)\](?:/level\[(\d+)\])?$");
         if (absNumSetMatchEarly.Success) return SetAbstractNumPath(absNumSetMatchEarly, properties);
 
+        // /numbering/num[@id=N] — set abstractNumId on a NumberingInstance.
+        // Without this intercept, generic Navigation finds the <w:num> element
+        // but SetElement has no NumberingInstance branch, so the call returns
+        // an empty unsupported list and the CLI prints "Updated …" while
+        // nothing changes on disk.
+        var numSetMatchEarly = System.Text.RegularExpressions.Regex.Match(
+            path, @"^/numbering/num\[@id=(\d+)\]$");
+        if (numSetMatchEarly.Success) return SetNumPath(numSetMatchEarly, properties);
+
         // Handle header/footer paths
         var hfParts = ParsePath(path);
         if (hfParts.Count >= 1)

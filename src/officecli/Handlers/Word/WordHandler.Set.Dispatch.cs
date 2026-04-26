@@ -728,6 +728,48 @@ public partial class WordHandler
         return unsupported;
     }
 
+    /// <summary>
+    /// Set props on a NumberingInstance (&lt;w:num&gt;).
+    /// Path /numbering/num[@id=N] currently supports updating abstractNumId.
+    /// CONSISTENCY(set-no-create): never auto-creates the num — Add owns creation.
+    /// </summary>
+    private List<string> SetNumPath(System.Text.RegularExpressions.Match numSetMatch, Dictionary<string, string> properties)
+    {
+        var unsupported = new List<string>();
+        var numId = int.Parse(numSetMatch.Groups[1].Value);
+
+        var numbering = _doc.MainDocumentPart?.NumberingDefinitionsPart?.Numbering
+            ?? throw new ArgumentException("No numbering part. Use `add /numbering --type num` first.");
+        var inst = numbering.Elements<NumberingInstance>()
+            .FirstOrDefault(n => n.NumberID?.Value == numId)
+            ?? throw new ArgumentException(
+                $"num with id={numId} not found. Use `add /numbering --type num --prop abstractNumId=N` first.");
+
+        foreach (var (key, value) in properties)
+        {
+            switch (key.ToLowerInvariant())
+            {
+                case "abstractnumid":
+                    var aidVal = ParseHelpers.SafeParseInt(value, "abstractNumId");
+                    var absExists = numbering.Elements<AbstractNum>()
+                        .Any(a => a.AbstractNumberId?.Value == aidVal);
+                    if (!absExists)
+                        throw new ArgumentException(
+                            $"abstractNumId={aidVal} not found in /numbering. " +
+                            $"Create the abstractNum first, or pick an existing one via 'officecli query <file> abstractNum'.");
+                    var aid = inst.AbstractNumId ?? (inst.AbstractNumId = new AbstractNumId());
+                    aid.Val = aidVal;
+                    break;
+                default:
+                    unsupported.Add(key);
+                    break;
+            }
+        }
+
+        numbering.Save();
+        return unsupported;
+    }
+
     private List<string> SetStylePath(System.Text.RegularExpressions.Match styleSetMatch, Dictionary<string, string> properties)
     {
         var unsupported = new List<string>();
