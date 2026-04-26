@@ -289,7 +289,10 @@ public partial class WordHandler
                 if (lvl.NumberingFormat?.Val?.HasValue == true) lNode.Format["format"] = lvl.NumberingFormat.Val.InnerText;
                 if (lvl.LevelText?.Val?.Value != null)
                 {
-                    lNode.Format["text"] = lvl.LevelText.Val.Value;
+                    // CONSISTENCY(canonical-keys): only emit canonical "lvlText";
+                    // legacy "text" alias dropped from Get output to honor root
+                    // CLAUDE.md "Canonical DocumentNode.Format Rules". Set still
+                    // accepts both keys via case "text" or "lvltext".
                     lNode.Format["lvlText"] = lvl.LevelText.Val.Value;
                 }
                 if (lvl.LevelJustification?.Val?.HasValue == true) lNode.Format["justification"] = lvl.LevelJustification.Val.InnerText;
