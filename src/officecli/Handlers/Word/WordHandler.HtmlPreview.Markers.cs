@@ -102,6 +102,37 @@ public partial class WordHandler
     }
 
     /// <summary>
+    /// Look up the abstractNumId that a num instance points at. Returns null
+    /// if the num isn't found. Used to key the cross-num running counter so
+    /// "continue" sibling lists (no startOverride) share a counter with the
+    /// list that ran before them on the same abstractNum.
+    /// </summary>
+    private int? GetAbstractNumId(int numId)
+    {
+        var numbering = _doc.MainDocumentPart?.NumberingDefinitionsPart?.Numbering;
+        var inst = numbering?.Elements<NumberingInstance>()
+            .FirstOrDefault(n => n.NumberID?.Value == numId);
+        return inst?.AbstractNumId?.Val?.Value;
+    }
+
+    /// <summary>
+    /// Read the startOverride value (if any) for one level of a num instance.
+    /// Returns null when the num lacks a &lt;w:lvlOverride w:ilvl=N&gt; with a
+    /// &lt;w:startOverride/&gt; child for the requested level — i.e. "continue
+    /// counting" semantics applies.
+    /// </summary>
+    private int? GetNumStartOverride(int numId, int ilvl)
+    {
+        var numbering = _doc.MainDocumentPart?.NumberingDefinitionsPart?.Numbering;
+        var inst = numbering?.Elements<NumberingInstance>()
+            .FirstOrDefault(n => n.NumberID?.Value == numId);
+        if (inst == null) return null;
+        var ovr = inst.Elements<LevelOverride>()
+            .FirstOrDefault(o => o.LevelIndex?.Value == ilvl);
+        return ovr?.StartOverrideNumberingValue?.Val?.Value;
+    }
+
+    /// <summary>
     /// For ul lists, when the lvlText is a single non-standard glyph (★/▶/etc.)
     /// the existing disc/circle/square mapping silently downgrades to •.
     /// Return a CSS string literal like <c>'★ '</c> that <c>list-style-type</c>

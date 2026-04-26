@@ -1354,6 +1354,12 @@ public partial class WordHandler
         int? currentNumId = null; // track numId for cross-numId nesting
         var numIdLevelOffset = new Dictionary<int, int>(); // numId → effective ilvl offset for cross-numId nesting
         var olCountPerLevel = new Dictionary<int, int>(); // ilvl → running <ol> item count for `start` attribute
+        // Per-(abstractNumId, ilvl) running counter. Persists across numId
+        // changes so that two num instances pointing at the same abstractNum
+        // share a counter (Word's "continue" behavior) UNLESS the new num
+        // carries an explicit <w:lvlOverride><w:startOverride/></w:lvlOverride>,
+        // in which case we reset to the override value.
+        var absNumLevelCounters = new Dictionary<int, Dictionary<int, int>>();
         var multiLevelCounters = new Dictionary<int, int>(); // ilvl → counter for multi-level numbering
         var headingCounters = new Dictionary<int, int>(); // ilvl → counter for heading auto-numbering from style numPr
         bool pendingLiClose = false; // defer </li> to allow nested lists inside
@@ -1648,14 +1654,26 @@ public partial class WordHandler
                     }
                     var indentStyle = $" style=\"{listStyleParts}\"";
 
-                    // Seed per-level counter from startOverride / level start
-                    // when we're opening this level for the first time in the
-                    // current list. Cross-list (different numId) continuation is
-                    // preserved via olCountPerLevel survival.
+                    // Seed per-level counter. Three-way precedence:
+                    //   1. olCountPerLevel survives within the current <ol> stack.
+                    //   2. lvlOverride/startOverride on this num → restart from value.
+                    //   3. abstractNum-level running counter → continuation across
+                    //      sibling num instances on the same abstractNum (the
+                    //      `continue=true` path through the API; matches Word's
+                    //      default "list continues from previous list using the
+                    //      same template" behavior).
+                    //   4. Otherwise, abstractNum's level start (typically 1).
+                    var seedAbsId = GetAbstractNumId(numId);
                     int SeedStart(int forIlvl)
                     {
                         if (olCountPerLevel.TryGetValue(forIlvl, out var prev) && prev > 0)
-                            return prev; // continuation
+                            return prev;
+                        var ovr = GetNumStartOverride(numId, forIlvl);
+                        if (ovr.HasValue) return ovr.Value - 1;
+                        if (seedAbsId.HasValue
+                            && absNumLevelCounters.TryGetValue(seedAbsId.Value, out var byIlvl)
+                            && byIlvl.TryGetValue(forIlvl, out var running) && running > 0)
+                            return running;
                         return (GetStartValue(numId, forIlvl) ?? 1) - 1;
                     }
 
@@ -1683,6 +1701,22 @@ public partial class WordHandler
                         {
                             if (olCountPerLevel.ContainsKey(lk)) olCountPerLevel[lk] = 0;
                             if (multiLevelCounters.ContainsKey(lk)) multiLevelCounters[lk] = 0;
+                        }
+                        // Mirror the running count into the per-abstractNum
+                        // store so a later sibling num on the same template
+                        // can pick it up (continuation). Reset the deeper
+                        // levels there too — Word resets all sub-levels when
+                        // a shallower level ticks.
+                        if (seedAbsId.HasValue)
+                        {
+                            if (!absNumLevelCounters.TryGetValue(seedAbsId.Value, out var byIlvl))
+                            {
+                                byIlvl = new Dictionary<int, int>();
+                                absNumLevelCounters[seedAbsId.Value] = byIlvl;
+                            }
+                            byIlvl[ilvl] = olCountPerLevel[ilvl];
+                            for (int lk = ilvl + 1; lk <= 8; lk++)
+                                if (byIlvl.ContainsKey(lk)) byIlvl[lk] = 0;
                         }
                     }
 
