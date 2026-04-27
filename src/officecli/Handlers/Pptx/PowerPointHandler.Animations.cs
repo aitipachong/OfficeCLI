@@ -1191,21 +1191,43 @@ public partial class PowerPointHandler
                 "wedge"                                     => "wedge",
                 var f when f.StartsWith("wheel")            => "wheel",
                 var f when f.StartsWith("wipe")             => "wipe",
-                _ => presetId switch
-                {
-                    1  when cls == "emphasis" => "bold",
-                    1  => "appear",
-                    2  => "fly",
-                    10 => "fade",
-                    12 => "float",
-                    14 when cls == "emphasis" => "wave",
-                    17 => "swivel",
-                    21 => "zoom",
-                    24 => "bounce",
-                    26 when cls == "emphasis" => "grow",
-                    27 when cls == "emphasis" => "spin",
-                    _  => "unknown"
-                }
+                _ => cls == "emphasis"
+                    ? presetId switch
+                    {
+                        1  => "bold",
+                        10 => "fade",
+                        14 => "wave",
+                        26 => "grow",
+                        27 => "spin",
+                        _  => "unknown"
+                    }
+                    : presetId switch
+                    {
+                        // Entrance/exit preset IDs (mirror GetAnimPreset table)
+                        1  => "appear",
+                        2  => "fly",
+                        3  => "blinds",
+                        4  => "box",
+                        5  => "checkerboard",
+                        6  => "circle",
+                        7  => "crawl",
+                        8  => "diamond",
+                        9  => "dissolve",
+                        10 => "fade",
+                        11 => "flash",
+                        12 => "float",
+                        13 => "plus",
+                        14 => "random",
+                        15 => "split",
+                        16 => "strips",
+                        17 => "swivel",
+                        18 => "wedge",
+                        19 => "wheel",
+                        20 => "wipe",
+                        21 => "zoom",
+                        24 => "bounce",
+                        _  => "unknown"
+                    }
             };
 
             // Read direction from presetSubtype
