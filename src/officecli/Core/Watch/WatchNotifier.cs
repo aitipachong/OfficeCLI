@@ -53,6 +53,50 @@ internal static class WatchNotifier
     }
 
     /// <summary>
+    /// Send a validated scroll request to the watch server. Returns
+    ///   ScrollResult.Ok            — selector resolved, scroll broadcast
+    ///   ScrollResult.NoWatch       — no watch process answered the pipe
+    ///   ScrollResult.NotFound(msg) — server rejected (selector absent in cached HTML)
+    /// BUG-BT-R33-3: keeps `goto` from silently returning exit=0 when the
+    /// requested anchor doesn't exist. Validation runs server-side over the
+    /// cached HTML snapshot (CONSISTENCY(watch-isolation)).
+    /// </summary>
+    public static ScrollResult TryScroll(string filePath, string selector)
+    {
+        try
+        {
+            ScrollResult result = ScrollResult.NoWatch();
+            RunWithTimeout(() =>
+            {
+                var pipeName = WatchServer.GetWatchPipeName(filePath);
+                using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+                client.Connect(200);
+
+                var noBom = new UTF8Encoding(false);
+                using var writer = new StreamWriter(client, noBom, leaveOpen: true) { AutoFlush = true };
+                writer.WriteLine("scroll " + selector);
+                writer.Flush();
+
+                using var reader = new StreamReader(client, noBom, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+                var resp = reader.ReadLine();
+                if (string.IsNullOrEmpty(resp)) { result = ScrollResult.NoWatch(); return; }
+                if (resp == "ok") { result = ScrollResult.Ok(); return; }
+                if (resp.StartsWith("err:", StringComparison.Ordinal))
+                {
+                    result = ScrollResult.NotFound(resp.Substring(4));
+                    return;
+                }
+                result = ScrollResult.NoWatch();
+            }, PipeTimeout);
+            return result;
+        }
+        catch
+        {
+            return ScrollResult.NoWatch();
+        }
+    }
+
+    /// <summary>
     /// Query the running watch process for the current selection.
     /// Returns:
     ///   null  → no watch running for this file (or pipe failure)
@@ -358,6 +402,18 @@ internal class WatchMessage
         var match = System.Text.RegularExpressions.Regex.Match(path, @"^/?([^/!]+)[/!]");
         return match.Success ? match.Groups[1].Value : null;
     }
+}
+
+/// <summary>Outcome of <see cref="WatchNotifier.TryScroll"/>.</summary>
+internal readonly struct ScrollResult
+{
+    public enum K { NoWatch, Ok, NotFound }
+    public K Kind { get; }
+    public string? Error { get; }
+    private ScrollResult(K k, string? err) { Kind = k; Error = err; }
+    public static ScrollResult Ok() => new(K.Ok, null);
+    public static ScrollResult NoWatch() => new(K.NoWatch, null);
+    public static ScrollResult NotFound(string msg) => new(K.NotFound, msg);
 }
 
 /// <summary>A single block-level change for Word incremental updates.</summary>

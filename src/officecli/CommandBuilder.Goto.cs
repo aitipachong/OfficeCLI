@@ -53,11 +53,25 @@ static partial class CommandBuilder
                 return 1;
             }
 
-            WatchNotifier.NotifyIfWatching(file.FullName, new WatchMessage
+            // BUG-BT-R33-3: validate the selector against the watch server's
+            // cached HTML snapshot before reporting success. Previously goto
+            // exited 0 even when the anchor didn't exist (e.g. /body/p[99] in
+            // a 4-paragraph doc).
+            var scroll = WatchNotifier.TryScroll(file.FullName, selector);
+            if (scroll.Kind == ScrollResult.K.NotFound)
             {
-                Action = "scroll",
-                ScrollTo = selector,
-            });
+                var err = $"Cannot scroll to '{path}': {scroll.Error}.";
+                if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeError(err));
+                else Console.Error.WriteLine(err);
+                return 1;
+            }
+            if (scroll.Kind == ScrollResult.K.NoWatch)
+            {
+                var err = $"No watch process is running for {file.Name}.";
+                if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeError(err));
+                else Console.Error.WriteLine(err);
+                return 1;
+            }
 
             var msg = $"Scrolled watcher(s) to {path} ({selector})";
             if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeText(msg));

@@ -536,6 +536,27 @@ internal class WatchServer : IDisposable
                     var resp = HandleMarkRemove(payload);
                     await writer.WriteLineAsync(resp.AsMemory(), token);
                 }
+                else if (message != null && message.StartsWith("scroll ", StringComparison.Ordinal))
+                {
+                    // "scroll <selector>" — validate the CSS selector against
+                    // the cached HTML snapshot, broadcast on success, return
+                    // "ok" or "err:<msg>". BUG-BT-R33-3: pure-positional
+                    // existence check on the cached HTML so goto can fail
+                    // exit=1 instead of silently exit=0 on missing anchors.
+                    // CONSISTENCY(watch-isolation): no file open — only the
+                    // already-cached HTML string is inspected.
+                    var selector = message.Substring(7);
+                    var found = SelectorExistsInHtml(_currentHtml, selector);
+                    if (!found)
+                    {
+                        await writer.WriteLineAsync(("err:selector not found in current HTML: " + selector).AsMemory(), token);
+                    }
+                    else
+                    {
+                        await writer.WriteLineAsync("ok".AsMemory(), token);
+                        SendSseEvent("scroll", 0, null, selector, _version);
+                    }
+                }
                 else if (message != null)
                 {
                     await writer.WriteLineAsync("ok".AsMemory(), token);
@@ -976,6 +997,39 @@ internal class WatchServer : IDisposable
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Existence check for the small set of CSS selectors emitted by
+    /// WatchNotifier.ExtractWordScrollTarget — `#anchor` (id=) or
+    /// `[data-path="..."]`. Pure substring scan over the cached HTML;
+    /// no DOM parser, mirrors FindDataPathInHtml's design.
+    /// CONSISTENCY(watch-isolation): only the cached HTML is read.
+    /// </summary>
+    internal static bool SelectorExistsInHtml(string html, string selector)
+    {
+        if (string.IsNullOrEmpty(html) || string.IsNullOrEmpty(selector)) return false;
+
+        // [data-path="..."] form
+        var dpMatch = System.Text.RegularExpressions.Regex.Match(
+            selector, @"^\[data-path=""(.+)""\]$");
+        if (dpMatch.Success)
+        {
+            var path = dpMatch.Groups[1].Value;
+            return html.IndexOf("data-path=\"" + path + "\"", StringComparison.Ordinal) >= 0;
+        }
+
+        // #anchor-id form
+        if (selector.StartsWith("#"))
+        {
+            var id = selector.Substring(1);
+            return html.IndexOf("id=\"" + id + "\"", StringComparison.Ordinal) >= 0
+                || html.IndexOf("id='" + id + "'", StringComparison.Ordinal) >= 0;
+        }
+
+        // Unknown selector form — let it through (best-effort) so future
+        // anchor styles aren't blocked.
+        return true;
     }
 
     /// <summary>
