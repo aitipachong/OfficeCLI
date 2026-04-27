@@ -1387,6 +1387,13 @@ public partial class PowerPointHandler
         animNode.Format["class"] = cls;
         animNode.Format["presetId"] = presetId;
 
+        // bt-2 fix: surface trigger (encoded as effectCTn.NodeType in OOXML).
+        // ClickEffect → onclick, AfterEffect → afterPrevious, WithEffect → withPrevious.
+        var nt = effectCTn.NodeType?.Value;
+        animNode.Format["trigger"] = nt == TimeNodeValues.AfterEffect ? "afterPrevious"
+            : nt == TimeNodeValues.WithEffect ? "withPrevious"
+            : "onClick";
+
         var dur = 500;
         if (int.TryParse(animEffect?.CommonBehavior?.CommonTimeNode?.Duration, out var dd)) dur = dd;
         animNode.Format["duration"] = dur;
