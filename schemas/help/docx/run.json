@@ -23,6 +23,7 @@
     },
     "bold": {
       "type": "bool",
+      "aliases": ["font.bold"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop bold=true"],
       "readback": "true | false",
@@ -30,6 +31,7 @@
     },
     "italic": {
       "type": "bool",
+      "aliases": ["font.italic"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop italic=true"],
       "readback": "true | false",
@@ -38,14 +40,14 @@
     "font": {
       "type": "string",
       "description": "font family (e.g. \"Times New Roman\", \"SimSun\")",
-      "aliases": ["fontname", "fontFamily"],
+      "aliases": ["fontname", "fontFamily", "font.name"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop font=\"Times New Roman\""],
       "enforcement": "strict"
     },
     "size": {
       "type": "font-size",
-      "aliases": ["fontsize"],
+      "aliases": ["fontsize", "font.size"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop size=14", "--prop size=14pt", "--prop size=10.5pt"],
       "readback": "unit-qualified, e.g. \"14pt\"",
@@ -53,6 +55,7 @@
     },
     "color": {
       "type": "color",
+      "aliases": ["font.color"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop color=FF0000", "--prop color=#FF0000", "--prop color=red"],
       "readback": "#RRGGBB uppercase",
@@ -62,6 +65,7 @@
       "type": "enum",
       "description": "underline style. Common values: single, double, dotted, dash, wave, none.",
       "values": ["single", "double", "dotted", "dash", "wave", "none", "thick", "dottedHeavy", "dashLong", "dashLongHeavy", "dashDotHeavy", "wavyHeavy", "wavyDouble"],
+      "aliases": ["font.underline"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop underline=single", "--prop underline=double"],
       "readback": "underline style name",
@@ -78,7 +82,7 @@
     "strike": {
       "type": "bool",
       "description": "single strikethrough.",
-      "aliases": ["strikethrough"],
+      "aliases": ["strikethrough", "font.strike", "font.strikethrough"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop strike=true"],
       "readback": "true | false",

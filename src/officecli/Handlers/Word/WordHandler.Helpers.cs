@@ -670,24 +670,29 @@ public partial class WordHandler
         switch (key.ToLowerInvariant())
         {
             case "size":
+            case "font.size":
                 var existingFs = props.GetFirstChild<FontSize>();
                 if (existingFs != null) existingFs.Val = ((int)Math.Round(ParseFontSize(value) * 2, MidpointRounding.AwayFromZero)).ToString();
                 else InsertRunPropInSchemaOrder(props, new FontSize { Val = ((int)Math.Round(ParseFontSize(value) * 2, MidpointRounding.AwayFromZero)).ToString() });
                 return true;
             case "font":
+            case "font.name":
                 var existingRf = props.GetFirstChild<RunFonts>();
                 if (existingRf != null) { existingRf.Ascii = value; existingRf.HighAnsi = value; existingRf.EastAsia = value; }
                 else InsertRunPropInSchemaOrder(props, new RunFonts { Ascii = value, HighAnsi = value, EastAsia = value });
                 return true;
             case "bold":
+            case "font.bold":
                 props.RemoveAllChildren<Bold>();
                 if (IsTruthy(value)) InsertRunPropInSchemaOrder(props, new Bold());
                 return true;
             case "italic":
+            case "font.italic":
                 props.RemoveAllChildren<Italic>();
                 if (IsTruthy(value)) InsertRunPropInSchemaOrder(props, new Italic());
                 return true;
             case "color":
+            case "font.color":
                 props.RemoveAllChildren<Color>();
                 InsertRunPropInSchemaOrder(props, new Color { Val = SanitizeHex(value) });
                 return true;
@@ -696,11 +701,12 @@ public partial class WordHandler
                 InsertRunPropInSchemaOrder(props, new Highlight { Val = ParseHighlightColor(value) });
                 return true;
             case "underline":
+            case "font.underline":
                 props.RemoveAllChildren<Underline>();
                 var ulMapped = NormalizeUnderlineValue(value);
                 InsertRunPropInSchemaOrder(props, new Underline { Val = new UnderlineValues(ulMapped) });
                 return true;
-            case "strike" or "strikethrough":
+            case "strike" or "strikethrough" or "font.strike" or "font.strikethrough":
                 props.RemoveAllChildren<Strike>();
                 if (IsTruthy(value)) InsertRunPropInSchemaOrder(props, new Strike());
                 return true;

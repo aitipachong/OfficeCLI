@@ -41,6 +41,7 @@
     "color": {
       "type": "color",
       "description": "text color",
+      "aliases": ["font.color"],
       "add": true,
       "set": true,
       "get": true,
@@ -51,7 +52,7 @@
     "size": {
       "type": "font-size",
       "description": "font size",
-      "aliases": ["fontSize", "fontsize"],
+      "aliases": ["fontSize", "fontsize", "font.size"],
       "add": true,
       "set": true,
       "get": true,
@@ -61,6 +62,7 @@
     },
     "bold": {
       "type": "bool",
+      "aliases": ["font.bold"],
       "add": true,
       "set": true,
       "get": true,
@@ -70,6 +72,7 @@
     },
     "italic": {
       "type": "bool",
+      "aliases": ["font.italic"],
       "add": true,
       "set": true,
       "get": true,
@@ -195,6 +198,7 @@
     "font": {
       "type": "string",
       "description": "default font family for shape text.",
+      "aliases": ["font.name"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop font=Arial"],
       "readback": "font name",
@@ -204,6 +208,7 @@
       "type": "enum",
       "description": "underline style for shape text.",
       "values": ["single", "double", "dotted", "dash", "wave", "none"],
+      "aliases": ["font.underline"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop underline=single"],
       "readback": "underline style",
@@ -212,7 +217,7 @@
     "strike": {
       "type": "bool",
       "description": "strikethrough on shape text.",
-      "aliases": ["strikethrough"],
+      "aliases": ["strikethrough", "font.strike", "font.strikethrough"],
       "add": true, "set": true, "get": true,
       "examples": ["--prop strike=true"],
       "readback": "true | false",

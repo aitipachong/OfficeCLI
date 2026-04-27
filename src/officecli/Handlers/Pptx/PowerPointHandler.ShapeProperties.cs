@@ -150,6 +150,7 @@ public partial class PowerPointHandler
                 }
 
                 case "font":
+                case "font.name":
                     foreach (var run in runs)
                     {
                         var rProps = run.RunProperties ?? (run.RunProperties = new Drawing.RunProperties());
@@ -164,6 +165,7 @@ public partial class PowerPointHandler
                 case "size":
                 case "fontSize":
                 case "fontsize":
+                case "font.size":
                     var sizeVal = (int)Math.Round(ParseFontSize(value) * 100);
                     foreach (var run in runs)
                     {
@@ -173,6 +175,7 @@ public partial class PowerPointHandler
                     break;
 
                 case "bold":
+                case "font.bold":
                     var isBold = IsTruthy(value);
                     foreach (var run in runs)
                     {
@@ -182,6 +185,7 @@ public partial class PowerPointHandler
                     break;
 
                 case "italic":
+                case "font.italic":
                     var isItalic = IsTruthy(value);
                     foreach (var run in runs)
                     {
@@ -191,6 +195,7 @@ public partial class PowerPointHandler
                     break;
 
                 case "color":
+                case "font.color":
                 {
                     // Build fill before removing old one (atomic: no data loss on invalid color)
                     var colorFill = BuildSolidFill(value);
@@ -231,6 +236,7 @@ public partial class PowerPointHandler
                 }
 
                 case "underline":
+                case "font.underline":
                     foreach (var run in runs)
                     {
                         var rProps = run.RunProperties ?? (run.RunProperties = new Drawing.RunProperties());
@@ -248,7 +254,7 @@ public partial class PowerPointHandler
                     }
                     break;
 
-                case "strikethrough" or "strike":
+                case "strikethrough" or "strike" or "font.strike" or "font.strikethrough":
                     foreach (var run in runs)
                     {
                         var rProps = run.RunProperties ?? (run.RunProperties = new Drawing.RunProperties());
@@ -1087,6 +1093,7 @@ public partial class PowerPointHandler
                     break;
                 }
                 case "font":
+                case "font.name":
                     EnsureTableCellHasRun(cell);
                     foreach (var run in cell.Descendants<Drawing.Run>())
                     {
@@ -1098,6 +1105,7 @@ public partial class PowerPointHandler
                     }
                     break;
                 case "size":
+                case "font.size":
                     EnsureTableCellHasRun(cell);
                     var sz = (int)Math.Round(ParseFontSize(value) * 100);
                     foreach (var run in cell.Descendants<Drawing.Run>())
@@ -1107,6 +1115,7 @@ public partial class PowerPointHandler
                     }
                     break;
                 case "bold":
+                case "font.bold":
                     EnsureTableCellHasRun(cell);
                     var b = IsTruthy(value);
                     foreach (var run in cell.Descendants<Drawing.Run>())
@@ -1116,6 +1125,7 @@ public partial class PowerPointHandler
                     }
                     break;
                 case "italic":
+                case "font.italic":
                     EnsureTableCellHasRun(cell);
                     var it = IsTruthy(value);
                     foreach (var run in cell.Descendants<Drawing.Run>())
@@ -1125,6 +1135,7 @@ public partial class PowerPointHandler
                     }
                     break;
                 case "color":
+                case "font.color":
                 {
                     // Build fill before removing old one (atomic)
                     EnsureTableCellHasRun(cell);
@@ -1284,6 +1295,7 @@ public partial class PowerPointHandler
                     break;
                 }
                 case "underline":
+                case "font.underline":
                     EnsureTableCellHasRun(cell);
                     foreach (var run in cell.Descendants<Drawing.Run>())
                     {
@@ -1301,7 +1313,7 @@ public partial class PowerPointHandler
                         };
                     }
                     break;
-                case "strikethrough" or "strike":
+                case "strikethrough" or "strike" or "font.strike" or "font.strikethrough":
                     EnsureTableCellHasRun(cell);
                     foreach (var run in cell.Descendants<Drawing.Run>())
                     {

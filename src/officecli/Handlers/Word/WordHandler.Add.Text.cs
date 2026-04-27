@@ -180,26 +180,30 @@ public partial class WordHandler
         {
             var run = new Run();
             var rProps = new RunProperties();
-            if (properties.TryGetValue("font", out var font))
+            if (properties.TryGetValue("font", out var font) || properties.TryGetValue("font.name", out font))
             {
                 rProps.AppendChild(new RunFonts { Ascii = font, HighAnsi = font, EastAsia = font });
             }
-            if (properties.TryGetValue("size", out var size))
+            if (properties.TryGetValue("size", out var size) || properties.TryGetValue("font.size", out size))
             {
                 rProps.AppendChild(new FontSize { Val = ((int)Math.Round(ParseFontSize(size) * 2, MidpointRounding.AwayFromZero)).ToString() });
             }
-            if (properties.TryGetValue("bold", out var bold) && IsTruthy(bold))
+            if ((properties.TryGetValue("bold", out var bold) || properties.TryGetValue("font.bold", out bold)) && IsTruthy(bold))
                 rProps.Bold = new Bold();
-            if (properties.TryGetValue("italic", out var pItalic) && IsTruthy(pItalic))
+            if ((properties.TryGetValue("italic", out var pItalic) || properties.TryGetValue("font.italic", out pItalic)) && IsTruthy(pItalic))
                 rProps.Italic = new Italic();
-            if (properties.TryGetValue("color", out var pColor))
+            if (properties.TryGetValue("color", out var pColor) || properties.TryGetValue("font.color", out pColor))
                 rProps.Color = new Color { Val = SanitizeHex(pColor) };
-            if (properties.TryGetValue("underline", out var pUnderline))
+            if (properties.TryGetValue("underline", out var pUnderline) || properties.TryGetValue("font.underline", out pUnderline))
             {
                 var ulVal = NormalizeUnderlineValue(pUnderline);
                 rProps.Underline = new Underline { Val = new UnderlineValues(ulVal) };
             }
-            if ((properties.TryGetValue("strike", out var pStrike) || properties.TryGetValue("strikethrough", out pStrike)) && IsTruthy(pStrike))
+            if ((properties.TryGetValue("strike", out var pStrike)
+                    || properties.TryGetValue("strikethrough", out pStrike)
+                    || properties.TryGetValue("font.strike", out pStrike)
+                    || properties.TryGetValue("font.strikethrough", out pStrike))
+                && IsTruthy(pStrike))
                 rProps.Strike = new Strike();
             if (properties.TryGetValue("highlight", out var pHighlight))
                 rProps.Highlight = new Highlight { Val = ParseHighlightColor(pHighlight) };
@@ -296,6 +300,19 @@ public partial class WordHandler
         {
             if (!key.Contains('.')) continue;
             if (key.StartsWith("pbdr", StringComparison.OrdinalIgnoreCase)) continue;
+            // CONSISTENCY(font-dotted-alias): same skip-list as run-add.
+            switch (key.ToLowerInvariant())
+            {
+                case "font.name":
+                case "font.size":
+                case "font.bold":
+                case "font.italic":
+                case "font.color":
+                case "font.underline":
+                case "font.strike":
+                case "font.strikethrough":
+                    continue;
+            }
             if (Core.TypedAttributeFallback.TrySet(pProps, key, value)) continue;
             if (rPropsForFallback != null
                 && Core.TypedAttributeFallback.TrySet(rPropsForFallback, key, value)) continue;
@@ -434,22 +451,26 @@ public partial class WordHandler
 
         var newRun = new Run();
         var newRProps = new RunProperties();
-        if (properties.TryGetValue("font", out var rFont))
+        if (properties.TryGetValue("font", out var rFont) || properties.TryGetValue("font.name", out rFont))
             newRProps.AppendChild(new RunFonts { Ascii = rFont, HighAnsi = rFont, EastAsia = rFont });
-        if (properties.TryGetValue("size", out var rSize))
+        if (properties.TryGetValue("size", out var rSize) || properties.TryGetValue("font.size", out rSize))
             newRProps.AppendChild(new FontSize { Val = ((int)Math.Round(ParseFontSize(rSize) * 2, MidpointRounding.AwayFromZero)).ToString() });
-        if (properties.TryGetValue("bold", out var rBold) && IsTruthy(rBold))
+        if ((properties.TryGetValue("bold", out var rBold) || properties.TryGetValue("font.bold", out rBold)) && IsTruthy(rBold))
             newRProps.Bold = new Bold();
-        if (properties.TryGetValue("italic", out var rItalic) && IsTruthy(rItalic))
+        if ((properties.TryGetValue("italic", out var rItalic) || properties.TryGetValue("font.italic", out rItalic)) && IsTruthy(rItalic))
             newRProps.Italic = new Italic();
-        if (properties.TryGetValue("color", out var rColor))
+        if (properties.TryGetValue("color", out var rColor) || properties.TryGetValue("font.color", out rColor))
             newRProps.Color = new Color { Val = SanitizeHex(rColor) };
-        if (properties.TryGetValue("underline", out var rUnderline))
+        if (properties.TryGetValue("underline", out var rUnderline) || properties.TryGetValue("font.underline", out rUnderline))
         {
             var ulVal = NormalizeUnderlineValue(rUnderline);
             newRProps.Underline = new Underline { Val = new UnderlineValues(ulVal) };
         }
-        if ((properties.TryGetValue("strike", out var rStrike) || properties.TryGetValue("strikethrough", out rStrike)) && IsTruthy(rStrike))
+        if ((properties.TryGetValue("strike", out var rStrike)
+                || properties.TryGetValue("strikethrough", out rStrike)
+                || properties.TryGetValue("font.strike", out rStrike)
+                || properties.TryGetValue("font.strikethrough", out rStrike))
+            && IsTruthy(rStrike))
             newRProps.Strike = new Strike();
         if (properties.TryGetValue("highlight", out var rHighlight))
             newRProps.Highlight = new Highlight { Val = ParseHighlightColor(rHighlight) };
@@ -570,6 +591,22 @@ public partial class WordHandler
         foreach (var (key, value) in properties)
         {
             if (!key.Contains('.')) continue;
+            // CONSISTENCY(font-dotted-alias): font.name/font.bold/font.size/
+            // font.italic/font.color/font.underline/font.strike are consumed
+            // above by the curated alias blocks; skip the typed-attr fallback
+            // so they don't get re-flagged as UNSUPPORTED.
+            switch (key.ToLowerInvariant())
+            {
+                case "font.name":
+                case "font.size":
+                case "font.bold":
+                case "font.italic":
+                case "font.color":
+                case "font.underline":
+                case "font.strike":
+                case "font.strikethrough":
+                    continue;
+            }
             if (Core.TypedAttributeFallback.TrySet(newRProps, key, value)) continue;
             LastAddUnsupportedProps.Add(key);
         }
