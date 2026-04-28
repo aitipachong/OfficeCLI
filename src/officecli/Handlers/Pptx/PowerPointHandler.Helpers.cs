@@ -934,13 +934,31 @@ public partial class PowerPointHandler
     /// <summary>
     /// Read a GradientFill element and return a string representation (C1-C2[-angle] or radial:C1-C2[-focus]).
     /// </summary>
+    /// <summary>
+    /// Read a gradient stop color, handling both RgbColorModelHex and SchemeColor.
+    /// Without this, scheme-color stops (accent1/dark1/...) read back as "#?" because
+    /// FormatHexColor receives the literal "?" placeholder.
+    /// </summary>
+    private static string ReadGradientStopColor(Drawing.GradientStop gs)
+    {
+        var rgb = gs.GetFirstChild<Drawing.RgbColorModelHex>();
+        if (rgb?.Val?.Value != null) return ParseHelpers.FormatHexColor(rgb.Val.Value);
+        var scheme = gs.GetFirstChild<Drawing.SchemeColor>();
+        if (scheme?.Val?.Value != null) return scheme.Val.Value.ToString();
+        var sys = gs.GetFirstChild<Drawing.SystemColor>();
+        if (sys?.Val?.Value != null) return sys.Val.Value.ToString();
+        var preset = gs.GetFirstChild<Drawing.PresetColor>();
+        if (preset?.Val?.Value != null) return preset.Val.Value.ToString();
+        return "?";
+    }
+
     internal static string ReadGradientString(Drawing.GradientFill gradFill)
     {
         var stopEls = gradFill.GradientStopList?.Elements<Drawing.GradientStop>().ToList();
         if (stopEls == null || stopEls.Count == 0) return "gradient";
 
         var stopData = stopEls.Select(gs => (
-            color: ParseHelpers.FormatHexColor(gs.GetFirstChild<Drawing.RgbColorModelHex>()?.Val?.Value ?? "?"),
+            color: ReadGradientStopColor(gs),
             pos: gs.Position?.Value
         )).ToList();
 
