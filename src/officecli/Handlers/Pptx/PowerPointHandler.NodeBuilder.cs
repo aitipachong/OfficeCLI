@@ -254,8 +254,10 @@ public partial class PowerPointHandler
                             var cellCs = rp.GetFirstChild<Drawing.ComplexScriptFont>()?.Typeface?.Value;
                             var cellFont = cellLatin ?? cellEa;
                             if (cellFont != null) cellNode.Format["font"] = cellFont;
-                            if (cellLatin != null && cellLatin != cellFont) cellNode.Format["font.latin"] = cellLatin;
-                            if (cellEa != null && cellEa != cellFont) cellNode.Format["font.ea"] = cellEa;
+                            // CONSISTENCY(canonical-keys): always emit per-script
+                            // slots when present (schema declares get:true).
+                            if (cellLatin != null) cellNode.Format["font.latin"] = cellLatin;
+                            if (cellEa != null && cellEa != cellLatin) cellNode.Format["font.ea"] = cellEa;
                             if (cellCs != null) cellNode.Format["font.cs"] = cellCs;
 
                             if (rp.FontSize?.HasValue == true)
@@ -478,11 +480,12 @@ public partial class PowerPointHandler
             var fontCsTf = firstRun.RunProperties.GetFirstChild<Drawing.ComplexScriptFont>()?.Typeface?.Value;
             var font = fontLatinTf ?? fontEaTf;
             if (font != null) node.Format["font"] = font;
-            // Per-script slots — only emit when present (writers asking for
-            // round-trip can rebuild the same XML). Skip the redundant
-            // `font.latin` when it equals bare `font` to keep readback terse.
-            if (fontLatinTf != null && fontLatinTf != font) node.Format["font.latin"] = fontLatinTf;
-            if (fontEaTf != null && fontEaTf != font) node.Format["font.ea"] = fontEaTf;
+            // Per-script slots — emit canonical `font.latin` / `font.ea`
+            // whenever the slot is present so schema-declared `get:true`
+            // round-trips (CONSISTENCY(canonical-keys)). The redundant
+            // `font` alias is kept for backward compat.
+            if (fontLatinTf != null) node.Format["font.latin"] = fontLatinTf;
+            if (fontEaTf != null && fontEaTf != fontLatinTf) node.Format["font.ea"] = fontEaTf;
             if (fontCsTf != null) node.Format["font.cs"] = fontCsTf;
 
             var fontSize = firstRun.RunProperties.FontSize?.Value;
@@ -876,8 +879,11 @@ public partial class PowerPointHandler
             var fCs = run.RunProperties.GetFirstChild<Drawing.ComplexScriptFont>()?.Typeface?.Value;
             var f = fLatin ?? fEa;
             if (f != null) node.Format["font"] = f;
-            if (fLatin != null && fLatin != f) node.Format["font.latin"] = fLatin;
-            if (fEa != null && fEa != f) node.Format["font.ea"] = fEa;
+            // Emit canonical `font.latin` / `font.ea` whenever the slot is
+            // present so schema-declared `get:true` round-trips
+            // (CONSISTENCY(canonical-keys)). `font` kept as backward-compat alias.
+            if (fLatin != null) node.Format["font.latin"] = fLatin;
+            if (fEa != null && fEa != fLatin) node.Format["font.ea"] = fEa;
             if (fCs != null) node.Format["font.cs"] = fCs;
             var fs = run.RunProperties.FontSize?.Value;
             if (fs.HasValue) node.Format["size"] = $"{fs.Value / 100.0:0.##}pt";
