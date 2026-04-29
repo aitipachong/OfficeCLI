@@ -1211,17 +1211,22 @@ public partial class WordHandler
                         if (!node.Format.ContainsKey("font.latin"))
                             node.Format["font.latin"] = ascii;
                     }
-                    else
+                    else if (ascii != null && hAnsi != null)
                     {
-                        if (ascii != null && !node.Format.ContainsKey("font.ascii"))
+                        // Two slots, divergent values — fall back to legacy keys.
+                        if (!node.Format.ContainsKey("font.ascii"))
                             node.Format["font.ascii"] = ascii;
-                        if (hAnsi != null && !node.Format.ContainsKey("font.hAnsi"))
+                        if (!node.Format.ContainsKey("font.hAnsi"))
                             node.Format["font.hAnsi"] = hAnsi;
-                        // Single-slot emit: prefer canonical font.latin if
-                        // only one of ascii/hAnsi is set.
-                        if (ascii != null && hAnsi == null && !node.Format.ContainsKey("font.latin"))
+                    }
+                    else if (ascii != null)
+                    {
+                        if (!node.Format.ContainsKey("font.latin"))
                             node.Format["font.latin"] = ascii;
-                        else if (hAnsi != null && ascii == null && !node.Format.ContainsKey("font.latin"))
+                    }
+                    else if (hAnsi != null)
+                    {
+                        if (!node.Format.ContainsKey("font.latin"))
                             node.Format["font.latin"] = hAnsi;
                     }
                     if (pRunFonts.EastAsia?.Value != null && !node.Format.ContainsKey("font.ea"))
