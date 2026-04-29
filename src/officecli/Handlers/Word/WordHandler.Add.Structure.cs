@@ -206,6 +206,12 @@ public partial class WordHandler
             new Run(new Text(" " + fnText) { Space = SpaceProcessingModeValues.Preserve })
         );
         footnote.AppendChild(fnContentPara);
+        // i18n: route remaining keys (direction, font.cs, bold.cs, etc.)
+        // through the same paragraph + run helpers SetFootnotePath uses.
+        // Mirrors AddHeader's R2-2 fix so RTL footnotes work end-to-end.
+        var fnUnsupported = new List<string>();
+        ApplyFootnoteEndnoteFormatKeys(footnote, properties, fnUnsupported);
+        foreach (var u in fnUnsupported) LastAddUnsupportedProps.Add(u);
         fnPart.Footnotes.AppendChild(footnote);
         fnPart.Footnotes.Save();
 
@@ -250,6 +256,10 @@ public partial class WordHandler
             new Run(new Text(" " + enText) { Space = SpaceProcessingModeValues.Preserve })
         );
         endnote.AppendChild(enContentPara);
+        // i18n: route remaining keys through the same helper as footnote.
+        var enUnsupported = new List<string>();
+        ApplyFootnoteEndnoteFormatKeys(endnote, properties, enUnsupported);
+        foreach (var u in enUnsupported) LastAddUnsupportedProps.Add(u);
         enPart.Endnotes.AppendChild(endnote);
         enPart.Endnotes.Save();
 

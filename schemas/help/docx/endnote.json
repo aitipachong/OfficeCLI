@@ -21,6 +21,65 @@
       "examples": ["--prop text=\"End-of-doc reference\""],
       "readback": "concatenated text",
       "enforcement": "report"
+    },
+    "direction": {
+      "type": "enum",
+      "values": ["rtl", "ltr"],
+      "aliases": ["dir", "bidi"],
+      "description": "Reading direction. 'rtl' writes <w:bidi/> on the endnote content paragraph and cascades <w:rtl/> to the paragraph mark.",
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop direction=rtl"],
+      "enforcement": "report"
+    },
+    "alignment": {
+      "type": "enum",
+      "values": ["left", "center", "right", "justify", "both", "distribute"],
+      "aliases": ["align"],
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop alignment=right"],
+      "enforcement": "report"
+    },
+    "font.cs": {
+      "type": "string",
+      "description": "Complex-script font (rFonts/cs).",
+      "aliases": ["font.complexscript", "font.complex"],
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop font.cs=\"Arabic Typesetting\""],
+      "enforcement": "report"
+    },
+    "font.ea": {
+      "type": "string",
+      "aliases": ["font.eastasia", "font.eastasian"],
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop font.ea=\"メイリオ\""],
+      "enforcement": "report"
+    },
+    "font.latin": {
+      "type": "string",
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop font.latin=Calibri"],
+      "enforcement": "report"
+    },
+    "bold.cs": {
+      "type": "bool",
+      "aliases": ["font.bold.cs", "boldcs"],
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop bold.cs=true"],
+      "enforcement": "report"
+    },
+    "italic.cs": {
+      "type": "bool",
+      "aliases": ["font.italic.cs", "italiccs"],
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop italic.cs=true"],
+      "enforcement": "report"
+    },
+    "size.cs": {
+      "type": "font-size",
+      "aliases": ["font.size.cs", "sizecs"],
+      "add": true, "set": true, "get": false,
+      "examples": ["--prop size.cs=14pt"],
+      "enforcement": "report"
     }
   }
 }
