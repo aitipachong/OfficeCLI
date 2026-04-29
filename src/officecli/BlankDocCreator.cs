@@ -12,7 +12,7 @@ namespace OfficeCli;
 
 public static class BlankDocCreator
 {
-    public static void Create(string path)
+    public static void Create(string path, string? locale = null)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
         switch (ext)
@@ -21,7 +21,7 @@ public static class BlankDocCreator
                 CreateExcel(path);
                 break;
             case ".docx":
-                CreateWord(path);
+                CreateWord(path, locale);
                 break;
             case ".pptx":
                 CreatePowerPoint(path);
@@ -49,7 +49,7 @@ public static class BlankDocCreator
         OfficeCliMetadata.StampOnCreate(doc);
     }
 
-    private static void CreateWord(string path)
+    private static void CreateWord(string path, string? locale = null)
     {
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
         var mainPart = doc.AddMainDocumentPart();
@@ -96,17 +96,23 @@ public static class BlankDocCreator
         // predictable, system-independent baseline.
         // pPrDefault is left empty — schema defaults (autoSpaceDE/DN/kinsoku/
         // overflowPunct = true) match Word's behaviour and CJK ⇄ Latin spacing.
+        // Resolve locale-specific defaults from LocaleFontRegistry (POI/LO
+        // pattern). Without a locale, only Latin slots are populated so the
+        // host application's UI-locale defaults fill EastAsia / CS as needed.
+        var (locLatin, locEa, locCs) = OfficeCli.Core.LocaleFontRegistry.Resolve(locale);
+        var docDefaultFonts = new RunFonts
+        {
+            Ascii = locLatin ?? "Times New Roman",
+            HighAnsi = locLatin ?? "Times New Roman",
+        };
+        if (!string.IsNullOrEmpty(locEa)) docDefaultFonts.EastAsia = locEa;
+        if (!string.IsNullOrEmpty(locCs)) docDefaultFonts.ComplexScript = locCs;
+
         var stylesPart = mainPart.AddNewPart<DocumentFormat.OpenXml.Packaging.StyleDefinitionsPart>();
         stylesPart.Styles = new Styles(
             new DocDefaults(
                 new RunPropertiesDefault(
-                    new RunPropertiesBaseStyle(
-                        new RunFonts
-                        {
-                            Ascii = "Times New Roman",
-                            HighAnsi = "Times New Roman",
-                        }
-                    )
+                    new RunPropertiesBaseStyle(docDefaultFonts)
                 ),
                 new ParagraphPropertiesDefault()
             )

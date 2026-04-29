@@ -433,8 +433,13 @@ public partial class PowerPointHandler
 
                 case "direction" or "dir" or "rtl":
                 {
-                    // Paragraph reading direction (Arabic / Hebrew). Maps to
-                    // <a:pPr rtl="1"/>. Bare 'rtl' kept for parity with Word.
+                    // Paragraph reading direction + textbox column direction.
+                    // <a:pPr rtl="1"/> reverses character order inside each
+                    // paragraph; <a:bodyPr rtlCol="1"/> reverses the column
+                    // flow of the text body itself. POI / PowerPoint's UI set
+                    // both when the user toggles "Right-to-left text direction"
+                    // on a shape, so a single 'direction=rtl' here mirrors the
+                    // same intent end-to-end.
                     bool rtl = key.ToLowerInvariant() == "rtl"
                         ? IsTruthy(value)
                         : ParsePptDirectionRtl(value);
@@ -443,6 +448,12 @@ public partial class PowerPointHandler
                         var pProps = para.ParagraphProperties ?? (para.ParagraphProperties = new Drawing.ParagraphProperties());
                         pProps.RightToLeft = rtl;
                     }
+                    var dirBodyPr = shape.TextBody?.Elements<Drawing.BodyProperties>().FirstOrDefault();
+                    // OpenXml SDK doesn't expose rtlCol as a typed property on
+                    // BodyProperties — set the attribute directly. "1"/"0" is
+                    // the only canonical xsd:boolean form Office tooling reads.
+                    if (dirBodyPr != null)
+                        dirBodyPr.SetAttribute(new DocumentFormat.OpenXml.OpenXmlAttribute("", "rtlCol", "", rtl ? "1" : "0"));
                     break;
                 }
 

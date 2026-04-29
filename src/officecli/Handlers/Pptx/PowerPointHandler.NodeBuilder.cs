@@ -691,6 +691,19 @@ public partial class PowerPointHandler
         var bodyPr = shape.TextBody?.Elements<Drawing.BodyProperties>().FirstOrDefault();
         if (bodyPr != null)
         {
+            // Textbox-level RTL (a:bodyPr rtlCol). When the user set
+            // direction=rtl, both rtlCol and per-paragraph pPr.rtl were
+            // written; surface the textbox flag here so users see one
+            // canonical 'direction' regardless of which scope they queried.
+            // OpenXml SDK doesn't expose rtlCol as a typed property — read
+            // it via GetAttribute and treat "1"/"true" as RTL.
+            var rtlColAttr = bodyPr.GetAttribute("rtlCol", "").Value;
+            if (!string.IsNullOrEmpty(rtlColAttr) && !node.Format.ContainsKey("direction"))
+            {
+                bool rtlColOn = rtlColAttr == "1" || rtlColAttr.Equals("true", StringComparison.OrdinalIgnoreCase);
+                node.Format["direction"] = rtlColOn ? "rtl" : "ltr";
+            }
+
             var lIns = bodyPr.LeftInset;
             var tIns = bodyPr.TopInset;
             var rIns = bodyPr.RightInset;

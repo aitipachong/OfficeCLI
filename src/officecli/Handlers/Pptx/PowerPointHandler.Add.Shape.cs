@@ -143,7 +143,10 @@ public partial class PowerPointHandler
                         ReorderDrawingRunProperties(rProps);
                     }
                 }
-                // Reading direction (Arabic/Hebrew). 'rtl' enables <a:pPr rtl="1"/>
+                // Reading direction (Arabic/Hebrew). Sets BOTH <a:pPr rtl="1"/>
+                // (per-paragraph character order) AND <a:bodyPr rtlCol="1"/>
+                // (textbox column direction) so a fresh shape created with
+                // direction=rtl is fully RTL-correct end to end.
                 if (properties.TryGetValue("direction", out var dirVal)
                     || properties.TryGetValue("dir", out dirVal)
                     || properties.TryGetValue("rtl", out dirVal))
@@ -154,6 +157,9 @@ public partial class PowerPointHandler
                         var pProps = para.ParagraphProperties ?? (para.ParagraphProperties = new Drawing.ParagraphProperties());
                         pProps.RightToLeft = rtl;
                     }
+                    var dirBodyPr = newShape.TextBody?.Elements<Drawing.BodyProperties>().FirstOrDefault();
+                    if (dirBodyPr != null)
+                        dirBodyPr.SetAttribute(new DocumentFormat.OpenXml.OpenXmlAttribute("", "rtlCol", "", rtl ? "1" : "0"));
                 }
 
                 // Text margin (padding inside shape)

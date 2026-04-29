@@ -123,11 +123,13 @@ static partial class CommandBuilder
         var createFileArg = new Argument<string>("file") { Description = "Output file path (.docx, .xlsx, .pptx)" };
         var createTypeOpt = new Option<string>("--type") { Description = "Document type (docx, xlsx, pptx) — optional, inferred from file extension" };
         var createForceOpt = new Option<bool>("--force") { Description = "Overwrite an existing file." };
+        var createLocaleOpt = new Option<string>("--locale") { Description = "Locale tag (e.g. zh-CN, ja, ko, ar, he) — sets per-script default fonts in docDefaults. Without it, host application's UI-locale fallback applies. Currently only honored for .docx." };
         var createCommand = new Command("create", "Create a blank Office document");
         createCommand.Aliases.Add("new");
         createCommand.Add(createFileArg);
         createCommand.Add(createTypeOpt);
         createCommand.Add(createForceOpt);
+        createCommand.Add(createLocaleOpt);
         createCommand.Add(jsonOption);
 
         createCommand.SetAction(result => { var json = result.GetValue(jsonOption); return SafeRun(() =>
@@ -135,6 +137,7 @@ static partial class CommandBuilder
             var file = result.GetValue(createFileArg)!;
             var type = result.GetValue(createTypeOpt);
             var force = result.GetValue(createForceOpt);
+            var locale = result.GetValue(createLocaleOpt);
 
             // If file has no extension but --type is provided, append it
             if (!string.IsNullOrEmpty(type) && string.IsNullOrEmpty(Path.GetExtension(file)))
@@ -170,7 +173,7 @@ static partial class CommandBuilder
                 Console.Error.WriteLine($"Overwriting existing file: {file}");
             }
 
-            OfficeCli.BlankDocCreator.Create(file);
+            OfficeCli.BlankDocCreator.Create(file, locale);
             var fullCreatedPath = Path.GetFullPath(file);
 
             // Best-effort: auto-start a short-lived resident process so
