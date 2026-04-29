@@ -796,7 +796,16 @@ public partial class PowerPointHandler
         // `effective.direction` (mirrors the Word effective.* idiom).
         if (!node.Format.ContainsKey("direction") && part is SlidePart slidePart)
         {
-            bool? inherited = ResolveInheritedDirection(slidePart);
+            // R8-4: route the txStyles probe by placeholder type. Title
+            // placeholders inherit only from titleStyle, body / subTitle from
+            // bodyStyle, everything else from otherStyle. Pre-fix, the helper
+            // walked txStyles.ChildElements blindly and returned the first
+            // child with rtl=1 — so a master with bodyStyle rtl=1 leaked
+            // direction onto a titleStyle-rtl-absent title placeholder.
+            var phForDir = shape.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties
+                ?.GetFirstChild<PlaceholderShape>();
+            var phTypeForDir = phForDir?.Type?.HasValue == true ? phForDir.Type.Value : (PlaceholderValues?)null;
+            bool? inherited = ResolveInheritedDirection(slidePart, phTypeForDir, isTitle);
             if (inherited.HasValue)
                 node.Format["effective.direction"] = inherited.Value ? "rtl" : "ltr";
         }
@@ -1691,7 +1700,7 @@ public partial class PowerPointHandler
     /// when no ancestor declares a direction. Used by ShapeToNode to populate
     /// `effective.direction` when the slide-level shape doesn't set it itself.
     /// </summary>
-    private static bool? ResolveInheritedDirection(SlidePart slidePart)
+    private static bool? ResolveInheritedDirection(SlidePart slidePart, PlaceholderValues? phType = null, bool isTitle = false)
     {
         bool? Probe(OpenXmlElement? root)
         {
@@ -1721,9 +1730,22 @@ public partial class PowerPointHandler
         var txStyles = slidePart.SlideLayoutPart?.SlideMasterPart?.SlideMaster?.TextStyles;
         if (txStyles != null)
         {
-            foreach (var styleEl in txStyles.ChildElements)
+            // R8-4: route by placeholder type. titleStyle is the inheritance
+            // surface for Title / CenteredTitle; bodyStyle for Body / SubTitle
+            // / Object; otherStyle for everything else and for non-placeholder
+            // shapes (mirrors ResolveEffectiveBold / ResolveEffectiveColor —
+            // the otherStyle surface is the canonical default for free shapes).
+            OpenXmlCompositeElement? styleList;
+            if (isTitle || phType == PlaceholderValues.Title || phType == PlaceholderValues.CenteredTitle)
+                styleList = txStyles.TitleStyle;
+            else if (phType == PlaceholderValues.Body || phType == PlaceholderValues.SubTitle || phType == PlaceholderValues.Object)
+                styleList = txStyles.BodyStyle;
+            else
+                styleList = txStyles.OtherStyle;
+
+            if (styleList != null)
             {
-                var lvl1 = (styleEl as OpenXmlCompositeElement)?.GetFirstChild<Drawing.Level1ParagraphProperties>();
+                var lvl1 = styleList.GetFirstChild<Drawing.Level1ParagraphProperties>();
                 var rtl = lvl1?.RightToLeft;
                 if (rtl?.HasValue == true) return rtl.Value;
             }
