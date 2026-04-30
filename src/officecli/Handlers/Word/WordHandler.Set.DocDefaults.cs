@@ -104,14 +104,23 @@ public partial class WordHandler
             {
                 // <w:rtl/> on rPrDefault makes RTL the document-wide default;
                 // explicit run rtl=false overrides per-run. Mirrors bold/italic.
+                // Stays hand-rolled (does NOT route through ApplyRunFormatting)
+                // because <w:rtl/> in StyleRunProperties context round-trips
+                // as OpenXmlUnknownElement, which RemoveAllChildren<RightToLeftText>
+                // wouldn't catch on a re-toggle. Also handles unknown-element
+                // cleanup so toggle-off after reload works.
                 var rPr = EnsureRunPropsDefault();
                 bool rtlOn = key.ToLowerInvariant() == "docdefaults.rtl"
                     ? IsTruthy(value)
                     : ParseDirectionRtl(value);
+                rPr.RemoveAllChildren<RightToLeftText>();
+                foreach (var unknown in rPr.ChildElements
+                    .OfType<DocumentFormat.OpenXml.OpenXmlUnknownElement>()
+                    .Where(e => e.LocalName == "rtl").ToList())
+                    unknown.Remove();
                 // <w:rtl/> sits late in CT_RPr (after vertAlign), so AppendChild
                 // is schema-correct here — unlike Bold/Italic which must precede
                 // Color/FontSize.
-                rPr.RemoveAllChildren<RightToLeftText>();
                 if (rtlOn) rPr.AppendChild(new RightToLeftText());
                 SaveStyles();
                 return true;

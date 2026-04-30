@@ -405,10 +405,11 @@ public partial class WordHandler
             // Run-level rtl: explicit `rtl=true` OR cascaded from paragraph
             // direction=rtl above. Skipping the cascade would leave Latin
             // character order inside an RTL paragraph (broken Arabic).
-            if (properties.TryGetValue("rtl", out var pRtl) && IsTruthy(pRtl))
-                rProps.RightToLeftText = new RightToLeftText();
-            else if (paraRtl == true)
-                rProps.RightToLeftText = new RightToLeftText();
+            // Routes through ApplyRunFormatting so schema order matches
+            // direct Set path. See WordHandler.I18n.cs.
+            if ((properties.TryGetValue("rtl", out var pRtl) && IsTruthy(pRtl))
+                || paraRtl == true)
+                ApplyRunFormatting(rProps, "rtl", "true");
             if (properties.TryGetValue("vertAlign", out var pVertAlign) || properties.TryGetValue("vertalign", out pVertAlign))
             {
                 rProps.VerticalTextAlignment = new VerticalTextAlignment
@@ -862,7 +863,7 @@ public partial class WordHandler
         if (properties.TryGetValue("noproof", out var rNoProof) && IsTruthy(rNoProof))
             newRProps.NoProof = new NoProof();
         if (properties.TryGetValue("rtl", out var rRtl) && IsTruthy(rRtl))
-            newRProps.RightToLeftText = new RightToLeftText();
+            ApplyRunFormatting(newRProps, "rtl", "true");
         if (properties.TryGetValue("vertAlign", out var rVertAlign) || properties.TryGetValue("vertalign", out rVertAlign))
         {
             newRProps.VerticalTextAlignment = new VerticalTextAlignment

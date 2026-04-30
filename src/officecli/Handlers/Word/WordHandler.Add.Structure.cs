@@ -238,7 +238,7 @@ public partial class WordHandler
         // renders on the correct side of an Arabic / Hebrew paragraph.
         var fnRefRPr = new RunProperties(new RunStyle { Val = "FootnoteReference" });
         if (fnPara.ParagraphProperties?.BiDi != null)
-            fnRefRPr.AppendChild(new RightToLeftText());
+            ApplyRunFormatting(fnRefRPr, "rtl", "true");
         var fnRefRun = new Run(fnRefRPr, new FootnoteReference { Id = fnId });
         InsertIntoParagraph(fnPara, fnRefRun, index);
 
@@ -288,7 +288,7 @@ public partial class WordHandler
         // paragraphs stamp <w:rtl/> on the reference run's rPr.
         var enRefRPr = new RunProperties(new RunStyle { Val = "EndnoteReference" });
         if (enPara.ParagraphProperties?.BiDi != null)
-            enRefRPr.AppendChild(new RightToLeftText());
+            ApplyRunFormatting(enRefRPr, "rtl", "true");
         var enRefRun = new Run(enRefRPr, new EndnoteReference { Id = enId });
         InsertIntoParagraph(enPara, enRefRun, index);
 
@@ -1230,19 +1230,15 @@ public partial class WordHandler
 
         if (properties.TryGetValue("alignment", out var hAlign) || properties.TryGetValue("align", out hAlign))
             hPProps.Justification = new Justification { Val = ParseJustification(hAlign) };
-        // Reading direction (Arabic / Hebrew). Mirrors AddParagraph: 'rtl'
-        // writes <w:bidi/> on pPr AND <w:rtl/> on the paragraph mark rPr so
-        // any later runs added via Set inherit the run-level direction.
+        // Reading direction (Arabic / Hebrew). Parsed here, applied at the
+        // end of paragraph build via ApplyDirectionCascade (cascades to all
+        // runs including text and field runs). See WordHandler.I18n.cs.
         bool? hRtlFlag = null;
         if (properties.TryGetValue("direction", out var hDirRaw)
             || properties.TryGetValue("dir", out hDirRaw)
             || properties.TryGetValue("bidi", out hDirRaw))
         {
-            var hRtl = ParseDirectionRtl(hDirRaw);
-            hRtlFlag = hRtl;
-            if (hRtl) hPProps.BiDi = new BiDi();
-            var hMarkRPr = hPProps.ParagraphMarkRunProperties ?? hPProps.AppendChild(new ParagraphMarkRunProperties());
-            ApplyRunFormatting(hMarkRPr, "direction", hRtl ? "rtl" : "ltr");
+            hRtlFlag = ParseDirectionRtl(hDirRaw);
         }
         hPara.AppendChild(hPProps);
 
@@ -1268,11 +1264,6 @@ public partial class WordHandler
         {
             var hRun = new Run();
             if (hSharedRProps != null) hRun.AppendChild((RunProperties)hSharedRProps.CloneNode(true));
-            if (hRtlFlag.HasValue)
-            {
-                var hRunRPr = hRun.GetFirstChild<RunProperties>() ?? hRun.PrependChild(new RunProperties());
-                ApplyRunFormatting(hRunRPr, "direction", hRtlFlag.Value ? "rtl" : "ltr");
-            }
             hRun.AppendChild(new Text(hText) { Space = SpaceProcessingModeValues.Preserve });
             hPara.AppendChild(hRun);
         }
@@ -1310,6 +1301,12 @@ public partial class WordHandler
             hPara.AppendChild(hResultRun);
             hPara.AppendChild(hEndRun);
         }
+
+        // CONSISTENCY(rtl-cascade): apply after all runs (text + field) are
+        // appended so every run gets <w:rtl/>. Previously field runs were
+        // missed by the inline stamp. See WordHandler.I18n.cs.
+        if (hRtlFlag.HasValue)
+            ApplyDirectionCascade(hPara, hRtlFlag.Value);
 
         // AssignParaId stamps w14:paraId / w14:textId on each w:p. Those
         // attributes are MS-2010 extensions and OpenXmlValidator rejects
@@ -1396,17 +1393,14 @@ public partial class WordHandler
 
         if (properties.TryGetValue("alignment", out var fAlign) || properties.TryGetValue("align", out fAlign))
             fPProps.Justification = new Justification { Val = ParseJustification(fAlign) };
-        // Reading direction (Arabic / Hebrew) — mirrors AddHeader.
+        // Reading direction (Arabic / Hebrew) — mirrors AddHeader. Applied
+        // at end of paragraph build via ApplyDirectionCascade.
         bool? fRtlFlag = null;
         if (properties.TryGetValue("direction", out var fDirRaw)
             || properties.TryGetValue("dir", out fDirRaw)
             || properties.TryGetValue("bidi", out fDirRaw))
         {
-            var fRtl = ParseDirectionRtl(fDirRaw);
-            fRtlFlag = fRtl;
-            if (fRtl) fPProps.BiDi = new BiDi();
-            var fMarkRPr = fPProps.ParagraphMarkRunProperties ?? fPProps.AppendChild(new ParagraphMarkRunProperties());
-            ApplyRunFormatting(fMarkRPr, "direction", fRtl ? "rtl" : "ltr");
+            fRtlFlag = ParseDirectionRtl(fDirRaw);
         }
         fPara.AppendChild(fPProps);
 
@@ -1432,11 +1426,6 @@ public partial class WordHandler
         {
             var fRun = new Run();
             if (sharedRProps != null) fRun.AppendChild((RunProperties)sharedRProps.CloneNode(true));
-            if (fRtlFlag.HasValue)
-            {
-                var fRunRPr = fRun.GetFirstChild<RunProperties>() ?? fRun.PrependChild(new RunProperties());
-                ApplyRunFormatting(fRunRPr, "direction", fRtlFlag.Value ? "rtl" : "ltr");
-            }
             fRun.AppendChild(new Text(fText) { Space = SpaceProcessingModeValues.Preserve });
             fPara.AppendChild(fRun);
         }
@@ -1474,6 +1463,10 @@ public partial class WordHandler
             fPara.AppendChild(resultRun);
             fPara.AppendChild(endRun);
         }
+
+        // CONSISTENCY(rtl-cascade): mirror AddHeader — apply after all runs.
+        if (fRtlFlag.HasValue)
+            ApplyDirectionCascade(fPara, fRtlFlag.Value);
 
         // Same w14 / mc:Ignorable declaration as AddHeader: paragraphs
         // here also carry w14:paraId / w14:textId from AssignParaId, and

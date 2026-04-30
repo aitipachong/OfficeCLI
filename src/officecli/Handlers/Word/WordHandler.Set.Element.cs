@@ -940,25 +940,10 @@ public partial class WordHandler
             var k = key.ToLowerInvariant();
             if (ApplyParagraphLevelProperty(pProps, key, value))
             {
-                // CONSISTENCY(rtl-cascade): a paragraph-level <w:bidi/> only
-                // flips layout (page side, mark anchor); it does NOT make the
-                // run-internal character order RTL. Word's UI also writes
-                // <w:rtl/> on every run and on the paragraph mark when the
-                // user toggles paragraph direction. Mirror that here so a
-                // single `direction=rtl` produces a fully Arabic-correct
-                // paragraph instead of a mixed-bidi one that renders wrong
-                // for fonts like Arabic Typesetting.
+                // CONSISTENCY(rtl-cascade): direction toggle stamps the full
+                // bidi+markRPr+runs cascade. See WordHandler.I18n.cs.
                 if (k is "direction" or "dir" or "bidi")
-                {
-                    bool runRtl = ParseDirectionRtl(value);
-                    var markRPr = pProps.ParagraphMarkRunProperties ?? pProps.AppendChild(new ParagraphMarkRunProperties());
-                    ApplyRunFormatting(markRPr, "direction", runRtl ? "rtl" : "ltr");
-                    foreach (var pRun in para.Descendants<Run>())
-                    {
-                        var pRunProps = EnsureRunProperties(pRun);
-                        ApplyRunFormatting(pRunProps, "direction", runRtl ? "rtl" : "ltr");
-                    }
-                }
+                    ApplyDirectionCascade(para, ParseDirectionRtl(value));
                 // handled by paragraph-level helper
             }
             else switch (k)
@@ -1167,24 +1152,11 @@ public partial class WordHandler
                     break;
                 case "direction" or "dir" or "bidi":
                 {
-                    // CONSISTENCY(rtl-cascade): table cell direction mirrors
-                    // SetElementParagraph (Set.Element.cs:951-961) — set
-                    // <w:bidi/> on every cell paragraph's pPr and stamp
-                    // <w:rtl/> on every run + paragraph mark. <w:bidi/> alone
-                    // flips layout but doesn't reverse character order in
-                    // runs, so the cascade is required for proper Arabic /
-                    // Hebrew rendering inside a cell.
+                    // CONSISTENCY(rtl-cascade): each cell paragraph runs the
+                    // full bidi+markRPr+runs cascade. See WordHandler.I18n.cs.
                     bool cellRtl = ParseDirectionRtl(value);
                     foreach (var cellPara in cell.Elements<Paragraph>())
-                    {
-                        var cpPr = cellPara.ParagraphProperties ?? cellPara.PrependChild(new ParagraphProperties());
-                        if (cellRtl) cpPr.BiDi = new BiDi();
-                        else cpPr.RemoveAllChildren<BiDi>();
-                        var cMarkRPr = cpPr.ParagraphMarkRunProperties ?? cpPr.AppendChild(new ParagraphMarkRunProperties());
-                        ApplyRunFormatting(cMarkRPr, "direction", cellRtl ? "rtl" : "ltr");
-                        foreach (var cellRun in cellPara.Descendants<Run>())
-                            ApplyRunFormatting(EnsureRunProperties(cellRun), "direction", cellRtl ? "rtl" : "ltr");
-                    }
+                        ApplyDirectionCascade(cellPara, cellRtl);
                     break;
                 }
                 case "shd" or "shading" or "fill":

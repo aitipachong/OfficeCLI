@@ -1252,27 +1252,21 @@ public partial class WordHandler
                     }
                     if (!string.IsNullOrEmpty(pRunFonts.EastAsia?.Value) && !node.Format.ContainsKey("font.ea"))
                         node.Format["font.ea"] = pRunFonts.EastAsia!.Value!;
-                    if (!string.IsNullOrEmpty(pRunFonts.ComplexScript?.Value) && !node.Format.ContainsKey("font.cs"))
-                        node.Format["font.cs"] = pRunFonts.ComplexScript!.Value!;
                 }
 
                 var fsVal = rp?.FontSize?.Val?.Value ?? markRp?.GetFirstChild<FontSize>()?.Val?.Value;
                 if (fsVal != null && !node.Format.ContainsKey("size"))
                     node.Format["size"] = $"{int.Parse(fsVal) / 2.0:0.##}pt";
-                var fsCsVal = rp?.GetFirstChild<FontSizeComplexScript>()?.Val?.Value
-                    ?? markRp?.GetFirstChild<FontSizeComplexScript>()?.Val?.Value;
-                if (fsCsVal != null && int.TryParse(fsCsVal, out var fsCsHalfPt) && !node.Format.ContainsKey("size.cs"))
-                    node.Format["size.cs"] = $"{fsCsHalfPt / 2.0:0.##}pt";
 
                 var boldEl = rp?.Bold ?? (OpenXmlLeafElement?)markRp?.GetFirstChild<Bold>();
                 if (boldEl != null && !node.Format.ContainsKey("bold")) node.Format["bold"] = true;
-                var boldCsEl = rp?.GetFirstChild<BoldComplexScript>() ?? (OpenXmlLeafElement?)markRp?.GetFirstChild<BoldComplexScript>();
-                if (boldCsEl != null && !node.Format.ContainsKey("bold.cs")) node.Format["bold.cs"] = true;
 
                 var italicEl = rp?.Italic ?? (OpenXmlLeafElement?)markRp?.GetFirstChild<Italic>();
                 if (italicEl != null && !node.Format.ContainsKey("italic")) node.Format["italic"] = true;
-                var italicCsEl = rp?.GetFirstChild<ItalicComplexScript>() ?? (OpenXmlLeafElement?)markRp?.GetFirstChild<ItalicComplexScript>();
-                if (italicCsEl != null && !node.Format.ContainsKey("italic.cs")) node.Format["italic.cs"] = true;
+
+                // Complex-script readback (font.cs / size.cs / bold.cs / italic.cs).
+                // See WordHandler.I18n.cs.
+                ReadComplexScriptRunFormatting(rp, markRp, node.Format);
 
                 var colorEl = rp?.Color ?? markRp?.GetFirstChild<Color>();
                 if (colorEl != null && !node.Format.ContainsKey("color"))
@@ -1342,7 +1336,6 @@ public partial class WordHandler
                     else if (hAnsi != null) node.Format["font.latin"] = hAnsi;
                 }
                 if (!string.IsNullOrEmpty(rFonts.EastAsia?.Value)) node.Format["font.ea"] = rFonts.EastAsia!.Value!;
-                if (!string.IsNullOrEmpty(rFonts.ComplexScript?.Value)) node.Format["font.cs"] = rFonts.ComplexScript!.Value!;
             }
             // <w:lang/> three slots: val (latin) / eastAsia / bidi (cs).
             // CONSISTENCY(canonical-keys): mirror font.latin/font.ea/font.cs vocabulary.
@@ -1355,14 +1348,11 @@ public partial class WordHandler
             }
             var size = GetRunFontSize(run);
             if (size != null) node.Format["size"] = size;
-            // Complex-script font size (<w:szCs/>) — half-points like <w:sz/>.
-            if (run.RunProperties?.GetFirstChild<FontSizeComplexScript>()?.Val?.Value is string szCsVal
-                && int.TryParse(szCsVal, out var szCsHalfPt))
-                node.Format["size.cs"] = $"{szCsHalfPt / 2.0:0.##}pt";
             if (run.RunProperties?.Bold != null) node.Format["bold"] = true;
-            if (run.RunProperties?.GetFirstChild<BoldComplexScript>() != null) node.Format["bold.cs"] = true;
             if (run.RunProperties?.Italic != null) node.Format["italic"] = true;
-            if (run.RunProperties?.GetFirstChild<ItalicComplexScript>() != null) node.Format["italic.cs"] = true;
+            // Complex-script readback (font.cs / size.cs / bold.cs / italic.cs).
+            // See WordHandler.I18n.cs.
+            ReadComplexScriptRunFormatting(run.RunProperties, null, node.Format);
             if (run.RunProperties?.Color?.ThemeColor?.HasValue == true) node.Format["color"] = run.RunProperties.Color.ThemeColor.InnerText;
             else if (run.RunProperties?.Color?.Val?.Value != null) node.Format["color"] = ParseHelpers.FormatHexColor(run.RunProperties.Color.Val.Value);
             if (run.RunProperties?.Underline?.Val != null) node.Format["underline"] = run.RunProperties.Underline.Val.InnerText;
