@@ -709,6 +709,19 @@ public partial class WordHandler
         {
             node.Format["effective.direction"] = direction;
             if (directionSrc != null) node.Format["effective.direction.src"] = directionSrc;
+            // R21-bt-1 + R21-bt-2: cascade-uniform effective.rtl. The
+            // style-chain path (ResolveEffectiveRunPropertiesCore) already
+            // lifts pPr.bidi into effective.rtl on style-style cascades.
+            // Section / table-bidiVisual / table-style / docDefaults /
+            // numbering layers were missing that lift, so paragraphs
+            // inheriting RTL from any of these emitted only effective.direction.
+            // Emit effective.rtl alongside effective.direction so callers see
+            // the same surface regardless of the originating cascade layer.
+            if (!node.Format.ContainsKey("effective.rtl"))
+            {
+                node.Format["effective.rtl"] = direction == "rtl";
+                if (directionSrc != null) node.Format["effective.rtl.src"] = directionSrc;
+            }
         }
         // R21-fuzz-2: paragraph carries its own pPr.bidi. Emit
         // effective.direction + .src=self for cascade-uniform readback so
