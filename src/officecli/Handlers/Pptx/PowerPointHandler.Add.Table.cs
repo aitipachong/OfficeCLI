@@ -162,6 +162,18 @@ public partial class PowerPointHandler
                 );
                 graphicFrame.Append(graphic);
                 InsertAtPosition(tblShapeTree, graphicFrame, index);
+
+                // CONSISTENCY(add-set-parity): border-prefixed props on AddTable
+                // delegate to the same fan-out used by Set. PPT OOXML has no
+                // table-level border element — borders are per-cell lnL/lnR/lnT/lnB,
+                // so border.all / border.top / etc. are applied to every cell.
+                // border.horizontal / border.vertical mean inside row/column dividers.
+                var tblBorderProps = properties
+                    .Where(kv => kv.Key.StartsWith("border", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+                if (tblBorderProps.Count > 0)
+                    ApplyTableBorderFanOut(table, tblBorderProps);
+
                 GetSlide(tblSlidePart).Save();
 
                 var tblCount = tblShapeTree.Elements<GraphicFrame>()
@@ -169,6 +181,125 @@ public partial class PowerPointHandler
                 return $"/slide[{tblSlideIdx}]/{BuildElementPathSegment("table", graphicFrame, tblCount)}";
     }
 
+
+    // Apply table-level border properties by fan-out to per-cell lnL/lnR/lnT/lnB.
+    // PPT OOXML has no table-level border element; "table border" is the union
+    // of cell borders along the outer edges (and optionally inside dividers).
+    //
+    // Semantics:
+    //   border / border.all              → every edge of every cell
+    //   border.top                       → top of cells in row 1
+    //   border.bottom                    → bottom of cells in last row
+    //   border.left                      → left of cells in column 1
+    //   border.right                     → right of cells in last column
+    //   border.horizontal / border.insideH → bottom of rows 1..N-1 + top of rows 2..N
+    //   border.vertical   / border.insideV → right of cols 1..M-1 + left of cols 2..M
+    //   border.tl2br / border.tr2bl      → diagonals on every cell
+    // Each can also use split form: border.top.width, border.left.color, etc.
+    internal static void ApplyTableBorderFanOut(Drawing.Table table, Dictionary<string, string> borderProps)
+    {
+        var rows = table.Elements<Drawing.TableRow>().ToList();
+        if (rows.Count == 0) return;
+        int colCount = rows.Max(r => r.Elements<Drawing.TableCell>().Count());
+        if (colCount == 0) return;
+
+        foreach (var (rawKey, value) in borderProps)
+        {
+            var key = rawKey.ToLowerInvariant();
+
+            bool isAll = key is "border" or "border.all";
+            bool isTop = key.StartsWith("border.top");
+            bool isBottom = key.StartsWith("border.bottom");
+            bool isLeft = key.StartsWith("border.left");
+            bool isRight = key.StartsWith("border.right");
+            bool isInsideH = key.StartsWith("border.horizontal") || key.StartsWith("border.insideh");
+            bool isInsideV = key.StartsWith("border.vertical")   || key.StartsWith("border.insidev");
+            bool isDiag = key.StartsWith("border.tl2br") || key.StartsWith("border.tr2bl");
+
+            // Split-form suffix preserved on cell-level key (e.g. ".width" / ".color" / ".dash").
+            string splitSuffix = "";
+            foreach (var s in new[] { ".width", ".color", ".dash" })
+                if (key.EndsWith(s)) { splitSuffix = s; break; }
+
+            void ApplyToCell(Drawing.TableCell cell, string edgeKey)
+            {
+                var cellKey = edgeKey + splitSuffix;
+                SetTableCellProperties(cell, new Dictionary<string, string> { { cellKey, value } });
+            }
+
+            if (isAll)
+            {
+                foreach (var row in rows)
+                    foreach (var cell in row.Elements<Drawing.TableCell>())
+                        ApplyToCell(cell, "border.all");
+                continue;
+            }
+            if (isDiag)
+            {
+                var diagEdge = key.StartsWith("border.tl2br") ? "border.tl2br" : "border.tr2bl";
+                foreach (var row in rows)
+                    foreach (var cell in row.Elements<Drawing.TableCell>())
+                        ApplyToCell(cell, diagEdge);
+                continue;
+            }
+            if (isTop)
+            {
+                foreach (var cell in rows[0].Elements<Drawing.TableCell>())
+                    ApplyToCell(cell, "border.top");
+                continue;
+            }
+            if (isBottom)
+            {
+                foreach (var cell in rows[^1].Elements<Drawing.TableCell>())
+                    ApplyToCell(cell, "border.bottom");
+                continue;
+            }
+            if (isLeft)
+            {
+                foreach (var row in rows)
+                {
+                    var firstCell = row.Elements<Drawing.TableCell>().FirstOrDefault();
+                    if (firstCell != null) ApplyToCell(firstCell, "border.left");
+                }
+                continue;
+            }
+            if (isRight)
+            {
+                foreach (var row in rows)
+                {
+                    var lastCell = row.Elements<Drawing.TableCell>().LastOrDefault();
+                    if (lastCell != null) ApplyToCell(lastCell, "border.right");
+                }
+                continue;
+            }
+            if (isInsideH)
+            {
+                // Apply to bottom of rows[0..N-2] and top of rows[1..N-1].
+                for (int r = 0; r < rows.Count - 1; r++)
+                {
+                    foreach (var cell in rows[r].Elements<Drawing.TableCell>())
+                        ApplyToCell(cell, "border.bottom");
+                    foreach (var cell in rows[r + 1].Elements<Drawing.TableCell>())
+                        ApplyToCell(cell, "border.top");
+                }
+                continue;
+            }
+            if (isInsideV)
+            {
+                foreach (var row in rows)
+                {
+                    var cells = row.Elements<Drawing.TableCell>().ToList();
+                    for (int c = 0; c < cells.Count - 1; c++)
+                    {
+                        ApplyToCell(cells[c], "border.right");
+                        ApplyToCell(cells[c + 1], "border.left");
+                    }
+                }
+                continue;
+            }
+            // Unknown border.* key — ignore (Set table dispatch already validates).
+        }
+    }
 
     private string AddRow(string parentPath, int? index, Dictionary<string, string> properties)
     {
@@ -341,6 +472,22 @@ public partial class PowerPointHandler
                 {
                     SetTableCellProperties(newCell, new Dictionary<string, string> { { "fill", cFill } });
                 }
+
+                // CONSISTENCY(add-set-parity): border-prefixed props on AddCell
+                // delegate to SetTableCellProperties — same builder, same schema
+                // ordering. Excludes border.horizontal/border.vertical which only
+                // make sense at table level (inside-row / inside-column dividers).
+                var addCellBorderProps = properties
+                    .Where(kv => kv.Key.StartsWith("border", StringComparison.OrdinalIgnoreCase)
+                        && !kv.Key.Equals("border.horizontal", StringComparison.OrdinalIgnoreCase)
+                        && !kv.Key.Equals("border.vertical", StringComparison.OrdinalIgnoreCase)
+                        && !kv.Key.Equals("border.insideh", StringComparison.OrdinalIgnoreCase)
+                        && !kv.Key.Equals("border.insidev", StringComparison.OrdinalIgnoreCase)
+                        && !kv.Key.Equals("border.insideH", StringComparison.OrdinalIgnoreCase)
+                        && !kv.Key.Equals("border.insideV", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+                if (addCellBorderProps.Count > 0)
+                    SetTableCellProperties(newCell, addCellBorderProps);
 
                 if (index.HasValue)
                 {

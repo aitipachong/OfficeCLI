@@ -161,6 +161,11 @@ public partial class PowerPointHandler
             if (tblPr.BandColumn is not null) node.Format["bandedCols"] = tblPr.BandColumn.Value;
         }
 
+        // Outer-edge border aggregation (PPT has no table-level border element).
+        // Scan the outer edges across cells; emit per-side keys when uniform,
+        // and 'border.all' shorthand when all four sides match.
+        AggregateTableOuterBorders(table, rows, node);
+
         // Position
         var offset = gf.Transform?.Offset;
         if (offset != null)
@@ -1339,6 +1344,71 @@ public partial class PowerPointHandler
     private static string? TableStyleGuidToName(string guid)
     {
         return _tableStyleGuidToName.TryGetValue(guid, out var name) ? name : null;
+    }
+
+    // Table-level border aggregation. PPT OOXML has no <a:tblBorders>; the
+    // visual "table border" is the union of outer cell borders. We sample the
+    // outer edge cells: top of row 1, bottom of last row, left of column 1,
+    // right of last column. If every cell along an edge agrees, emit a
+    // canonical 'border.<side>' summary; if all four sides match, also emit
+    // 'border.all'. Mixed/empty edges are simply omitted (consumers should
+    // descend to per-cell readback to inspect heterogeneous borders).
+    private static void AggregateTableOuterBorders(
+        Drawing.Table table,
+        List<Drawing.TableRow> rows,
+        DocumentNode node)
+    {
+        if (rows.Count == 0) return;
+        string? FormatBorder(OpenXmlCompositeElement? lp)
+        {
+            if (lp == null) return null;
+            if (lp.GetFirstChild<Drawing.NoFill>() != null) return "none";
+            var solidFill = lp.GetFirstChild<Drawing.SolidFill>();
+            if (solidFill == null) return null;
+            var color = ReadColorFromFill(solidFill);
+            var wAttr = lp.GetAttributes().FirstOrDefault(a => a.LocalName == "w");
+            var dash = lp.GetFirstChild<Drawing.PresetDash>();
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(wAttr.Value) && long.TryParse(wAttr.Value, out var w) && w > 0)
+                parts.Add(FormatEmu(w));
+            parts.Add(dash?.Val?.HasValue == true ? dash.Val.InnerText! : "solid");
+            if (color != null) parts.Add(color);
+            return string.Join(" ", parts);
+        }
+
+        string? AggregateEdge(IEnumerable<Drawing.TableCell> cells, Func<Drawing.TableCellProperties, OpenXmlCompositeElement?> pick)
+        {
+            string? agreed = null;
+            bool first = true;
+            int count = 0;
+            foreach (var cell in cells)
+            {
+                count++;
+                var tcPr = cell.TableCellProperties ?? cell.GetFirstChild<Drawing.TableCellProperties>();
+                var v = tcPr == null ? null : FormatBorder(pick(tcPr));
+                if (first) { agreed = v; first = false; }
+                else if (v != agreed) return null; // edge not uniform
+            }
+            return count == 0 ? null : agreed;
+        }
+
+        var topCells = rows[0].Elements<Drawing.TableCell>();
+        var bottomCells = rows[^1].Elements<Drawing.TableCell>();
+        var leftCells = rows.Select(r => r.Elements<Drawing.TableCell>().FirstOrDefault()).Where(c => c != null)!;
+        var rightCells = rows.Select(r => r.Elements<Drawing.TableCell>().LastOrDefault()).Where(c => c != null)!;
+
+        var top = AggregateEdge(topCells, t => t.TopBorderLineProperties);
+        var bottom = AggregateEdge(bottomCells!, t => t.BottomBorderLineProperties);
+        var left = AggregateEdge(leftCells!, t => t.LeftBorderLineProperties);
+        var right = AggregateEdge(rightCells!, t => t.RightBorderLineProperties);
+
+        if (top != null) node.Format["border.top"] = top;
+        if (bottom != null) node.Format["border.bottom"] = bottom;
+        if (left != null) node.Format["border.left"] = left;
+        if (right != null) node.Format["border.right"] = right;
+
+        if (top != null && top == bottom && top == left && top == right)
+            node.Format["border.all"] = top;
     }
 
     // ==================== Effective Properties Resolution (PPT) ====================

@@ -297,7 +297,20 @@ public partial class PowerPointHandler
                     }
                     break;
                 }
-                case var k when k.StartsWith("border") || k is "text" or "bold" or "italic" or "size" or "font" or "color" or "underline" or "strike" or "valign" or "fill" or "baseline" or "charspacing" or "opacity" or "bevel" or "margin" or "padding" or "textdirection" or "wordwrap" or "linespacing" or "spacebefore" or "spaceafter":
+                case var k when k.StartsWith("border"):
+                {
+                    // CONSISTENCY(border-edge-semantics): table-level border.top/bottom/left/right
+                    // applies only to the OUTER edge (matching docx semantics), not to every cell.
+                    // border.all / bare 'border' applies to every cell. border.horizontal /
+                    // border.vertical (a.k.a. border.insideH/V) target the inside dividers.
+                    // PPT OOXML has no table-level border element — all of these fan out to
+                    // per-cell a:lnL/lnR/lnT/lnB.
+                    var table = gf.Descendants<Drawing.Table>().FirstOrDefault();
+                    if (table != null)
+                        ApplyTableBorderFanOut(table, new Dictionary<string, string> { { key, value } });
+                    break;
+                }
+                case var k when k is "text" or "bold" or "italic" or "size" or "font" or "color" or "underline" or "strike" or "valign" or "fill" or "baseline" or "charspacing" or "opacity" or "bevel" or "margin" or "padding" or "textdirection" or "wordwrap" or "linespacing" or "spacebefore" or "spaceafter":
                 {
                     // Apply cell-level properties to all cells in the table
                     var table = gf.Descendants<Drawing.Table>().FirstOrDefault();
