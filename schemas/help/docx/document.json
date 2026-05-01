@@ -101,6 +101,135 @@
       "add": false, "set": false, "get": true,
       "readback": "true | false",
       "enforcement": "report"
+    },
+    "docGrid.type": {
+      "type": "enum",
+      "values": ["default", "lines", "linesAndChars", "snapToChars"],
+      "description": "document grid type.",
+      "add": false, "set": true, "get": true,
+      "readback": "grid type token",
+      "enforcement": "report"
+    },
+    "docGrid.linePitch": {
+      "type": "number",
+      "description": "document grid line pitch.",
+      "add": false, "set": true, "get": true,
+      "readback": "integer",
+      "enforcement": "report"
+    },
+    "docGrid.charSpace": {
+      "type": "number",
+      "description": "document grid char space.",
+      "add": false, "set": true, "get": true,
+      "readback": "integer",
+      "enforcement": "report"
+    },
+    "charSpacingControl": {
+      "type": "enum",
+      "values": ["compressPunctuation", "compressPunctuationAndJapaneseKana", "doNotCompress"],
+      "description": "CJK character spacing control.",
+      "add": false, "set": true, "get": true,
+      "readback": "spacing control token",
+      "enforcement": "report"
+    },
+    "compatibility.mode": {
+      "type": "string",
+      "description": "compatibility mode identifier.",
+      "add": false, "set": true, "get": true,
+      "readback": "compatibility mode value",
+      "enforcement": "report"
+    },
+    "docDefaults.font": {
+      "type": "string",
+      "description": "default Latin font.",
+      "aliases": ["defaultFont"],
+      "add": false, "set": true, "get": true,
+      "readback": "font family name",
+      "enforcement": "report"
+    },
+    "docDefaults.font.eastAsia": {
+      "type": "string",
+      "description": "default East Asian font slot.",
+      "add": false, "set": true, "get": true,
+      "readback": "font family name",
+      "enforcement": "report"
+    },
+    "docDefaults.font.hAnsi": {
+      "type": "string",
+      "description": "default hAnsi font slot.",
+      "add": false, "set": true, "get": true,
+      "readback": "font family name",
+      "enforcement": "report"
+    },
+    "docDefaults.font.complexScript": {
+      "type": "string",
+      "description": "default complex-script font slot.",
+      "add": false, "set": true, "get": true,
+      "readback": "font family name",
+      "enforcement": "report"
+    },
+    "docDefaults.fontSize": {
+      "type": "font-size",
+      "description": "default font size.",
+      "add": false, "set": true, "get": true,
+      "readback": "Npt",
+      "enforcement": "report"
+    },
+    "docDefaults.color": {
+      "type": "color",
+      "description": "default text color.",
+      "add": false, "set": true, "get": true,
+      "readback": "#RRGGBB",
+      "enforcement": "report"
+    },
+    "docDefaults.bold": {
+      "type": "bool",
+      "description": "default bold flag.",
+      "add": false, "set": true, "get": true,
+      "readback": "true | false",
+      "enforcement": "report"
+    },
+    "docDefaults.italic": {
+      "type": "bool",
+      "description": "default italic flag.",
+      "add": false, "set": true, "get": true,
+      "readback": "true | false",
+      "enforcement": "report"
+    },
+    "docDefaults.rtl": {
+      "type": "bool",
+      "description": "default right-to-left flag.",
+      "add": false, "set": true, "get": true,
+      "readback": "true | false",
+      "enforcement": "report"
+    },
+    "docDefaults.alignment": {
+      "type": "string",
+      "description": "default paragraph alignment.",
+      "add": false, "set": true, "get": true,
+      "readback": "alignment token",
+      "enforcement": "report"
+    },
+    "docDefaults.spaceBefore": {
+      "type": "string",
+      "description": "default paragraph space-before.",
+      "add": false, "set": true, "get": true,
+      "readback": "Npt",
+      "enforcement": "report"
+    },
+    "docDefaults.spaceAfter": {
+      "type": "string",
+      "description": "default paragraph space-after.",
+      "add": false, "set": true, "get": true,
+      "readback": "Npt",
+      "enforcement": "report"
+    },
+    "docDefaults.lineSpacing": {
+      "type": "string",
+      "description": "default paragraph line spacing.",
+      "add": false, "set": true, "get": true,
+      "readback": "1.5x or Npt",
+      "enforcement": "report"
     }
   },
   "children": [
