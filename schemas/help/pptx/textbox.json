@@ -13,7 +13,7 @@
   "paths": {
     "positional": ["/slide[N]/shape[M]"]
   },
-  "note": "textbox is an alias for shape — both route to AddShape. 'textbox' input that includes --prop formula routes to AddEquation instead. The common text/position/size/font properties are inlined below; the full property surface (geometry, rotation, opacity, name, effects, …) is documented in pptx/shape.json.",
+  "note": "textbox is an alias for shape — both route to AddShape. 'textbox' input that includes --prop formula routes to AddEquation instead. The common text/position/size/font properties are inlined below; the full property surface (geometry, rotation, opacity, name, effects, …) is documented in pptx/shape.json.\n\neffective.* keys (direction, size, font, color, bold) are read-only resolved values walked up the placeholder→layout→master→presentation defaults inheritance chain. They appear only when the direct key is absent on this textbox; once a direct value is set, the corresponding effective.* is suppressed. There are no .src counterparts (the implementation does not emit them).",
   "properties": {
     "text": {
       "type": "string",
@@ -141,6 +141,42 @@
       "examples": ["--prop y=3cm"],
       "readback": "length in cm (e.g. \"3cm\")",
       "enforcement": "strict"
+    },
+    "effective.direction": {
+      "type": "enum",
+      "values": ["rtl", "ltr"],
+      "description": "resolved reading direction inherited from placeholder→layout→master→presentation defaults. Suppressed when 'direction' is set directly on the textbox.",
+      "add": false, "set": false, "get": true,
+      "readback": "rtl | ltr",
+      "enforcement": "report"
+    },
+    "effective.size": {
+      "type": "length",
+      "description": "resolved font size inherited from placeholder→layout→master→presentation defaults. Suppressed when 'size' is set directly on the textbox.",
+      "add": false, "set": false, "get": true,
+      "readback": "unit-qualified pt (e.g. \"18pt\")",
+      "enforcement": "report"
+    },
+    "effective.font": {
+      "type": "string",
+      "description": "resolved font name inherited from placeholder→layout→master→presentation defaults. Suppressed when 'font' is set directly on the textbox.",
+      "add": false, "set": false, "get": true,
+      "readback": "font name",
+      "enforcement": "report"
+    },
+    "effective.color": {
+      "type": "color",
+      "description": "resolved text color inherited from placeholder→layout→master→presentation defaults. Suppressed when 'color' is set directly on the textbox.",
+      "add": false, "set": false, "get": true,
+      "readback": "#-prefixed uppercase hex (scheme colors pass through)",
+      "enforcement": "report"
+    },
+    "effective.bold": {
+      "type": "bool",
+      "description": "resolved bold inherited from placeholder→layout→master→presentation defaults. Suppressed when 'bold' is set directly on the textbox.",
+      "add": false, "set": false, "get": true,
+      "readback": "true/false",
+      "enforcement": "report"
     }
   }
 }

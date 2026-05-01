@@ -13,7 +13,7 @@
   "paths": {
     "positional": ["/slide[N]/placeholder[M]", "/slide[N]/shape[M]"]
   },
-  "note": "Aliases: ph. Inserts a Shape with PlaceholderShape nonVisual properties — geometry comes from the slide layout. Add returns /slide[N]/shape[M] path (placeholder is a shape at the OOXML layer).",
+  "note": "Aliases: ph. Inserts a Shape with PlaceholderShape nonVisual properties — geometry comes from the slide layout. Add returns /slide[N]/shape[M] path (placeholder is a shape at the OOXML layer).\n\neffective.* keys (direction, size, font, color, bold) are read-only resolved values walked up the placeholder→layout→master→presentation defaults inheritance chain. They appear only when the direct key is absent on this placeholder; once a direct value is set, the corresponding effective.* is suppressed. There are no .src counterparts (the implementation does not emit them).",
   "properties": {
     "phType": {
       "type": "enum",
@@ -46,6 +46,42 @@
       "description": "placeholder index within the slide layout (PlaceholderShape/@idx). Disambiguates same-typed placeholders (e.g. two `body` placeholders).",
       "add": false, "set": false, "get": true,
       "readback": "non-negative integer; key omitted when @idx absent",
+      "enforcement": "report"
+    },
+    "effective.direction": {
+      "type": "enum",
+      "values": ["rtl", "ltr"],
+      "description": "resolved reading direction inherited from placeholder→layout→master→presentation defaults. Suppressed when 'direction' is set directly on the placeholder.",
+      "add": false, "set": false, "get": true,
+      "readback": "rtl | ltr",
+      "enforcement": "report"
+    },
+    "effective.size": {
+      "type": "length",
+      "description": "resolved font size inherited from placeholder→layout→master→presentation defaults. Suppressed when 'size' is set directly on the placeholder.",
+      "add": false, "set": false, "get": true,
+      "readback": "unit-qualified pt (e.g. \"18pt\")",
+      "enforcement": "report"
+    },
+    "effective.font": {
+      "type": "string",
+      "description": "resolved font name inherited from placeholder→layout→master→presentation defaults. Suppressed when 'font' is set directly on the placeholder.",
+      "add": false, "set": false, "get": true,
+      "readback": "font name",
+      "enforcement": "report"
+    },
+    "effective.color": {
+      "type": "color",
+      "description": "resolved text color inherited from placeholder→layout→master→presentation defaults. Suppressed when 'color' is set directly on the placeholder.",
+      "add": false, "set": false, "get": true,
+      "readback": "#-prefixed uppercase hex (scheme colors pass through)",
+      "enforcement": "report"
+    },
+    "effective.bold": {
+      "type": "bool",
+      "description": "resolved bold inherited from placeholder→layout→master→presentation defaults. Suppressed when 'bold' is set directly on the placeholder.",
+      "add": false, "set": false, "get": true,
+      "readback": "true/false",
       "enforcement": "report"
     }
   }
