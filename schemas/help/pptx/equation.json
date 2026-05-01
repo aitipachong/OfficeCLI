@@ -11,43 +11,54 @@
     "remove": true
   },
   "paths": {
-    "positional": ["/slide[N]/shape[M]/oMath[K]"]
+    "positional": [
+      "/slide[N]/shape[M]/oMath[K]"
+    ]
   },
   "note": "Aliases: formula, math. FormulaParser parses LaTeX-ish input. Adding a 'shape' or 'textbox' with 'formula' prop also routes here.",
+  "extends": "_shared/equation",
   "properties": {
-    "formula": {
-      "type": "string",
-      "aliases": ["text"],
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop formula=\"x^2 + y^2 = z^2\""],
-      "readback": "source formula text — surfaces on DocumentNode.Text rather than Format[\"formula\"]",
-      "enforcement": "report"
-    },
     "x": {
       "type": "length",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop x=2cm"],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop x=2cm"
+      ],
       "readback": "length in cm (e.g. \"2cm\")",
       "enforcement": "report"
     },
     "y": {
       "type": "length",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop y=2cm"],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop y=2cm"
+      ],
       "readback": "length in cm (e.g. \"2cm\")",
       "enforcement": "report"
     },
     "width": {
       "type": "length",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop width=10cm"],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop width=10cm"
+      ],
       "readback": "length in cm (e.g. \"2cm\")",
       "enforcement": "report"
     },
     "height": {
       "type": "length",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop height=3cm"],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop height=3cm"
+      ],
       "readback": "length in cm (e.g. \"2cm\")",
       "enforcement": "report"
     }

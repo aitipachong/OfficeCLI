@@ -11,24 +11,26 @@
     "remove": true
   },
   "paths": {
-    "positional": ["/body/oMathPara[N]", "/body/p[N]/oMath[M]"]
+    "positional": [
+      "/body/oMathPara[N]",
+      "/body/p[N]/oMath[M]"
+    ]
   },
   "note": "Aliases: formula, math. formula input is parsed by FormulaParser (LaTeX-ish). Display mode wraps in oMathPara; inline mode appends oMath to the parent paragraph. Get returns only `mode` (display|inline) in Format[]; the formula source itself is in DocumentNode.Text.",
+  "extends": "_shared/equation",
   "properties": {
-    "formula": {
-      "type": "string",
-      "description": "math expression. Aliases: text.",
-      "aliases": ["text"],
-      "add": true, "set": true, "get": false,
-      "examples": ["--prop formula=\"x^2 + y^2 = z^2\""],
-      "readback": "n/a (formula source surfaces in DocumentNode.Text, not Format[])",
-      "enforcement": "report"
-    },
     "mode": {
       "type": "enum",
-      "values": ["display", "inline"],
-      "add": true, "set": false, "get": true,
-      "examples": ["--prop mode=inline"],
+      "values": [
+        "display",
+        "inline"
+      ],
+      "add": true,
+      "set": false,
+      "get": true,
+      "examples": [
+        "--prop mode=inline"
+      ],
       "readback": "display | inline",
       "enforcement": "report"
     }

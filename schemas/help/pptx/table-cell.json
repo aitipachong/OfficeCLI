@@ -11,87 +11,48 @@
     "remove": true
   },
   "paths": {
-    "positional": ["/slide[N]/table[M]/tr[R]/tc[C]"]
+    "positional": [
+      "/slide[N]/table[M]/tr[R]/tc[C]"
+    ]
   },
   "note": "Appending a cell to a row is unusual — normally cells are seeded at row-Add time. This op exists for completeness.",
+  "extends": "_shared/table-cell",
   "properties": {
-    "text": {
-      "type": "string",
-      "description": "cell text content (single run).",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop text=\"Hello\""],
-      "readback": "concatenated run text",
-      "enforcement": "strict"
-    },
-    "fill": {
-      "type": "color",
-      "description": "cell background fill. Accepts a solid color (hex, named, rgb(...)), 'none' for explicit no-fill, or a gradient string 'COLOR1-COLOR2[-ANGLE]' (e.g. 'FF0000-0000FF-90'). Stored as a:solidFill / a:gradFill / a:noFill on a:tcPr.",
-      "aliases": ["background"],
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop fill=FFFF00", "--prop fill=#FF0000", "--prop fill=red", "--prop background=accent1", "--prop fill=none", "--prop fill=\"FF0000-0000FF-90\""],
-      "readback": "#RRGGBB uppercase, 'gradient' (with separate 'gradient' key), or 'image' for picture fill",
+    "baseline": {
+      "type": "number",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "first run baseline offset for the cell text (percent units; positive=raised).",
+      "readback": "percent (e.g. 30)",
       "enforcement": "report"
     },
-    "border.all": {
-      "type": "string",
-      "description": "all four cell edges. Format: 'WIDTH[ DASH][ COLOR]' (e.g. '1pt solid FF0000') or 'STYLE;WIDTH;COLOR[;DASH]' (style ignored — kept for docx parity). DASH ∈ solid|dot|dash|lgDash|dashDot|sysDot|sysDash. Use 'none' to clear. Alias: border. Stored as a:lnL/lnR/lnT/lnB on a:tcPr. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient.",
-      "aliases": ["border"],
-      "add": true, "set": true, "get": false,
-      "examples": ["--prop border.all=\"1pt solid FF0000\"", "--prop border=none"],
-      "readback": "split across border.top/bottom/left/right",
+    "gridSpan": {
+      "type": "number",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "horizontal merge span — number of grid columns this cell spans (>=2 means merged across).",
+      "readback": "integer span",
       "enforcement": "report"
     },
-    "border.top": {
-      "type": "string",
-      "description": "top edge (a:lnT). Format same as border.all. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient.",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop border.top=\"2pt solid 000000\""],
-      "readback": "WIDTH DASH COLOR",
+    "hmerge": {
+      "type": "bool",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "true on cells continued from a horizontal merge anchor (CT_TableCell @hMerge).",
+      "readback": "true on continuation cells",
       "enforcement": "report"
     },
-    "border.bottom": {
+    "image.relId": {
       "type": "string",
-      "description": "bottom edge (a:lnB). Format same as border.all. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient.",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop border.bottom=\"1pt solid 808080\""],
-      "readback": "WIDTH DASH COLOR",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "relationship id of an embedded image used as the cell's blip fill.",
+      "readback": "relationship id token",
       "enforcement": "report"
-    },
-    "border.left": {
-      "type": "string",
-      "description": "left edge (a:lnL). Format same as border.all. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient.",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop border.left=\"1pt solid 808080\""],
-      "readback": "WIDTH DASH COLOR",
-      "enforcement": "report"
-    },
-    "border.right": {
-      "type": "string",
-      "description": "right edge (a:lnR). Format same as border.all. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient.",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop border.right=\"1pt solid 808080\""],
-      "readback": "WIDTH DASH COLOR",
-      "enforcement": "report"
-    },
-    "border.tl2br": {
-      "type": "string",
-      "description": "diagonal from top-left to bottom-right (a:lnTlToBr). Format same as border.all. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient. Add/Set only — Get does not surface diagonal borders today.",
-      "add": true, "set": true, "get": false,
-      "examples": ["--prop border.tl2br=\"1pt solid FF0000\""],
-      "readback": "n/a",
-      "enforcement": "report"
-    },
-    "border.tr2bl": {
-      "type": "string",
-      "description": "diagonal from top-right to bottom-left (a:lnBlToTr). Format same as border.all. Cross-format note: docx only accepts the semicolon form 'STYLE;SIZE;COLOR' — pptx is more lenient. Add/Set only — Get does not surface diagonal borders today.",
-      "add": true, "set": true, "get": false,
-      "examples": ["--prop border.tr2bl=\"1pt solid FF0000\""],
-      "readback": "n/a",
-      "enforcement": "report"
-    },
-    "baseline":    { "type":"number", "add":false, "set":false, "get":true, "description":"first run baseline offset for the cell text (percent units; positive=raised).", "readback":"percent (e.g. 30)", "enforcement":"report" },
-    "gridSpan":    { "type":"number", "add":false, "set":false, "get":true, "description":"horizontal merge span — number of grid columns this cell spans (>=2 means merged across).", "readback":"integer span", "enforcement":"report" },
-    "hmerge":      { "type":"bool",   "add":false, "set":false, "get":true, "description":"true on cells continued from a horizontal merge anchor (CT_TableCell @hMerge).", "readback":"true on continuation cells", "enforcement":"report" },
-    "image.relId": { "type":"string", "add":false, "set":false, "get":true, "description":"relationship id of an embedded image used as the cell's blip fill.", "readback":"relationship id token", "enforcement":"report" }
+    }
   }
 }

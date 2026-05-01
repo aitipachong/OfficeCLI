@@ -1,0 +1,22 @@
+{
+  "$schema": "../_schema.json",
+  "element": "equation",
+  "shared_base": true,
+  "properties": {
+    "formula": {
+      "type": "string",
+      "description": "math expression. Aliases: text.",
+      "aliases": [
+        "text"
+      ],
+      "add": true,
+      "set": true,
+      "get": false,
+      "examples": [
+        "--prop formula=\"x^2 + y^2 = z^2\""
+      ],
+      "readback": "n/a (formula source surfaces in DocumentNode.Text, not Format[])",
+      "enforcement": "report"
+    }
+  }
+}

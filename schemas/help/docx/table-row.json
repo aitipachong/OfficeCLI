@@ -11,41 +11,45 @@
     "remove": true
   },
   "paths": {
-    "positional": ["/body/tbl[N]/tr[R]"]
+    "positional": [
+      "/body/tbl[N]/tr[R]"
+    ]
   },
   "note": "Row column count defaults to the parent table grid. height uses AtLeast rule; height.exact forces Exact rule.",
+  "extends": "_shared/table-row",
   "properties": {
-    "cols": {
-      "type": "int",
-      "add": true, "set": false, "get": false,
-      "examples": ["--prop cols=3"],
-      "readback": "n/a (structural)",
-      "enforcement": "strict"
-    },
-    "height": {
-      "type": "length",
-      "description": "row height in twips or unit-qualified (AtLeast rule).",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop height=500"],
-      "readback": "twips",
-      "enforcement": "report"
-    },
     "height.exact": {
       "type": "length",
       "description": "row height in twips (Exact rule, cannot grow). Add/Set only — Get does not surface a separate exact-height key; inspect `height.rule=exact` paired with `height` instead.",
-      "add": true, "set": true, "get": false,
-      "examples": ["--prop height.exact=500"],
+      "add": true,
+      "set": true,
+      "get": false,
+      "examples": [
+        "--prop height.exact=500"
+      ],
       "readback": "n/a (inspect height + height.rule)",
       "enforcement": "report"
     },
     "header": {
       "type": "bool",
       "description": "repeat row as table header on every page.",
-      "add": true, "set": true, "get": true,
-      "examples": ["--prop header=true"],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop header=true"
+      ],
       "readback": "true when header, key absent otherwise",
       "enforcement": "report"
     },
-    "height.rule": { "type":"string", "add":false, "set":false, "get":true, "description":"row height rule readback — `exact` when the row enforces a fixed height, otherwise absent (auto/atLeast).", "readback":"`exact` when set", "enforcement":"report" }
+    "height.rule": {
+      "type": "string",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "row height rule readback — `exact` when the row enforces a fixed height, otherwise absent (auto/atLeast).",
+      "readback": "`exact` when set",
+      "enforcement": "report"
+    }
   }
 }

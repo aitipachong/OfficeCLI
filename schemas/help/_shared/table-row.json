@@ -1,0 +1,33 @@
+{
+  "$schema": "../_schema.json",
+  "element": "table-row",
+  "shared_base": true,
+  "properties": {
+    "cols": {
+      "type": "int",
+      "description": "override column count for the new row (defaults to table grid column count).",
+      "add": true,
+      "set": false,
+      "get": false,
+      "examples": [
+        "--prop cols=4",
+        "--prop cols=3"
+      ],
+      "readback": "n/a (structural)",
+      "enforcement": "strict"
+    },
+    "height": {
+      "type": "length",
+      "description": "row height in EMU-parseable length. Defaults to first-row height or ~1cm.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop height=1cm",
+        "--prop height=500"
+      ],
+      "readback": "length in cm (e.g. \"2cm\")",
+      "enforcement": "report"
+    }
+  }
+}
