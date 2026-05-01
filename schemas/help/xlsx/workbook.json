@@ -11,141 +11,303 @@
     "remove": false
   },
   "paths": {
-    "positional": ["/"]
+    "positional": [
+      "/"
+    ]
   },
   "note": "Root container. Get returns sheet list and workbook-level metadata. Set exists for workbook-wide properties (defaultFont, defaultFontSize, calc.mode, calc.iterate, author, title, subject). Sheets are mutated via /SheetName paths.",
+  "children": [
+    {
+      "element": "sheet",
+      "pathSegment": "{SheetName}",
+      "cardinality": "1..n"
+    }
+  ],
+  "extends": "_shared/root-metadata",
   "properties": {
     "defaultFont": {
       "type": "string",
       "description": "default font for all cells (fontname alias). Not implemented in ExcelHandler — Add/Set/Get all return n/a today; manage cell fonts directly.",
-      "aliases": ["fontName", "fontname"],
-      "add": false, "set": false, "get": false,
-      "examples": ["--prop defaultFont=Calibri"],
+      "aliases": [
+        "fontName",
+        "fontname"
+      ],
+      "add": false,
+      "set": false,
+      "get": false,
+      "examples": [
+        "--prop defaultFont=Calibri"
+      ],
       "readback": "n/a",
       "enforcement": "report"
     },
     "defaultFontSize": {
       "type": "length",
       "description": "default font size. Not implemented in ExcelHandler — Add/Set/Get all return n/a today; manage cell fonts directly.",
-      "aliases": ["fontSize", "fontsize"],
-      "add": false, "set": false, "get": false,
-      "examples": ["--prop defaultFontSize=11"],
+      "aliases": [
+        "fontSize",
+        "fontsize"
+      ],
+      "add": false,
+      "set": false,
+      "get": false,
+      "examples": [
+        "--prop defaultFontSize=11"
+      ],
       "readback": "n/a",
       "enforcement": "report"
     },
     "author": {
       "type": "string",
       "description": "document author (core properties).",
-      "aliases": ["creator"],
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop author=\"Alice\""],
+      "aliases": [
+        "creator"
+      ],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop author=\"Alice\""
+      ],
       "readback": "author string",
       "enforcement": "report"
     },
     "title": {
       "type": "string",
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop title=\"Q1 Report\""],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop title=\"Q1 Report\""
+      ],
       "readback": "title string",
-      "enforcement": "report"
-    },
-    "subject": {
-      "type": "string",
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop subject=Finance"],
-      "readback": "subject string",
       "enforcement": "report"
     },
     "calc.mode": {
       "type": "enum",
-      "values": ["auto", "manual", "autoExceptTables"],
+      "values": [
+        "auto",
+        "manual",
+        "autoExceptTables"
+      ],
       "description": "workbook formula calculation mode. 'auto' recalculates on every change, 'manual' requires F9, 'autoExceptTables' skips data tables.",
-      "aliases": ["calcmode"],
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop calc.mode=manual", "--prop calcmode=auto"],
+      "aliases": [
+        "calcmode"
+      ],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop calc.mode=manual",
+        "--prop calcmode=auto"
+      ],
       "readback": "calc mode name",
       "enforcement": "report"
     },
     "calc.iterate": {
       "type": "bool",
       "description": "enable iterative calculation for circular references.",
-      "aliases": ["iterate"],
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop calc.iterate=true", "--prop iterate=false"],
+      "aliases": [
+        "iterate"
+      ],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop calc.iterate=true",
+        "--prop iterate=false"
+      ],
       "readback": "true|false",
       "enforcement": "report"
     },
     "calc.iterateCount": {
       "type": "number",
       "description": "maximum number of iterations when calc.iterate is enabled.",
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop calc.iterateCount=100"],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop calc.iterateCount=100"
+      ],
       "readback": "integer",
       "enforcement": "report"
     },
     "calc.iterateDelta": {
       "type": "number",
       "description": "maximum change between iterations to consider the calculation converged.",
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop calc.iterateDelta=0.001"],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop calc.iterateDelta=0.001"
+      ],
       "readback": "number",
       "enforcement": "report"
     },
     "calc.fullPrecision": {
       "type": "bool",
       "description": "if true, calculations use full precision rather than the displayed value.",
-      "add": false, "set": true, "get": true,
-      "examples": ["--prop calc.fullPrecision=true"],
+      "add": false,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop calc.fullPrecision=true"
+      ],
       "readback": "true|false",
       "enforcement": "report"
     },
-    "lastModifiedBy": { "type":"string", "aliases":["lastmodifiedby"], "add":false, "set":true, "get":true, "description":"from docProps/core.xml lastModifiedBy field.", "examples":["--prop lastModifiedBy=\"Alice\""], "readback":"author string", "enforcement":"report" },
-    "created":        { "type":"string", "add":false, "set":false, "get":true, "description":"creation timestamp ISO-8601.", "readback":"ISO-8601 timestamp", "enforcement":"report" },
-    "modified":       { "type":"string", "add":false, "set":false, "get":true, "description":"last modification timestamp ISO-8601.", "readback":"ISO-8601 timestamp", "enforcement":"report" },
-    "theme.name":          { "type":"string", "add":false, "set":false, "get":true, "description":"theme display name (a:theme/@name).", "readback":"theme name string", "enforcement":"report" },
-    "theme.colorScheme":   { "type":"string", "add":false, "set":false, "get":true, "description":"color scheme name (a:clrScheme/@name).", "readback":"color scheme name", "enforcement":"report" },
-    "theme.color.dk1":     { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme color slot dk1 (dark 1 / default text).", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.lt1":     { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme color slot lt1 (light 1 / default background).", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.dk2":     { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme color slot dk2 (dark 2).", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.lt2":     { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme color slot lt2 (light 2).", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.accent1": { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme accent color 1.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.accent2": { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme accent color 2.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.accent3": { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme accent color 3.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.accent4": { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme accent color 4.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.accent5": { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme accent color 5.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.accent6": { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme accent color 6.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.hlink":   { "type":"color",  "add":false, "set":true,  "get":true, "description":"theme hyperlink color.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.color.folHlink":{ "type":"color",  "add":false, "set":true,  "get":true, "description":"theme followed-hyperlink color.", "readback":"#RRGGBB or scheme reference", "enforcement":"report" },
-    "theme.fontScheme":    { "type":"string", "add":false, "set":false, "get":true, "description":"font scheme name (a:fontScheme/@name).", "readback":"font scheme name", "enforcement":"report" },
-    "theme.font.major.latin":     { "type":"string", "add":false, "set":true, "get":true, "description":"major (heading) Latin typeface.", "readback":"font family name", "enforcement":"report" },
-    "theme.font.major.eastAsia":  { "type":"string", "add":false, "set":true, "get":true, "description":"major (heading) East Asian typeface.", "readback":"font family name", "enforcement":"report" },
-    "theme.font.minor.latin":     { "type":"string", "add":false, "set":true, "get":true, "description":"minor (body) Latin typeface.", "readback":"font family name", "enforcement":"report" },
-    "theme.font.minor.eastAsia":  { "type":"string", "add":false, "set":true, "get":true, "description":"minor (body) East Asian typeface.", "readback":"font family name", "enforcement":"report" },
-    "theme.formatScheme":  { "type":"string", "add":false, "set":false, "get":true, "description":"format scheme name (a:fmtScheme/@name).", "readback":"format scheme name", "enforcement":"report" },
-    "extended.application":        { "type":"string", "add":false, "set":false, "get":true, "description":"from docProps/app.xml application identifier (e.g. \"Microsoft Excel\").", "readback":"application string", "enforcement":"report" },
-    "extended.applicationVersion": { "type":"string", "add":false, "set":false, "get":true, "description":"docProps/app.xml AppVersion field.", "readback":"version string", "enforcement":"report" },
-    "extended.template":           { "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/app.xml Template field.", "readback":"template name", "enforcement":"report" },
-    "extended.company":            { "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/app.xml Company field.", "readback":"company name", "enforcement":"report" },
-    "extended.manager":            { "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/app.xml Manager field.", "readback":"manager name", "enforcement":"report" },
-    "extended.pages":              { "type":"number", "add":false, "set":false, "get":true, "description":"docProps/app.xml Pages count.", "readback":"integer", "enforcement":"report" },
-    "extended.words":              { "type":"number", "add":false, "set":false, "get":true, "description":"docProps/app.xml Words count.", "readback":"integer", "enforcement":"report" },
-    "extended.characters":         { "type":"number", "add":false, "set":false, "get":true, "description":"docProps/app.xml Characters count.", "readback":"integer", "enforcement":"report" },
-    "extended.lines":              { "type":"number", "add":false, "set":false, "get":true, "description":"docProps/app.xml Lines count.", "readback":"integer", "enforcement":"report" },
-    "extended.paragraphs":         { "type":"number", "add":false, "set":false, "get":true, "description":"docProps/app.xml Paragraphs count.", "readback":"integer", "enforcement":"report" },
-    "extended.totalTime":          { "type":"number", "add":false, "set":false, "get":true, "description":"docProps/app.xml TotalTime field (minutes).", "readback":"integer minutes", "enforcement":"report" },
-    "category":   { "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/core.xml Category field.", "examples":["--prop category=Reports"], "readback":"category string", "enforcement":"report" },
-    "description":{ "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/core.xml Description field.", "examples":["--prop description=\"Annual revenue summary\""], "readback":"description string", "enforcement":"report" },
-    "keywords":   { "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/core.xml Keywords field.", "examples":["--prop keywords=\"finance,2026\""], "readback":"keyword list string", "enforcement":"report" },
-    "revision":   { "type":"string", "add":false, "set":true,  "get":true, "description":"docProps/core.xml Revision field.", "examples":["--prop revision=3"], "readback":"revision number string", "enforcement":"report" },
-    "activeTab":  { "type":"number", "add":false, "set":false, "get":true, "description":"workbook BookViews activeTab — index of the sheet active when the file opens.", "readback":"integer (0-based)", "enforcement":"report" },
-    "firstSheet": { "type":"number", "add":false, "set":false, "get":true, "description":"workbook BookViews firstSheet — index of the leftmost visible sheet.", "readback":"integer (0-based)", "enforcement":"report" },
-    "calc.fullCalcOnLoad": { "type":"bool", "add":false, "set":false, "get":true, "description":"CalculationProperties FullCalculationOnLoad flag — force a full recalc when the workbook opens.", "readback":"true|false", "enforcement":"report" },
-    "calc.refMode":        { "type":"string", "add":false, "set":false, "get":true, "description":"CalculationProperties ReferenceMode (A1 or R1C1).", "readback":"reference mode string", "enforcement":"report" },
-    "workbook.backupFile": { "type":"bool", "add":false, "set":false, "get":true, "description":"WorkbookProperties BackupFile flag — Excel keeps a backup .bak alongside saves.", "readback":"true|false", "enforcement":"report" },
-    "workbook.codeName":   { "type":"string", "add":false, "set":false, "get":true, "description":"WorkbookProperties CodeName — VBA project workbook codename (e.g. ThisWorkbook).", "readback":"codename string", "enforcement":"report" },
-    "workbook.date1904":   { "type":"bool", "add":false, "set":false, "get":true, "description":"WorkbookProperties Date1904 flag — true means dates use the 1904 epoch (Mac legacy).", "readback":"true|false", "enforcement":"report" }
-  },
-  "children": [
-    { "element": "sheet", "pathSegment": "{SheetName}", "cardinality": "1..n" }
-  ]
+    "lastModifiedBy": {
+      "type": "string",
+      "aliases": [
+        "lastmodifiedby"
+      ],
+      "add": false,
+      "set": true,
+      "get": true,
+      "description": "from docProps/core.xml lastModifiedBy field.",
+      "examples": [
+        "--prop lastModifiedBy=\"Alice\""
+      ],
+      "readback": "author string",
+      "enforcement": "report"
+    },
+    "created": {
+      "type": "string",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "creation timestamp ISO-8601.",
+      "readback": "ISO-8601 timestamp",
+      "enforcement": "report"
+    },
+    "modified": {
+      "type": "string",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "last modification timestamp ISO-8601.",
+      "readback": "ISO-8601 timestamp",
+      "enforcement": "report"
+    },
+    "extended.application": {
+      "type": "string",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "from docProps/app.xml application identifier (e.g. \"Microsoft Excel\").",
+      "readback": "application string",
+      "enforcement": "report"
+    },
+    "category": {
+      "type": "string",
+      "add": false,
+      "set": true,
+      "get": true,
+      "description": "docProps/core.xml Category field.",
+      "examples": [
+        "--prop category=Reports"
+      ],
+      "readback": "category string",
+      "enforcement": "report"
+    },
+    "description": {
+      "type": "string",
+      "add": false,
+      "set": true,
+      "get": true,
+      "description": "docProps/core.xml Description field.",
+      "examples": [
+        "--prop description=\"Annual revenue summary\""
+      ],
+      "readback": "description string",
+      "enforcement": "report"
+    },
+    "keywords": {
+      "type": "string",
+      "add": false,
+      "set": true,
+      "get": true,
+      "description": "docProps/core.xml Keywords field.",
+      "examples": [
+        "--prop keywords=\"finance,2026\""
+      ],
+      "readback": "keyword list string",
+      "enforcement": "report"
+    },
+    "revision": {
+      "type": "string",
+      "add": false,
+      "set": true,
+      "get": true,
+      "description": "docProps/core.xml Revision field.",
+      "examples": [
+        "--prop revision=3"
+      ],
+      "readback": "revision number string",
+      "enforcement": "report"
+    },
+    "activeTab": {
+      "type": "number",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "workbook BookViews activeTab — index of the sheet active when the file opens.",
+      "readback": "integer (0-based)",
+      "enforcement": "report"
+    },
+    "firstSheet": {
+      "type": "number",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "workbook BookViews firstSheet — index of the leftmost visible sheet.",
+      "readback": "integer (0-based)",
+      "enforcement": "report"
+    },
+    "calc.fullCalcOnLoad": {
+      "type": "bool",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "CalculationProperties FullCalculationOnLoad flag — force a full recalc when the workbook opens.",
+      "readback": "true|false",
+      "enforcement": "report"
+    },
+    "calc.refMode": {
+      "type": "string",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "CalculationProperties ReferenceMode (A1 or R1C1).",
+      "readback": "reference mode string",
+      "enforcement": "report"
+    },
+    "workbook.backupFile": {
+      "type": "bool",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "WorkbookProperties BackupFile flag — Excel keeps a backup .bak alongside saves.",
+      "readback": "true|false",
+      "enforcement": "report"
+    },
+    "workbook.codeName": {
+      "type": "string",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "WorkbookProperties CodeName — VBA project workbook codename (e.g. ThisWorkbook).",
+      "readback": "codename string",
+      "enforcement": "report"
+    },
+    "workbook.date1904": {
+      "type": "bool",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "WorkbookProperties Date1904 flag — true means dates use the 1904 epoch (Mac legacy).",
+      "readback": "true|false",
+      "enforcement": "report"
+    }
+  }
 }
