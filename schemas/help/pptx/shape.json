@@ -391,12 +391,12 @@
       "readback": "#RRGGBB",
       "enforcement": "report"
     },
-    "linewidth": {
+    "lineWidth": {
       "type": "length",
       "description": "outline width.",
-      "aliases": ["lineWidth"],
+      "aliases": ["linewidth"],
       "add": true, "set": true, "get": true,
-      "examples": ["--prop linewidth=1pt"],
+      "examples": ["--prop lineWidth=1pt"],
       "readback": "length in pt (e.g. \"1pt\")",
       "enforcement": "report"
     },
