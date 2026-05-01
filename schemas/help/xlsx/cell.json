@@ -120,9 +120,44 @@
     },
     "locked": {
       "type": "bool",
-      "description": "cell protection: lock the cell against edits when the sheet is protected. Default Excel behavior is locked=true.",
-      "add": true, "set": true, "get": true,
+      "description": "cell protection: lock the cell against edits when the sheet is protected. Default Excel behavior is locked=true. Add/Set only — readback is exposed under 'protection.locked'.",
+      "add": true, "set": true, "get": false,
       "examples": ["--prop locked=false"],
+      "readback": "n/a (use protection.locked on Get)",
+      "enforcement": "report"
+    },
+    "protection.locked": {
+      "type": "bool",
+      "description": "cell protection lock state. Get-only readback (dotted form). For Add/Set use the flat `locked` key.",
+      "add": false, "set": false, "get": true,
+      "readback": "true | false",
+      "enforcement": "report"
+    },
+    "protection.hidden": {
+      "type": "bool",
+      "description": "hide formula in protected sheet. Get-only readback.",
+      "add": false, "set": false, "get": true,
+      "readback": "true | false",
+      "enforcement": "report"
+    },
+    "numFmtId": {
+      "type": "number",
+      "description": "raw OOXML number format id (supplementary; prefer `numberformat`). Emitted only when numFmtId > 0.",
+      "add": false, "set": false, "get": true,
+      "readback": "integer",
+      "enforcement": "report"
+    },
+    "phonetic": {
+      "type": "string",
+      "description": "phonetic guide text from SST PhoneticRun. Emitted only when present.",
+      "add": false, "set": false, "get": true,
+      "readback": "phonetic string",
+      "enforcement": "report"
+    },
+    "quotePrefix": {
+      "type": "bool",
+      "description": "leading apostrophe quote-prefix flag. Emitted only when set.",
+      "add": false, "set": false, "get": true,
       "readback": "true | false",
       "enforcement": "report"
     },
