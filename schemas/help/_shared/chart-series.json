@@ -3,6 +3,17 @@
   "element": "chart-series",
   "shared_base": true,
   "properties": {
+    "categories": {
+      "type": "string",
+      "description": "per-series category override; range reference only.",
+      "add": true,
+      "set": true,
+      "get": false,
+      "examples": [
+        "--prop series1.categories=\"Sheet1!$A$2:$A$5\""
+      ],
+      "enforcement": "report"
+    },
     "categoriesRef": {
       "type": "string",
       "add": false,
@@ -10,6 +21,19 @@
       "get": true,
       "description": "A1 cell range backing the category labels.",
       "readback": "A1 range string",
+      "enforcement": "report"
+    },
+    "color": {
+      "type": "color",
+      "description": "series fill color.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop series1.color=#4472C4",
+        "--prop series1.color=4472C4"
+      ],
+      "readback": "#-prefixed uppercase hex",
       "enforcement": "report"
     },
     "dataLabels.numFmt": {
@@ -110,6 +134,26 @@
       "readback": "integer",
       "enforcement": "report"
     },
+    "name": {
+      "type": "string",
+      "description": "series name shown in legend and data labels.",
+      "aliases": [
+        "title"
+      ],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop name=\"Q1\"",
+        "--prop series1.name=\"Q1\"",
+        "--prop name=\"Product A\"",
+        "--prop series1.name=\"Product A\"",
+        "--prop name=\"Revenue\"",
+        "--prop series1.name=\"Revenue\""
+      ],
+      "readback": "series name string",
+      "enforcement": "report"
+    },
     "nameRef": {
       "type": "string",
       "add": false,
@@ -136,6 +180,36 @@
       "description": "true when the chart has more than one value axis (this series uses the secondary).",
       "readback": "true | false",
       "enforcement": "report"
+    },
+    "smooth": {
+      "type": "bool",
+      "description": "smooth line interpolation for line/scatter series.",
+      "appliesWhen": {
+        "parent.chartType": [
+          "line",
+          "scatter"
+        ]
+      },
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop smooth=true"
+      ],
+      "readback": "true | false",
+      "enforcement": "report"
+    },
+    "values": {
+      "type": "string",
+      "description": "comma-separated numbers, OR a cell range reference (Sheet1!B2:B13)",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop series1.values=\"120,150,180\"",
+        "--prop series1.values=\"Sheet1!$B$2:$B$5\"",
+        "--prop series1.values=\"120,150,180,210\""
+      ],
+      "enforcement": "strict"
     }
   }
 }
