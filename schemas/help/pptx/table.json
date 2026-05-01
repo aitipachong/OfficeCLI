@@ -38,6 +38,15 @@
     "_shared/table.pptx-xlsx"
   ],
   "properties": {
+    "id": {
+      "type": "number",
+      "add": false,
+      "set": false,
+      "get": true,
+      "description": "OOXML graphic frame id (cNvPr id). pptx-only readback.",
+      "readback": "integer column id",
+      "enforcement": "report"
+    },
     "x": {
       "type": "length",
       "description": "left offset in EMU-parseable length.",

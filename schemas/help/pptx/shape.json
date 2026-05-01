@@ -508,6 +508,73 @@
       "description": "shape outline alpha as fraction (0..1). Surfaces when the outline carries an a:alpha child.",
       "readback": "fraction 0..1",
       "enforcement": "report"
+    },
+    "x": {
+      "type": "length",
+      "description": "x in EMU/length form (e.g. 2cm). pptx absolute positioning.",
+      "aliases": [
+        "left"
+      ],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop x=2",
+        "--prop x=2cm",
+        "--prop x=1in",
+        "--prop x=72pt"
+      ],
+      "readback": "length string (FormatEmu)",
+      "enforcement": "strict"
+    },
+    "y": {
+      "type": "string",
+      "description": "y in EMU/length form (e.g. 2cm). pptx absolute positioning.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop y=3",
+        "--prop y=3cm"
+      ],
+      "enforcement": "report",
+      "aliases": [
+        "top"
+      ],
+      "readback": "length string (FormatEmu)"
+    },
+    "width": {
+      "type": "string",
+      "description": "width in EMU/length form (e.g. 2cm). pptx absolute positioning.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "aliases": [
+        "w"
+      ],
+      "examples": [
+        "--prop width=4",
+        "--prop width=6cm",
+        "--prop width=5cm"
+      ],
+      "enforcement": "report",
+      "readback": "length string (FormatEmu)"
+    },
+    "height": {
+      "type": "string",
+      "description": "height in EMU/length form (e.g. 2cm). pptx absolute positioning.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "aliases": [
+        "h"
+      ],
+      "examples": [
+        "--prop height=3",
+        "--prop height=3cm"
+      ],
+      "enforcement": "report",
+      "readback": "length string (FormatEmu)"
     }
   }
 }

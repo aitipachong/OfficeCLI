@@ -258,6 +258,32 @@
       "description": "true when the picture is anchored to a merged-cell region.",
       "readback": "true|false",
       "enforcement": "report"
+    },
+    "x": {
+      "type": "length",
+      "description": "x as TwoCellAnchor column/row index (xlsx cell-anchor positioning, integer).",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop x=0",
+        "--prop x=1in"
+      ],
+      "readback": "integer column/row index",
+      "enforcement": "report"
+    },
+    "y": {
+      "type": "length",
+      "description": "y as TwoCellAnchor column/row index (xlsx cell-anchor positioning, integer).",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop y=0",
+        "--prop y=1in"
+      ],
+      "readback": "integer column/row index",
+      "enforcement": "report"
     }
   }
 }

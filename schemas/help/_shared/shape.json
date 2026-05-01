@@ -116,21 +116,6 @@
       "readback": "color hex string",
       "enforcement": "report"
     },
-    "height": {
-      "type": "string",
-      "description": "shape height in cell units (or unit-qualified size).",
-      "add": true,
-      "set": true,
-      "get": false,
-      "aliases": [
-        "h"
-      ],
-      "examples": [
-        "--prop height=3",
-        "--prop height=3cm"
-      ],
-      "enforcement": "report"
-    },
     "italic": {
       "type": "bool",
       "description": "Italic runs. Bare alias of font.italic.",
@@ -297,55 +282,6 @@
         "--prop valign=middle"
       ],
       "enforcement": "report"
-    },
-    "width": {
-      "type": "string",
-      "description": "shape width in cell units (or unit-qualified size like 6cm).",
-      "add": true,
-      "set": true,
-      "get": false,
-      "aliases": [
-        "w"
-      ],
-      "examples": [
-        "--prop width=4",
-        "--prop width=6cm",
-        "--prop width=5cm"
-      ],
-      "enforcement": "report"
-    },
-    "x": {
-      "type": "length",
-      "description": "horizontal position of shape",
-      "aliases": [
-        "left"
-      ],
-      "add": true,
-      "set": true,
-      "get": true,
-      "examples": [
-        "--prop x=2",
-        "--prop x=2cm",
-        "--prop x=1in",
-        "--prop x=72pt"
-      ],
-      "readback": "length in cm (e.g. \"2cm\")",
-      "enforcement": "strict"
-    },
-    "y": {
-      "type": "string",
-      "description": "anchor y position in cell units (or unit-qualified size).",
-      "add": true,
-      "set": true,
-      "get": false,
-      "examples": [
-        "--prop y=3",
-        "--prop y=3cm"
-      ],
-      "enforcement": "report",
-      "aliases": [
-        "top"
-      ]
     }
   }
 }

@@ -77,32 +77,6 @@
         "--prop name=\"Hero Image\""
       ],
       "enforcement": "report"
-    },
-    "x": {
-      "type": "length",
-      "description": "anchor column index (0-based, e.g. x=2 means column C).",
-      "add": true,
-      "set": true,
-      "get": true,
-      "examples": [
-        "--prop x=0",
-        "--prop x=1in"
-      ],
-      "readback": "anchor column index (0-based integer)",
-      "enforcement": "report"
-    },
-    "y": {
-      "type": "length",
-      "description": "anchor row index (0-based, e.g. y=4 means row 5).",
-      "add": true,
-      "set": true,
-      "get": true,
-      "examples": [
-        "--prop y=0",
-        "--prop y=1in"
-      ],
-      "readback": "anchor row index (0-based integer)",
-      "enforcement": "report"
     }
   }
 }

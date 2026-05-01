@@ -77,6 +77,73 @@
         "--prop flipBoth=true"
       ],
       "enforcement": "report"
+    },
+    "x": {
+      "type": "length",
+      "description": "x as TwoCellAnchor column/row index. xlsx cell-anchor positioning, integer.",
+      "aliases": [
+        "left"
+      ],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop x=2",
+        "--prop x=2cm",
+        "--prop x=1in",
+        "--prop x=72pt"
+      ],
+      "readback": "integer column/row index",
+      "enforcement": "strict"
+    },
+    "y": {
+      "type": "string",
+      "description": "y as TwoCellAnchor column/row index. xlsx cell-anchor positioning, integer.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop y=3",
+        "--prop y=3cm"
+      ],
+      "enforcement": "report",
+      "aliases": [
+        "top"
+      ],
+      "readback": "integer column/row index"
+    },
+    "width": {
+      "type": "string",
+      "description": "width as TwoCellAnchor column/row index. xlsx cell-anchor positioning, integer.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "aliases": [
+        "w"
+      ],
+      "examples": [
+        "--prop width=4",
+        "--prop width=6cm",
+        "--prop width=5cm"
+      ],
+      "enforcement": "report",
+      "readback": "integer column/row index"
+    },
+    "height": {
+      "type": "string",
+      "description": "height as TwoCellAnchor column/row index. xlsx cell-anchor positioning, integer.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "aliases": [
+        "h"
+      ],
+      "examples": [
+        "--prop height=3",
+        "--prop height=3cm"
+      ],
+      "enforcement": "report",
+      "readback": "integer column/row index"
     }
   }
 }

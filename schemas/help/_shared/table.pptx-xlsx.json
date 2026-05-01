@@ -2,15 +2,6 @@
   "$schema": "../_schema.json",
   "shared_base": true,
   "properties": {
-    "id": {
-      "type": "number",
-      "add": false,
-      "set": false,
-      "get": true,
-      "description": "per-column @id readback (surfaces on the column child node, not the table itself).",
-      "readback": "integer column id",
-      "enforcement": "report"
-    },
     "name": {
       "type": "string",
       "description": "NonVisualDrawingProperties Name (used for stable @name addressing).",

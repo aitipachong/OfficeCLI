@@ -30,6 +30,32 @@
       "get": true,
       "readback": "`picture` | `video` | `audio`",
       "enforcement": "report"
+    },
+    "x": {
+      "type": "length",
+      "description": "x offset in EMU/length form (e.g. 2cm). pptx absolute positioning.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop x=0",
+        "--prop x=1in"
+      ],
+      "readback": "length string (FormatEmu)",
+      "enforcement": "report"
+    },
+    "y": {
+      "type": "length",
+      "description": "y offset in EMU/length form (e.g. 2cm). pptx absolute positioning.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop y=0",
+        "--prop y=1in"
+      ],
+      "readback": "length string (FormatEmu)",
+      "enforcement": "report"
     }
   }
 }
