@@ -56,6 +56,32 @@
       ],
       "readback": "length string (FormatEmu)",
       "enforcement": "report"
+    },
+    "width": {
+      "type": "length",
+      "description": "width — EMU/length form (e.g. 1.5cm). Required if not inferred from native ratio.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop width=5",
+        "--prop width=3in"
+      ],
+      "readback": "length string",
+      "enforcement": "report"
+    },
+    "height": {
+      "type": "length",
+      "description": "height — EMU/length form (e.g. 1.5cm). Required if not inferred from native ratio.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop height=5",
+        "--prop height=2in"
+      ],
+      "readback": "length string",
+      "enforcement": "report"
     }
   }
 }

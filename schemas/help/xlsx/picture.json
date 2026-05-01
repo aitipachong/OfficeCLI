@@ -284,6 +284,32 @@
       ],
       "readback": "integer column/row index",
       "enforcement": "report"
+    },
+    "width": {
+      "type": "integer",
+      "description": "width — TwoCellAnchor column/row span (xlsx cell-anchor positioning, integer)",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop width=5",
+        "--prop width=3in"
+      ],
+      "readback": "integer column/row span",
+      "enforcement": "report"
+    },
+    "height": {
+      "type": "integer",
+      "description": "height — TwoCellAnchor column/row span (xlsx cell-anchor positioning, integer)",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop height=5",
+        "--prop height=2in"
+      ],
+      "readback": "integer column/row span",
+      "enforcement": "report"
     }
   }
 }

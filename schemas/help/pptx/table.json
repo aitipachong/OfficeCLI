@@ -44,7 +44,7 @@
       "set": false,
       "get": true,
       "description": "OOXML graphic frame id (cNvPr id). pptx-only readback.",
-      "readback": "integer column id",
+      "readback": "integer (cNvPr graphic frame id)",
       "enforcement": "report"
     },
     "x": {

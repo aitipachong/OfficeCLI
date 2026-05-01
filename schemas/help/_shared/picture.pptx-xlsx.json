@@ -76,7 +76,9 @@
         "--prop name=\"hero-image\"",
         "--prop name=\"Hero Image\""
       ],
-      "enforcement": "report"
+      "enforcement": "report",
+      "get": true,
+      "readback": "shape name string"
     }
   }
 }

@@ -48,6 +48,32 @@
       "description": "horizontal anchor reference frame (e.g. page, margin, column, character).",
       "readback": "OOXML positionH @relativeFrom token",
       "enforcement": "report"
+    },
+    "width": {
+      "type": "length",
+      "description": "width — cm length (extent.Cy/Cx in EMU formatted to cm).",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop width=5",
+        "--prop width=3in"
+      ],
+      "readback": "length string",
+      "enforcement": "report"
+    },
+    "height": {
+      "type": "length",
+      "description": "height — cm length (extent.Cy/Cx in EMU formatted to cm).",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop height=5",
+        "--prop height=2in"
+      ],
+      "readback": "length string",
+      "enforcement": "report"
     }
   }
 }

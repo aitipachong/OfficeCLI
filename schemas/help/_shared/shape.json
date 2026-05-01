@@ -171,7 +171,9 @@
         "--prop name=\"banner\"",
         "--prop name=MyShape"
       ],
-      "enforcement": "report"
+      "enforcement": "report",
+      "get": true,
+      "readback": "shape name string (cNvPr @name)"
     },
     "reflection": {
       "type": "string",

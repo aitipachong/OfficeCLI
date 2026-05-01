@@ -39,19 +39,6 @@
       "readback": "byte length of the embedded image part",
       "enforcement": "report"
     },
-    "height": {
-      "type": "length",
-      "description": "EMU-parseable. If omitted, derived from width + native aspect ratio or defaults to 4in.",
-      "add": true,
-      "set": true,
-      "get": true,
-      "examples": [
-        "--prop height=5",
-        "--prop height=2in"
-      ],
-      "readback": "length in cm (e.g. \"3.2cm\")",
-      "enforcement": "report"
-    },
     "src": {
       "type": "string",
       "description": "image source (file path, URL, data-URI); accepted on add/set only. Get does NOT surface this key; the embedded relationship id is exposed under a separate Format[\"relId\"] key.",
@@ -65,19 +52,6 @@
         "--prop src=/path/to/image.png"
       ],
       "readback": "add/set-only input; not echoed by Get. Use Format[\"relId\"] to inspect the embedded image relationship.",
-      "enforcement": "report"
-    },
-    "width": {
-      "type": "length",
-      "description": "EMU-parseable. If omitted, derived from height + native aspect ratio or defaults to 6in.",
-      "add": true,
-      "set": true,
-      "get": true,
-      "examples": [
-        "--prop width=5",
-        "--prop width=3in"
-      ],
-      "readback": "length in cm (e.g. \"5.1cm\")",
       "enforcement": "report"
     }
   }
