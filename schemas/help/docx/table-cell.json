@@ -218,7 +218,7 @@
       "description": "top border. Format: STYLE[;SIZE[;COLOR[;SPACE]]]. Cross-format note: pptx accepts a space-separated 'WIDTH DASH COLOR' form; docx only accepts the semicolon form 'STYLE;SIZE;COLOR' (SIZE is in 1/8 pt units).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop border.top=\"single;4;000000\""],
-      "readback": "STYLE[;SIZE;COLOR[;SPACE]]",
+      "readback": "style name under 'border.top'; size under 'border.top.sz'; color under 'border.top.color'; space under 'border.top.space' (4 separate keys, not a compound string)",
       "enforcement": "report"
     },
     "border.bottom": {
@@ -226,7 +226,7 @@
       "description": "bottom border. Format: STYLE[;SIZE[;COLOR[;SPACE]]]. Cross-format note: pptx accepts a space-separated 'WIDTH DASH COLOR' form; docx only accepts the semicolon form 'STYLE;SIZE;COLOR' (SIZE is in 1/8 pt units).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop border.bottom=\"double;6;0000FF\""],
-      "readback": "STYLE[;SIZE;COLOR[;SPACE]]",
+      "readback": "style name under 'border.bottom'; size under 'border.bottom.sz'; color under 'border.bottom.color'; space under 'border.bottom.space' (4 separate keys, not a compound string)",
       "enforcement": "report"
     },
     "border.left": {
@@ -234,7 +234,7 @@
       "description": "left border. Format: STYLE[;SIZE[;COLOR[;SPACE]]]. Cross-format note: pptx accepts a space-separated 'WIDTH DASH COLOR' form; docx only accepts the semicolon form 'STYLE;SIZE;COLOR' (SIZE is in 1/8 pt units).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop border.left=\"single;4\""],
-      "readback": "STYLE[;SIZE;COLOR[;SPACE]]",
+      "readback": "style name under 'border.left'; size under 'border.left.sz'; color under 'border.left.color'; space under 'border.left.space' (4 separate keys, not a compound string)",
       "enforcement": "report"
     },
     "border.right": {
@@ -242,7 +242,7 @@
       "description": "right border. Format: STYLE[;SIZE[;COLOR[;SPACE]]]. Cross-format note: pptx accepts a space-separated 'WIDTH DASH COLOR' form; docx only accepts the semicolon form 'STYLE;SIZE;COLOR' (SIZE is in 1/8 pt units).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop border.right=\"single;4\""],
-      "readback": "STYLE[;SIZE;COLOR[;SPACE]]",
+      "readback": "style name under 'border.right'; size under 'border.right.sz'; color under 'border.right.color'; space under 'border.right.space' (4 separate keys, not a compound string)",
       "enforcement": "report"
     },
     "border.tl2br": {
@@ -250,7 +250,7 @@
       "description": "top-left to bottom-right diagonal border (cell-only). Format: STYLE[;SIZE[;COLOR[;SPACE]]]. Cross-format note: pptx accepts a space-separated 'WIDTH DASH COLOR' form; docx only accepts the semicolon form 'STYLE;SIZE;COLOR' (SIZE is in 1/8 pt units).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop border.tl2br=\"single;4;FF0000\""],
-      "readback": "STYLE[;SIZE;COLOR[;SPACE]]",
+      "readback": "style name under 'border.tl2br'; size under 'border.tl2br.sz'; color under 'border.tl2br.color'; space under 'border.tl2br.space' (4 separate keys, not a compound string)",
       "enforcement": "report"
     },
     "border.tr2bl": {
@@ -258,7 +258,7 @@
       "description": "top-right to bottom-left diagonal border (cell-only). Format: STYLE[;SIZE[;COLOR[;SPACE]]]. Cross-format note: pptx accepts a space-separated 'WIDTH DASH COLOR' form; docx only accepts the semicolon form 'STYLE;SIZE;COLOR' (SIZE is in 1/8 pt units).",
       "add": false, "set": true, "get": true,
       "examples": ["--prop border.tr2bl=\"single;4;FF0000\""],
-      "readback": "STYLE[;SIZE;COLOR[;SPACE]]",
+      "readback": "style name under 'border.tr2bl'; size under 'border.tr2bl.sz'; color under 'border.tr2bl.color'; space under 'border.tr2bl.space' (4 separate keys, not a compound string)",
       "enforcement": "report"
     }
   }
