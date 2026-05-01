@@ -17,11 +17,11 @@
   "properties": {
     "src": {
       "type": "string",
-      "description": ".glb source (file path, URL, data-URI). Non-glb rejected.",
+      "description": ".glb source (file path, URL, data-URI). Non-glb rejected. Accepted on add/set only; Get does NOT surface this key (no Format[\"src\"] or Format[\"relId\"] is emitted for model3d).",
       "aliases": ["path"],
-      "add": true, "set": true, "get": true,
+      "add": true, "set": true, "get": false,
       "examples": ["--prop src=/path/to/model.glb"],
-      "readback": "model URL or rel id",
+      "readback": "add-time only; not surfaced in Get.",
       "enforcement": "report"
     },
     "x": {

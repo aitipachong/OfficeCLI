@@ -17,11 +17,11 @@
   "properties": {
     "src": {
       "type": "string",
-      "description": "embedded object source. Alias: path.",
+      "description": "embedded object source — file path, URL, or data-URI; accepted on add/set only. Get does NOT surface this key; the embedded relationship id is exposed under a separate Format[\"relId\"] key.",
       "aliases": ["path"],
-      "add": true, "set": true, "get": true,
+      "add": true, "set": true, "get": false,
       "examples": ["--prop src=/path/to/data.xlsx"],
-      "readback": "object rel id",
+      "readback": "add/set-only input; not echoed by Get. Use Format[\"relId\"] to inspect the embedded relationship.",
       "enforcement": "report"
     },
     "progId": {

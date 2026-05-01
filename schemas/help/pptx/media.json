@@ -17,10 +17,11 @@
   "properties": {
     "src": {
       "type": "string",
+      "description": "media source — file path, URL, or data-URI; accepted on add/set only. Get does NOT surface this key (no Format[\"src\"] or Format[\"relId\"] is emitted for media).",
       "aliases": ["path"],
-      "add": true, "set": true, "get": true,
+      "add": true, "set": true, "get": false,
       "examples": ["--prop src=/path/to/video.mp4"],
-      "readback": "media URL or rel id",
+      "readback": "add-time only; not surfaced in Get.",
       "enforcement": "report"
     },
     "poster": {

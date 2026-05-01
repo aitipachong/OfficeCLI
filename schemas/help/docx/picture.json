@@ -17,11 +17,11 @@
   "properties": {
     "src": {
       "type": "string",
-      "description": "image source (file path, URL, data-URI).",
+      "description": "image source (file path, URL, data-URI); accepted on add/set only. Get does NOT surface this key; the embedded relationship id is exposed under a separate Format[\"relId\"] key.",
       "aliases": ["path"],
-      "add": true, "set": true, "get": true,
+      "add": true, "set": true, "get": false,
       "examples": ["--prop src=/path/to/image.png"],
-      "readback": "not surfaced directly",
+      "readback": "add/set-only input; not echoed by Get. Use Format[\"relId\"] to inspect the embedded image relationship.",
       "enforcement": "report"
     },
     "width": {
