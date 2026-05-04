@@ -586,6 +586,20 @@ public partial class WordHandler
             throw new ArgumentException(
                 "Cannot move a run (w:r) directly to /body. Runs must live inside a paragraph.");
 
+        // CONSISTENCY(word-schema): w:p cannot be nested inside w:p.
+        // Without this guard, `move /body/p[1] --to /body/p[3]` happily
+        // appends the source paragraph as a child of the target paragraph,
+        // producing schema-invalid <w:p><w:p>...</w:p></w:p>. Users almost
+        // always meant "place after", so steer them toward --after.
+        if (element.LocalName == "p" && targetParent.LocalName == "p")
+            throw new ArgumentException(
+                "Cannot move a paragraph into another paragraph (would create invalid <w:p><w:p>). " +
+                "To place after a paragraph, use `--after <path>`; to reorder within /body, omit --to.");
+        // Same guard for moving table/tbl into a paragraph.
+        if ((element.LocalName == "tbl" || element.LocalName == "table") && targetParent.LocalName == "p")
+            throw new ArgumentException(
+                "Cannot move a table into a paragraph. Use `--after <paragraph-path>` to place it after.");
+
         element.Remove();
 
         // Insert at the resolved position
