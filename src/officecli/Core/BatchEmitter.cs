@@ -408,6 +408,17 @@ public static class BatchEmitter
         });
     }
 
+    // Mirror of AddStyle's builtInIds set — these styles ship in every
+    // blank template, so EmitStyles must use `set` instead of `add` to
+    // avoid "already exists" errors on round-trip into a fresh document.
+    private static readonly HashSet<string> BuiltInStyleIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Normal", "Heading1", "Heading2", "Heading3", "Heading4", "Heading5",
+        "Heading6", "Heading7", "Heading8", "Heading9", "Title", "Subtitle",
+        "Quote", "IntenseQuote", "ListParagraph", "NoSpacing", "TOCHeading",
+        "DefaultParagraphFont", "TableNormal", "NoList",
+    };
+
     private static void EmitStyles(WordHandler word, List<BatchItem> items)
     {
         // Use query() rather than walking Get("/styles").Children — the
@@ -433,13 +444,43 @@ public static class BatchEmitter
                 if (props.TryGetValue("name", out var n)) props["id"] = n;
                 else continue;
             }
-            items.Add(new BatchItem
+            // BUG-R6-03: built-in styles (Normal / Heading1-9 / Title /
+            // Subtitle / Quote / IntenseQuote / ListParagraph / NoSpacing /
+            // TOCHeading) are present in every blank template, so emitting
+            // `add` for them on a fresh batch target fails with
+            // "Style 'X' already exists". Emit `set` on /styles/<id> for
+            // those — it's already an upsert-on-existing path — so a real
+            // document's customised Normal/Heading values land on the
+            // template's built-ins instead of being rejected.
+            var styleIdGuess = props.TryGetValue("id", out var sidGuess) ? sidGuess
+                : props.TryGetValue("styleId", out sidGuess) ? sidGuess : null;
+            bool isBuiltInStyle = styleIdGuess != null && BuiltInStyleIds.Contains(styleIdGuess);
+            if (isBuiltInStyle)
             {
-                Command = "add",
-                Parent = "/styles",
-                Type = "style",
-                Props = props
-            });
+                // /styles/<id> set rejects keys it doesn't model; strip the
+                // identity-only bag (id/styleId/name/type) since those
+                // would no-op anyway.
+                var setProps = new Dictionary<string, string>(props, StringComparer.OrdinalIgnoreCase);
+                setProps.Remove("id");
+                setProps.Remove("styleId");
+                setProps.Remove("type");
+                items.Add(new BatchItem
+                {
+                    Command = "set",
+                    Path = $"/styles/{styleIdGuess}",
+                    Props = setProps
+                });
+            }
+            else
+            {
+                items.Add(new BatchItem
+                {
+                    Command = "add",
+                    Parent = "/styles",
+                    Type = "style",
+                    Props = props
+                });
+            }
             // BUG-R4-T1: FilterEmittableProps drops the `tabs` scalar (it's a
             // List<Dict>, not stringable). EmitParagraph compensates by
             // emitting per-stop `add tab` rows; EmitStyles must do the same
