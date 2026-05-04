@@ -251,6 +251,11 @@ public static class BatchEmitter
         "protection", "protectionEnforced",
         // Document grid (CJK-aware line layout)
         "charSpacingControl",
+        // pPrDefault CJK toggles — without these, Word inserts an automatic
+        // space between Latin runs and adjacent CJK glyphs ("2025年" →
+        // "2025 年"). Templates that explicitly disable autoSpaceDE/DN
+        // depend on these surviving the round-trip.
+        "kinsoku", "overflowPunct", "autoSpaceDE", "autoSpaceDN",
     };
 
     // Dotted-prefix groups that round-trip wholesale via `set /`. Each
