@@ -542,7 +542,10 @@ public partial class WordHandler
             "template" => " TEMPLATE ",
             "comments" or "doccomments" => " COMMENTS ",
             "keywords" => " KEYWORDS ",
-            "mergefield" => $" MERGEFIELD {mergeFieldName} ",
+            // BUG-DUMP9-09: quote MERGEFIELD names containing whitespace so
+            // Word parses the full name as one token. " MERGEFIELD First Name "
+            // would otherwise be parsed as field "First" with arg "Name".
+            "mergefield" => $" MERGEFIELD {QuoteFieldNameIfNeeded(mergeFieldName!)} ",
             "ref" => $" REF {refBookmarkName}{(IsTruthy(properties.GetValueOrDefault("hyperlink")) ? " \\h" : "")} ",
             "pageref" => $" PAGEREF {refBookmarkName}{(IsTruthy(properties.GetValueOrDefault("hyperlink")) ? " \\h" : "")} ",
             "noteref" => $" NOTEREF {refBookmarkName}{(IsTruthy(properties.GetValueOrDefault("hyperlink")) ? " \\h" : "")} ",
@@ -1295,6 +1298,23 @@ public partial class WordHandler
     /// here so add round-trips correctly. A bare token (no `|`) keeps the
     /// old behavior — display == value.
     /// </summary>
+    // BUG-DUMP9-09: MERGEFIELD field names with whitespace must be quoted in
+    // the instruction so Word parses them as one token. Already-quoted input
+    // is left as-is so the instruction is idempotent under dump round-trip.
+    private static string QuoteFieldNameIfNeeded(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        if (name.Length >= 2 && name[0] == '"' && name[^1] == '"') return name;
+        bool needs = false;
+        foreach (var ch in name)
+        {
+            if (char.IsWhiteSpace(ch) || ch == '"' || ch == '\\') { needs = true; break; }
+        }
+        if (!needs) return name;
+        var escaped = name.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return $"\"{escaped}\"";
+    }
+
     private static IEnumerable<ListItem> ParseSdtItems(string items)
     {
         foreach (var raw in items.Split(','))
