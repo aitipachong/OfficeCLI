@@ -4,7 +4,7 @@
 namespace OfficeCli.Core;
 
 /// <summary>
-/// Single source of truth for the Microsoft "Office" default font scheme.
+/// Single source of truth for the canonical default font scheme.
 /// These literals appear in two contexts:
 ///
 ///   1. Blank document creation — emitted into theme1.xml's fontScheme.

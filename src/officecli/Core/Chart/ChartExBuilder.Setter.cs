@@ -375,9 +375,9 @@ internal static partial class ChartExBuilder
                 {
                     series.RemoveAllChildren<CX.DataLabels>();
                     if (!enable) continue;
-                    // CONSISTENCY(chartex-sidecars): omit `pos` — Microsoft's
-                    // chartEx labels do not set it, and PowerPoint flags the
-                    // file as needing repair when present.
+                    // CONSISTENCY(chartex-sidecars): omit `pos` — chartEx
+                    // labels do not carry it, and PowerPoint flags the file
+                    // as needing repair when present.
                     var dl = new CX.DataLabels();
                     dl.AppendChild(new CX.DataLabelVisibilities
                     {

@@ -260,9 +260,10 @@ public partial class WordHandler
     {
         var parts = new List<string>();
 
-        // Set paragraph font-size to match the first run's resolved font-size.
-        // This prevents the CSS "strut" (block container's anonymous inline box) from inflating
-        // the line box when .page font-size differs from the actual text span font-size.
+        // Set paragraph font-size and font-family to match the first run.
+        // This keeps the paragraph's anonymous inline box (strut) sized in the
+        // same metrics as the actual text spans, preventing line-box inflation
+        // when the page-level defaults differ from the run.
         var firstRun = para.Elements<Run>().FirstOrDefault(r =>
             r.ChildElements.Any(c => c is Text t && !string.IsNullOrEmpty(t.Text)));
         if (firstRun != null)
@@ -271,6 +272,21 @@ public partial class WordHandler
             var sz = rProps.FontSize?.Val?.Value;
             if (sz != null && int.TryParse(sz, out var hp))
                 parts.Add($"font-size:{hp / 2.0:0.##}pt");
+
+            var fonts = rProps.RunFonts;
+            var paraFont = fonts?.EastAsia?.Value ?? ResolveThemeFont(fonts?.EastAsiaTheme?.InnerText)
+                ?? fonts?.Ascii?.Value ?? ResolveThemeFont(fonts?.AsciiTheme?.InnerText)
+                ?? fonts?.HighAnsi?.Value ?? ResolveThemeFont(fonts?.HighAnsiTheme?.InnerText);
+            if (!string.IsNullOrEmpty(paraFont)
+                && !paraFont.StartsWith("+", StringComparison.Ordinal)
+                && !string.Equals(paraFont, ReadDocDefaults().Font, StringComparison.Ordinal))
+            {
+                var fallback = GetChineseFontFallback(paraFont);
+                var generic = IsLikelySerif(paraFont) ? "serif" : "sans-serif";
+                parts.Add(fallback != null
+                    ? $"font-family:'{CssSanitize(paraFont)}',{fallback},{generic}"
+                    : $"font-family:'{CssSanitize(paraFont)}',{generic}");
+            }
         }
 
         var pProps = para.ParagraphProperties;

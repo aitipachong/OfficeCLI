@@ -4,7 +4,7 @@
 namespace OfficeCli.Core;
 
 /// <summary>
-/// Single source of truth for the Microsoft "Office" default color scheme
+/// Single source of truth for the canonical default color scheme
 /// (the palette Word/Excel/PowerPoint apply when a document has no explicit
 /// <c>a:theme</c> part). Used in two contexts:
 ///

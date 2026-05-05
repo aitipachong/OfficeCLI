@@ -18,9 +18,9 @@ namespace OfficeCli.Core;
 /// Without these sidecars Excel/PowerPoint silently "repairs" the file by
 /// dropping the chart (or the entire drawing it lives in). The chartStyle
 /// and colorStyle XML are layout-/data-independent and reused verbatim from
-/// a Microsoft-authored funnel reference; the embedded xlsx is built
-/// programmatically per-chart so its Sheet1!$A:$Z cells match the cx:f
-/// formulas emitted by ChartExBuilder.
+/// a canonical funnel reference; the embedded xlsx is built programmatically
+/// per-chart so its Sheet1!$A:$Z cells match the cx:f formulas emitted by
+/// ChartExBuilder.
 ///
 /// CONSISTENCY(chartex-sidecars): Excel's path uses ChartExStyleBuilder for
 /// a per-type style; PPT/Word use the canonical funnel template here. Both

@@ -127,8 +127,8 @@ internal static partial class ChartExBuilder
                 {
                     LayoutId = new EnumValue<CX.SeriesLayout>(ParseSeriesLayout(layoutId)),
                     // CONSISTENCY(chartex-sidecars): every cx:series carries a
-                    // GUID identifier. Microsoft-authored funnels include this;
-                    // PowerPoint's repair logic complains when it is missing.
+                    // GUID identifier; PowerPoint's repair logic complains
+                    // when it is missing.
                     UniqueId = Guid.NewGuid().ToString("B").ToUpperInvariant(),
                 };
 
@@ -161,10 +161,10 @@ internal static partial class ChartExBuilder
                     ApplyCxSeriesShadow(series, seriesShadow);
 
                 // Data labels (value count above each bar). chartEx data
-                // labels do NOT carry a `pos` attribute in Microsoft-authored
-                // funnels/treemaps/sunburst — emitting OutEnd causes PowerPoint
-                // to treat the file as needing repair (silently drops labels
-                // and sometimes the entire chart).
+                // labels do NOT carry a `pos` attribute on funnels/treemaps/
+                // sunburst — emitting OutEnd causes PowerPoint to treat the
+                // file as needing repair (silently drops labels and sometimes
+                // the entire chart).
                 if (showDataLabels)
                 {
                     var dl = new CX.DataLabels();
@@ -236,8 +236,8 @@ internal static partial class ChartExBuilder
         plotArea.AppendChild(plotAreaRegion);
 
         // CONSISTENCY(chartex-sidecars): funnel needs a single category axis
-        // (id=1) with catScaling+tickLabels. Microsoft's reference funnel
-        // ships with this; without it PowerPoint repairs/drops the chart.
+        // (id=1) with catScaling+tickLabels; without it PowerPoint
+        // repairs/drops the chart.
         if (normalized == "funnel")
         {
             var funnelAxis = new CX.Axis { Id = 1U };

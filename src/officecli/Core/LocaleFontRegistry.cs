@@ -14,8 +14,8 @@ namespace OfficeCli.Core;
 /// UI-locale defaults — that's the POI-aligned behaviour BlankDocCreator
 /// already had after we removed the "宋体" hardcode.
 ///
-/// Font names are chosen for cross-platform availability (typefaces shipped
-/// by Microsoft Office on Windows and macOS, plus Apple Sans equivalents).
+/// Font names are chosen for cross-platform availability (typefaces commonly
+/// shipped on Windows and macOS, plus Apple Sans equivalents).
 /// </summary>
 public static class LocaleFontRegistry
 {

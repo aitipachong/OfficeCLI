@@ -447,7 +447,7 @@ internal class ExcelStyleManager
         }
 
         // 2. Create the hyperlink font (blue + underline), dedup by match.
-        // Microsoft's canonical hyperlink color is 0563C1 (theme hyperlink).
+        // Default hyperlink color: 0563C1 (theme hyperlink).
         var hlFontProps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["color"] = "0563C1",

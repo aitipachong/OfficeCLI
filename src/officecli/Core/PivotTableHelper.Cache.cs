@@ -502,8 +502,7 @@ internal static partial class PivotTableHelper
 
         var sharedItems = new SharedItems();
 
-        // MIXED strategy — verified against Microsoft's own pivot5.xlsx (in
-        // OPEN-XML-SDK test fixtures, authored by real Excel):
+        // MIXED strategy — verified against canonical Excel-authored pivots:
         //
         //   • Numeric fields: emit ONLY containsNumber/minValue/maxValue metadata,
         //     no enumerated items, no count attribute. Records reference values
@@ -511,13 +510,10 @@ internal static partial class PivotTableHelper
         //   • String fields: enumerate every unique value as <s v="..."/> with
         //     count attribute. Records reference them by index via <x v="N"/>.
         //
-        // I previously experimented with LibreOffice's uniform strategy (always
-        // enumerate, always index-reference), but Microsoft's actual format is
-        // the mixed one — and matching the real Excel format is the safest bet
-        // for round-trip compatibility. The uniform strategy is technically valid
-        // OOXML but introduces an asymmetry that Excel handles less reliably
-        // (numeric data fields with item enumeration have failed to render in
-        // testing, even though the file passes schema validation).
+        // A uniform strategy (always enumerate, always index-reference) is
+        // technically valid OOXML but introduces an asymmetry Excel handles
+        // less reliably (numeric data fields with item enumeration have failed
+        // to render in testing, even though the file passes schema validation).
         bool hasErrorCells = values.Any(v => v == ErrorCellSentinel);
         if (isNumeric && values.Any(v => !string.IsNullOrEmpty(v) && v != ErrorCellSentinel))
         {
@@ -805,8 +801,7 @@ internal static partial class PivotTableHelper
     // ==================== Cache Records Builder ====================
 
     /// <summary>
-    /// Build pivotCacheRecords using the MIXED strategy verified against Microsoft's
-    /// own pivot5.xlsx test fixture:
+    /// Build pivotCacheRecords using the MIXED strategy:
     ///
     ///   <r>
     ///     <x v="0"/>     <!-- string field, references sharedItems[0] -->
