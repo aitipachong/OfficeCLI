@@ -582,42 +582,100 @@ public partial class WordHandler
       // page and split after, so the oversized element is not silently
       // dropped by being moved to a new (still-oversized) page.
       if(splitIdx===0)splitIdx=1;
-      // Collect movable children from splitIdx onward (skip footnotes — they
-      // stay on the reference page). If nothing is movable, the page is
-      // irreducibly oversized and we let it overflow gracefully instead of
-      // producing an empty follow-up page.
-      var toMove=[];
-      for(var mi=splitIdx;mi<children.length;mi++){
-        if(!children[mi].classList.contains('footnotes'))toMove.push(children[mi]);
+      // Sync mode: greedy multi-split — walk children once, find ALL break
+      // points based on cumulative offsetTop/Height, and create N new pages
+      // in a single pass. Avoids the O(N) layout reflows the async path
+      // pays via recursive single-splits. Async path retains the original
+      // single-split behaviour (setTimeout chain stays cheap).
+      if(window._wpSync){
+        // table-row-split above may have refreshed children — re-collect.
+        children=Array.from(body.children);
+        var bodyT=body.offsetTop;
+        var movable=[];
+        for(var mi=splitIdx;mi<children.length;mi++){
+          if(children[mi].classList.contains('footnotes'))continue;
+          movable.push({el:children[mi],top:children[mi].offsetTop-bodyT,h:children[mi].offsetHeight});
+        }
+        if(movable.length===0)continue;
+        // Greedy bin-pack: each segment-leading element becomes :first-child
+        // of its new page-body, where the CSS rule
+        //   .page-body > :first-child { margin-top: 0 !important; }
+        // zeroes its margin-top contribution. Since the leader's old offsetTop
+        // already absorbs its own margin-top (it wasn't first-child of source
+        // body), and inter-sibling distances are preserved across the move
+        // (flex items don't collapse), bot-segStartTop with
+        // segStartTop=leader.oldTop directly equals the leader's newBottom in
+        // the new page-body. No margin-top shift needed.
+        var splits=[0];
+        var segStartTop=movable[0].top;
+        for(var i=1;i<movable.length;i++){
+          var bot=movable[i].top+movable[i].h;
+          if(bot-segStartTop>availH+2){
+            splits.push(i);
+            segStartTop=movable[i].top;
+          }
+        }
+        // splits = [0, k1, k2, ...]: segment s holds movable[splits[s]..splits[s+1]-1]
+        var prevWrapper=page.closest('.page-wrapper')||page;
+        for(var s=0;s<splits.length;s++){
+          var segStart=splits[s];
+          var segEnd=s+1<splits.length?splits[s+1]:movable.length;
+          var nw=document.createElement('div');
+          nw.className='page-wrapper';
+          var np=document.createElement('div');
+          np.className='page';
+          np.style.cssText=page.style.cssText;
+          var nb=document.createElement('div');
+          nb.className='page-body';
+          for(var mi=segStart;mi<segEnd;mi++){
+            nb.appendChild(movable[mi].el);
+          }
+          if(htpl){
+            var nh=document.createElement('div');
+            nh.innerHTML=htpl.replace('<!--PAGE_NUM-->',(pi+s+2).toString());
+            if(nh.firstChild)np.appendChild(nh.firstChild);
+          }
+          np.appendChild(nb);
+          var nf=document.createElement('div');
+          nf.innerHTML=ftpl.replace('<!--PAGE_NUM-->',(pi+s+2).toString());
+          if(nf.firstChild)np.appendChild(nf.firstChild);
+          nw.appendChild(np);
+          prevWrapper.after(nw);
+          prevWrapper=nw;
+        }
       }
-      if(toMove.length===0)continue;
-      // Create new page wrapped in page-wrapper
-      var nw=document.createElement('div');
-      nw.className='page-wrapper';
-      var np=document.createElement('div');
-      np.className='page';
-      np.style.cssText=page.style.cssText;
-      var nb=document.createElement('div');
-      nb.className='page-body';
-      for(var mi=0;mi<toMove.length;mi++){
-        nb.appendChild(toMove[mi]);
+      else{
+        // Async path: single split per iter (setTimeout-driven, layout cost
+        // amortized across event loop turns).
+        var toMove=[];
+        for(var mi=splitIdx;mi<children.length;mi++){
+          if(!children[mi].classList.contains('footnotes'))toMove.push(children[mi]);
+        }
+        if(toMove.length===0)continue;
+        var nw=document.createElement('div');
+        nw.className='page-wrapper';
+        var np=document.createElement('div');
+        np.className='page';
+        np.style.cssText=page.style.cssText;
+        var nb=document.createElement('div');
+        nb.className='page-body';
+        for(var mi=0;mi<toMove.length;mi++){
+          nb.appendChild(toMove[mi]);
+        }
+        if(htpl){
+          var nh=document.createElement('div');
+          nh.innerHTML=htpl.replace('<!--PAGE_NUM-->',(pi+2).toString());
+          if(nh.firstChild)np.appendChild(nh.firstChild);
+        }
+        np.appendChild(nb);
+        var nf=document.createElement('div');
+        nf.innerHTML=ftpl.replace('<!--PAGE_NUM-->',(pi+2).toString());
+        if(nf.firstChild)np.appendChild(nf.firstChild);
+        nw.appendChild(np);
+        var parentWrapper=page.closest('.page-wrapper');
+        if(parentWrapper)parentWrapper.after(nw);
+        else page.after(nw);
       }
-      // Clone header into new page (prepended before page-body) so each
-      // continuation page shows the same header tree as the source page.
-      if(htpl){
-        var nh=document.createElement('div');
-        nh.innerHTML=htpl.replace('<!--PAGE_NUM-->',(pi+2).toString());
-        if(nh.firstChild)np.appendChild(nh.firstChild);
-      }
-      np.appendChild(nb);
-      // Clone footer into new page
-      var nf=document.createElement('div');
-      nf.innerHTML=ftpl.replace('<!--PAGE_NUM-->',(pi+2).toString());
-      if(nf.firstChild)np.appendChild(nf.firstChild);
-      nw.appendChild(np);
-      var parentWrapper=page.closest('.page-wrapper');
-      if(parentWrapper)parentWrapper.after(nw);
-      else page.after(nw);
     }
     // Renumber pages
     var allPages=document.querySelectorAll('.page');
@@ -655,7 +713,17 @@ public partial class WordHandler
       if(ch>maxBodyH-fh+2 && visibleCount>1){again=true;break;}
     }
     if(again){if(window._wpSync)paginate();else setTimeout(paginate,0);}
-    else if(window._wpSync){positionFootnotes();wrapFloats();applyLineNumbers();applyPageFilter();document.title='PAGES:'+document.querySelectorAll('.page').length;}
+    else if(window._wpSync){
+      positionFootnotes();wrapFloats();applyLineNumbers();
+      // Build heading→page map BEFORE applyPageFilter (it sets display:none).
+      var pgs=Array.from(document.querySelectorAll('.page'));
+      var pmap=[];
+      document.querySelectorAll('a[id^=""_Toc""]').forEach(function(a){
+        for(var i=0;i<pgs.length;i++) if(pgs[i].contains(a)){pmap.push(a.id+'='+(i+1));break;}
+      });
+      applyPageFilter();
+      document.title='PAGES:'+pgs.length+(pmap.length?'|MAP:'+pmap.join(','):'');
+    }
     else{setTimeout(positionFootnotes,0);setTimeout(wrapFloats,0);setTimeout(applyLineNumbers,0);setTimeout(applyPageFilter,0);setTimeout(function(){scalePages(false);},0);}
   }
   // #2 / #7b light approximation: a floating table whose CSS has float:*

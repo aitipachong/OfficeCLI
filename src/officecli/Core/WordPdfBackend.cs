@@ -476,6 +476,49 @@ internal static class WordPdfBackend
         finally { Rel(fileFact); Rel(pdfFact); Rel(drFact); }
     }
 
+    public static bool RefreshFields(string docx, int timeoutMs = 180000)
+    {
+        bool ok = false;
+        var th = new Thread(() =>
+        {
+            try
+            {
+                var clsid = G_Word; var iid = G_IDispatch;
+                CoCreateInstance(ref clsid, IntPtr.Zero, 4, ref iid, out var word);
+                try
+                {
+                    var name = (string?)DispGet(word, "Name") ?? "";
+                    if (!name.Contains("Microsoft Word", StringComparison.OrdinalIgnoreCase)) return;
+                    DispSet(word, "Visible", false);
+                    DispSet(word, "DisplayAlerts", 0);
+                    try { DispSet(word, "AutomationSecurity", 3); } catch { }
+                    var docs = (IntPtr)DispGet(word, "Documents")!;
+                    try
+                    {
+                        var doc = (IntPtr)DispMethod(docs, "Open", docx, MISSING, false, false)!;
+                        try
+                        {
+                            var fields = (IntPtr)DispGet(doc, "Fields")!;
+                            try { DispMethod(fields, "Update"); }
+                            finally { Marshal.Release(fields); }
+                            DispMethod(doc, "Save");
+                            ok = true;
+                        }
+                        finally { try { DispMethod(doc, "Close", false); } catch { } Marshal.Release(doc); }
+                    }
+                    finally { Marshal.Release(docs); }
+                }
+                finally { try { DispMethod(word, "Quit"); } catch { } Marshal.Release(word); }
+            }
+            catch { }
+        });
+        th.SetApartmentState(ApartmentState.STA);
+        th.IsBackground = true;
+        th.Start();
+        if (!th.Join(timeoutMs + 30000)) return false;
+        return ok;
+    }
+
     public static int? GetPageCount(string docx, int timeoutMs = 120000)
     {
         int? result = null;

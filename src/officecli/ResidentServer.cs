@@ -689,6 +689,10 @@ public class ResidentServer : IDisposable
                 ExecuteSwap(request);
                 NotifyWatchFullRefresh();
                 break;
+            case "refresh":
+                ExecuteRefresh(request);
+                NotifyWatchFullRefresh();
+                break;
             case "raw":
                 ExecuteRaw(request);
                 break;
@@ -1369,6 +1373,37 @@ public class ResidentServer : IDisposable
         var to = req.GetArgOrNull("to");
         var resultPath = _handler.Move(path, to, BuildInsertPosition(req));
         Console.WriteLine($"Moved to {resultPath}");
+    }
+
+    private void ExecuteRefresh(ResidentRequest req)
+    {
+        if (_handler is not OfficeCli.Handlers.WordHandler)
+        {
+            Console.Error.WriteLine("refresh currently only supports .docx files.");
+            return;
+        }
+        _handler.Dispose();
+        bool ok = false;
+        string backend = "";
+        if (OperatingSystem.IsWindows())
+        {
+            try { ok = OfficeCli.Core.WordPdfBackend.RefreshFields(_filePath); } catch { }
+            if (ok) backend = "word";
+        }
+        if (!ok)
+        {
+            try { ok = OfficeCli.Core.WordHtmlRefresh.RefreshViaHtml(_filePath); } catch { }
+            if (ok) backend = "html";
+        }
+        _handler = OfficeCli.Handlers.DocumentHandlerFactory.Open(_filePath, _editable);
+        if (!ok)
+        {
+            Console.Error.WriteLine("refresh failed (Word backend unavailable and HTML fallback failed).");
+            return;
+        }
+        if (backend == "html")
+            Console.Error.WriteLine("Note: HTML fallback used. TOC page numbers reflect officecli's HTML pagination.");
+        Console.WriteLine($"Refreshed: {_filePath} (backend: {backend})");
     }
 
     private void ExecuteSwap(ResidentRequest req)

@@ -15,11 +15,12 @@ internal static class HtmlScreenshot
 {
     public sealed record Result(bool Ok, string Backend, string? Error);
 
+    public sealed record PaginationResult(int TotalPages, Dictionary<string, int> AnchorPageMap);
+
     /// Run a chromium-family browser in dump-dom mode against the given HTML
-    /// and parse the document title for "PAGES:N". Caller's HTML must set the
-    /// title from JS after layout settles. Returns null if no browser is
-    /// available, the run timed out, or no marker was found.
-    public static int? GetPageCountFromDom(string htmlPath, int timeoutMs = 60000)
+    /// and parse the document title for "PAGES:N|MAP:anchor=p,anchor=p,...".
+    /// The HTML must set the title from JS after layout settles.
+    public static PaginationResult? GetPaginationFromDom(string htmlPath, int timeoutMs = 60000)
     {
         var url = new Uri(Path.GetFullPath(htmlPath)).AbsoluteUri + "#screenshot";
         var bin = FindChrome();
@@ -48,11 +49,25 @@ internal static class HtmlScreenshot
             if (p == null) return null;
             var stdout = p.StandardOutput.ReadToEnd();
             if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch { } return null; }
-            var m = System.Text.RegularExpressions.Regex.Match(stdout, @"<title>PAGES:(\d+)</title>");
-            return m.Success && int.TryParse(m.Groups[1].Value, out var n) ? n : null;
+            var m = System.Text.RegularExpressions.Regex.Match(stdout, @"<title>PAGES:(\d+)(?:\|MAP:([^<]*))?</title>");
+            if (!m.Success || !int.TryParse(m.Groups[1].Value, out var n)) return null;
+            var map = new Dictionary<string, int>();
+            if (m.Groups[2].Success && m.Groups[2].Value.Length > 0)
+            {
+                foreach (var pair in m.Groups[2].Value.Split(','))
+                {
+                    var eq = pair.IndexOf('=');
+                    if (eq > 0 && int.TryParse(pair[(eq + 1)..], out var pgNum))
+                        map[pair[..eq]] = pgNum;
+                }
+            }
+            return new PaginationResult(n, map);
         }
         catch { return null; }
     }
+
+    public static int? GetPageCountFromDom(string htmlPath, int timeoutMs = 60000)
+        => GetPaginationFromDom(htmlPath, timeoutMs)?.TotalPages;
 
     public static Result Capture(string htmlPath, string outPath, int width = 1600, int height = 1200)
     {
