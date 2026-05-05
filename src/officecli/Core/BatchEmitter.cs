@@ -195,8 +195,14 @@ public static class BatchEmitter
                                              string subTypeOverride = "default")
     {
         var partNode = word.Get(sourcePath);
-        var paras = (partNode.Children ?? new List<DocumentNode>())
-            .Where(c => c.Type == "paragraph" || c.Type == "p")
+        // BUG-DUMP9-08: tables are valid block-level OOXML inside hdr/ftr
+        // (same schema as body) and Navigation surfaces them as `table`-typed
+        // children, but the previous filter only kept paragraphs and silently
+        // dropped tables. Iterate in source order, tracking per-type indices
+        // so paragraph and table paths line up with replay output.
+        var blockChildren = (partNode.Children ?? new List<DocumentNode>())
+            .Where(c => c.Type == "paragraph" || c.Type == "p"
+                     || c.Type == "table" || c.Type == "tbl")
             .ToList();
         // partNode.Format does not expose `type`; the caller resolves the
         // role (default/first/even) from the section's headerRef.* / footerRef.*
@@ -219,9 +225,23 @@ public static class BatchEmitter
         });
 
         var partTargetPath = $"/{kind}[{targetIndex}]";
-        for (int p = 0; p < paras.Count; p++)
+        int pIdx = 0, tblIdx = 0;
+        bool sawFirstPara = false;
+        foreach (var child in blockChildren)
         {
-            EmitParagraph(word, paras[p].Path, partTargetPath, p + 1, items, autoPresent: p == 0);
+            if (child.Type == "table" || child.Type == "tbl")
+            {
+                tblIdx++;
+                EmitTable(word, child.Path, tblIdx, items, ctx: null,
+                          parentTablePath: null, containerPath: partTargetPath);
+            }
+            else
+            {
+                pIdx++;
+                EmitParagraph(word, child.Path, partTargetPath, pIdx, items,
+                              autoPresent: !sawFirstPara);
+                sawFirstPara = true;
+            }
         }
     }
 
@@ -1345,7 +1365,8 @@ public static class BatchEmitter
 
     private static void EmitTable(WordHandler word, string sourcePath, int targetIndex,
                                   List<BatchItem> items, BodyEmitContext? ctx = null,
-                                  string? parentTablePath = null)
+                                  string? parentTablePath = null,
+                                  string containerPath = "/body")
     {
         var tableNode = word.Get(sourcePath);
         var rows = (tableNode.Children ?? new List<DocumentNode>())
@@ -1399,7 +1420,7 @@ public static class BatchEmitter
         // /body/tbl[N]/tr[M]/tc[K] as a parent. Outer-level tables target
         // /body. parentTablePath, when set, is a cell target path
         // (/body/tbl[X]/tr[Y]/tc[Z]) that we emit nested tables under.
-        var tableParentPath = parentTablePath ?? "/body";
+        var tableParentPath = parentTablePath ?? containerPath;
         items.Add(new BatchItem
         {
             Command = "add",
@@ -1412,7 +1433,7 @@ public static class BatchEmitter
         // table in the cell). For outer tables, it's /body/tbl[N].
         var tablePath = parentTablePath != null
             ? $"{parentTablePath}/tbl[1]"
-            : $"/body/tbl[{targetIndex}]";
+            : $"{containerPath}/tbl[{targetIndex}]";
         for (int r = 0; r < rows.Count; r++)
         {
             // Emit row-level properties (header / height / height.rule) as a
