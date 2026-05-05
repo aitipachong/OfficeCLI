@@ -889,6 +889,11 @@ public partial class WordHandler
         if (sectPr.GetFirstChild<GutterOnRight>() != null)
             secNode.Format["rtlGutter"] = true;
 
+        // BUG-DUMP11-03: <w:noEndnote/> suppresses end-of-section endnote
+        // collection. On/off toggle — bare element, no val attribute.
+        if (sectPr.GetFirstChild<NoEndnote>() != null)
+            secNode.Format["noEndnote"] = true;
+
         // Header / footer references — expose so users can debug inheritance
         var mainPart = _doc.MainDocumentPart;
         if (mainPart != null)

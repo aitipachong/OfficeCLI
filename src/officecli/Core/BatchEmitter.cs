@@ -353,6 +353,8 @@ public static class BatchEmitter
         // BUG-DUMP11-01: chapter-numbering attributes on w:pgNumType.
         "chapStyle", "chapSep",
         "titlePage", "direction", "rtlGutter",
+        // BUG-DUMP11-03: <w:noEndnote/> section flag.
+        "noEndnote",
         "lineNumbers", "lineNumberCountBy",
         // BUG-DUMP11-02: lnNumType/@w:start (first line number when counting).
         "lineNumberStart",

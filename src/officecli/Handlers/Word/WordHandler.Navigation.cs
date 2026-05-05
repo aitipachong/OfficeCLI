@@ -213,6 +213,11 @@ public partial class WordHandler
             if (sectPr.GetFirstChild<GutterOnRight>() != null)
                 node.Format["rtlGutter"] = true;
 
+            // BUG-DUMP11-03: <w:noEndnote/> on a section suppresses endnote
+            // collection at section end. Bare on/off toggle (no val attr).
+            if (sectPr.GetFirstChild<NoEndnote>() != null)
+                node.Format["noEndnote"] = true;
+
             var lnNum = sectPr.GetFirstChild<LineNumberType>();
             if (lnNum != null)
             {

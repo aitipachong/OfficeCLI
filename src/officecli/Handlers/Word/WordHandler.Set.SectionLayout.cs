@@ -127,6 +127,16 @@ public partial class WordHandler
                     InsertSectPrChildInOrder(sectPr, new GutterOnRight());
                 return true;
             }
+            // BUG-DUMP11-03: <w:noEndnote/> on/off toggle — when present the
+            // section's endnote collection is suppressed. Bare element, no val.
+            case "noendnote":
+            {
+                var sectPr = EnsureSectionProperties();
+                sectPr.RemoveAllChildren<NoEndnote>();
+                if (IsTruthy(value))
+                    InsertSectPrChildInOrder(sectPr, new NoEndnote());
+                return true;
+            }
             // BUG-DUMP11-01: w:pgNumType chapter-numbering attributes —
             // chapStyle = heading level (1-9) used for chapter prefix,
             // chapSep = separator between chapter and page (hyphen, period,
