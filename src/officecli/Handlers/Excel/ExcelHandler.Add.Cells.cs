@@ -283,6 +283,27 @@ public partial class ExcelHandler
                 Console.Error.WriteLine(
                     $"warning: path row[{rowIndexFromPath.Value}] does not match cell ref '{cellRef}' row; using ref's row.");
         }
+        // --prop shift=right|down: before materializing the new cell, push
+        // existing cells in the same row (right) or column (down) by 1.
+        // Mirrors Excel UI's "Insert Cells > Shift cells right / down".
+        // Same scope cap as RemoveCellWithShift: only intra-row/col cellRefs
+        // are rewritten — formulas, mergeCells, CF/DV/hyperlinks/tables that
+        // span the affected row/col are NOT adjusted. For full row/col insert
+        // with all relations, use add --type row / --type col.
+        if (properties.TryGetValue("shift", out var shiftVal) && !string.IsNullOrEmpty(shiftVal))
+        {
+            var shiftDir = shiftVal.ToLowerInvariant();
+            if (shiftDir is not ("right" or "down"))
+                throw new ArgumentException(
+                    $"--prop shift={shiftVal} not valid for add cell. Use 'right' or 'down'.");
+            var (shiftCol, shiftRow) = ParseCellReference(cellRef);
+            var shiftColIdx = ColumnNameToIndex(shiftCol);
+            if (shiftDir == "right")
+                ShiftCellsRightInRow(cellSheetData, (uint)shiftRow, shiftColIdx);
+            else
+                ShiftCellsDownInColumn(cellSheetData, shiftCol, shiftRow);
+        }
+
         var cell = FindOrCreateCell(cellSheetData, cellRef);
 
         // CONSISTENCY(cell-value-alias): Set accepts "text" as alias for

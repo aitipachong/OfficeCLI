@@ -268,26 +268,45 @@ static partial class CommandBuilder
     {
         var removeFileArg = new Argument<FileInfo>("file") { Description = "Office document path (required even with open/close mode)" };
         var removePathArg = new Argument<string>("path") { Description = "DOM path of the element to remove" };
+        var shiftOption = new Option<string?>("--shift") {
+            Description = "(Excel cell only) Shift surrounding cells to fill the gap: left | up. " +
+                          "For full row/col delete with metadata adjustments, target the row/col path directly."
+        };
 
         var removeCommand = new Command("remove", "Remove an element from the document");
         removeCommand.Add(removeFileArg);
         removeCommand.Add(removePathArg);
+        removeCommand.Add(shiftOption);
         removeCommand.Add(jsonOption);
 
         removeCommand.SetAction(result => { var json = result.GetValue(jsonOption); return SafeRun(() =>
         {
             var file = result.GetValue(removeFileArg)!;
             var path = result.GetValue(removePathArg)!;
+            var shift = result.GetValue(shiftOption);
 
             if (TryResident(file.FullName, req =>
             {
                 req.Command = "remove";
                 req.Args["path"] = path;
+                if (!string.IsNullOrEmpty(shift)) req.Args["shift"] = shift;
             }, json) is {} rc) return rc;
 
             using var handler = DocumentHandlerFactory.Open(file.FullName, editable: true);
             var oldCount = (handler as OfficeCli.Handlers.PowerPointHandler)?.GetSlideCount() ?? 0;
-            var warning = handler.Remove(path);
+            string? warning;
+            if (!string.IsNullOrEmpty(shift))
+            {
+                if (handler is not OfficeCli.Handlers.ExcelHandler xlHandler)
+                    throw new OfficeCli.Core.CliException(
+                        "--shift is supported only for Excel cell paths (e.g. /Sheet1/B5).")
+                    { Code = "invalid_argument" };
+                warning = xlHandler.RemoveCellWithShift(path, shift);
+            }
+            else
+            {
+                warning = handler.Remove(path);
+            }
             var message = $"Removed {path}";
             if (warning != null) message += $"\n{warning}";
             if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeText(message));

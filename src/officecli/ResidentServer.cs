@@ -1391,7 +1391,19 @@ public class ResidentServer : IDisposable
     private void ExecuteRemove(ResidentRequest req)
     {
         var path = req.GetArg("path", "/");
-        _handler.Remove(path);
+        var shift = req.GetArgOrNull("shift");
+        if (!string.IsNullOrEmpty(shift))
+        {
+            if (_handler is not OfficeCli.Handlers.ExcelHandler xl)
+                throw new OfficeCli.Core.CliException(
+                    "--shift is supported only for Excel cell paths (e.g. /Sheet1/B5).")
+                { Code = "invalid_argument" };
+            xl.RemoveCellWithShift(path, shift);
+        }
+        else
+        {
+            _handler.Remove(path);
+        }
         Console.WriteLine($"Removed {path}");
     }
 

@@ -707,6 +707,159 @@ public partial class ExcelHandler
         return null;
     }
 
+    /// <summary>
+    /// Remove a single cell at the given path and shift the remaining cells
+    /// in the same row (shift=left) or same column (shift=up) by one position
+    /// to fill the gap. Mirrors Excel UI's "Delete Cells > Shift cells left /
+    /// Shift cells up". For full row/column delete with all metadata
+    /// adjustments use <c>Remove("/Sheet1/row[N]")</c> or
+    /// <c>Remove("/Sheet1/col[X]")</c> instead — those handle merged cells,
+    /// CF/DV/hyperlink/table refs, and formula refs across the entire sheet.
+    ///
+    /// <para>Limitation: only cell references inside the affected row (for
+    /// shift=left) or column (for shift=up) are rewritten. Formula text in
+    /// other rows/columns that references cells in the affected row/col is
+    /// NOT adjusted — Excel will recalculate against the new values on open
+    /// (fullCalcOnLoad), but a formula like A1=<c>=C5</c> after deleting B5
+    /// with shift=left will still read literal C5, not the new B5. Mergeed
+    /// cells and other range-based metadata that span the affected row/col
+    /// are also not adjusted. If precise behavior matters, prefer the
+    /// row/col-level remove.</para>
+    /// </summary>
+    public string? RemoveCellWithShift(string path, string shift)
+    {
+        if (string.IsNullOrEmpty(shift))
+            throw new ArgumentException("--shift requires a value: left or up");
+        var direction = shift.ToLowerInvariant();
+        if (direction is not ("left" or "up"))
+            throw new ArgumentException(
+                $"--shift={shift} not valid for remove. Use 'left' or 'up'.");
+
+        path = NormalizeExcelPath(path);
+        path = ResolveSheetIndexInPath(path);
+        var segments = path.TrimStart('/').Split('/', 2);
+        if (segments.Length < 2)
+            throw new ArgumentException(
+                "--shift requires a cell path like /Sheet1/B5");
+        var sheetName = segments[0];
+        var cellRef = segments[1].ToUpperInvariant();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(cellRef, @"^[A-Z]+\d+$"))
+            throw new ArgumentException(
+                $"--shift requires a single-cell path; got {cellRef}");
+
+        var worksheet = FindWorksheet(sheetName)
+            ?? throw SheetNotFoundException(sheetName);
+        var sheetData = GetSheet(worksheet).GetFirstChild<SheetData>()
+            ?? throw new ArgumentException("Sheet has no data");
+
+        var (col, rowIdx) = ParseCellReference(cellRef);
+        var colIdx = ColumnNameToIndex(col);
+
+        if (direction == "left")
+            ShiftCellsLeftInRow(sheetData, (uint)rowIdx, colIdx);
+        else
+            ShiftCellsUpInColumn(sheetData, col, rowIdx);
+
+        DeleteCalcChainIfPresent();
+        SaveWorksheet(worksheet);
+        return null;
+    }
+
+    /// <summary>
+    /// Remove the cell at (rowIdx, fromColIdx) and shift every cell with
+    /// col &gt; fromColIdx in the same row left by one.
+    /// </summary>
+    private void ShiftCellsLeftInRow(SheetData sheetData, uint rowIdx, int fromColIdx)
+    {
+        var row = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex?.Value == rowIdx);
+        if (row == null) return;
+
+        foreach (var cell in row.Elements<Cell>().ToList())
+        {
+            if (cell.CellReference?.Value == null) continue;
+            var (cCol, cRow) = ParseCellReference(cell.CellReference.Value);
+            var cColIdx = ColumnNameToIndex(cCol);
+            if (cColIdx == fromColIdx)
+                cell.Remove();
+            else if (cColIdx > fromColIdx)
+                cell.CellReference = $"{IndexToColumnName(cColIdx - 1)}{cRow}";
+        }
+    }
+
+    /// <summary>
+    /// Shift every cell with col &gt;= fromColIdx in the given row right by
+    /// one, opening a gap at (rowIdx, fromColIdx). Used by add cell with
+    /// --prop shift=right.
+    /// </summary>
+    internal void ShiftCellsRightInRow(SheetData sheetData, uint rowIdx, int fromColIdx)
+    {
+        var row = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex?.Value == rowIdx);
+        if (row == null) return;
+
+        // Process in reverse-col order so we don't overwrite a not-yet-shifted ref.
+        var cells = row.Elements<Cell>()
+            .Where(c => c.CellReference?.Value != null)
+            .Select(c => new { Cell = c, ColIdx = ColumnNameToIndex(ParseCellReference(c.CellReference!.Value!).Column) })
+            .Where(t => t.ColIdx >= fromColIdx)
+            .OrderByDescending(t => t.ColIdx)
+            .ToList();
+        foreach (var t in cells)
+        {
+            var pr = ParseCellReference(t.Cell.CellReference!.Value!);
+            t.Cell.CellReference = $"{IndexToColumnName(t.ColIdx + 1)}{pr.Row}";
+        }
+    }
+
+    /// <summary>
+    /// Shift every cell with row &gt;= fromRow in the given column down by
+    /// one, opening a gap at (fromRow, col). Used by add cell with
+    /// --prop shift=down.
+    /// </summary>
+    internal void ShiftCellsDownInColumn(SheetData sheetData, string col, int fromRow)
+    {
+        // Reverse-row order to avoid collisions during rewrite.
+        foreach (var row in sheetData.Elements<Row>().OrderByDescending(r => r.RowIndex?.Value ?? 0))
+        {
+            var rowIdx = (int)(row.RowIndex?.Value ?? 0);
+            if (rowIdx < fromRow) continue;
+
+            var cell = row.Elements<Cell>().FirstOrDefault(c =>
+            {
+                if (c.CellReference?.Value == null) return false;
+                var (cCol, _) = ParseCellReference(c.CellReference.Value);
+                return cCol.Equals(col, StringComparison.OrdinalIgnoreCase);
+            });
+            if (cell != null)
+                cell.CellReference = $"{col}{rowIdx + 1}";
+        }
+    }
+
+    /// <summary>
+    /// Remove the cell at (fromRow, col) and shift every cell with row &gt;
+    /// fromRow in the same column up by one.
+    /// </summary>
+    private void ShiftCellsUpInColumn(SheetData sheetData, string col, int fromRow)
+    {
+        foreach (var row in sheetData.Elements<Row>())
+        {
+            var rowIdx = (int)(row.RowIndex?.Value ?? 0);
+            if (rowIdx < fromRow) continue;
+
+            var cell = row.Elements<Cell>().FirstOrDefault(c =>
+            {
+                if (c.CellReference?.Value == null) return false;
+                var (cCol, _) = ParseCellReference(c.CellReference.Value);
+                return cCol.Equals(col, StringComparison.OrdinalIgnoreCase);
+            });
+            if (cell == null) continue;
+
+            if (rowIdx == fromRow)
+                cell.Remove();
+            else
+                cell.CellReference = $"{col}{rowIdx - 1}";
+        }
+    }
+
     // ==================== Row/Column insert shift ====================
 
     /// <summary>
