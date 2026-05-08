@@ -2,6 +2,7 @@
   "$schema": "../_schema.json",
   "format": "docx",
   "element": "run",
+  "elementAliases": ["r"],
   "parent": "paragraph",
   "operations": {
     "add": true,

@@ -136,6 +136,18 @@ internal static class SchemaHelpLoader
         // 1. Exact filename match (case-insensitive).
         var match = elements.FirstOrDefault(
             e => string.Equals(e, element, StringComparison.OrdinalIgnoreCase));
+
+        // 1b. CONSISTENCY(path-name-vs-schema-name): the path forms used in
+        // /body/p[N], /Sheet1/col[B], /body/tbl[N]/tr[N]/tc[N] etc. don't match
+        // the schema filenames (paragraph, column, table, table-row, table-cell).
+        // Schemas can declare `elementAliases` to publish their path-form names
+        // so `help docx p` ≡ `help docx paragraph`, `help xlsx col` ≡
+        // `help xlsx column`, etc. Resolved by scanning each schema's top-level
+        // elementAliases array on miss.
+        if (match == null)
+        {
+            match = ResolveElementAlias(canonical, element, elements);
+        }
         if (match != null)
         {
             using var stream = OpenSchemaStream(canonical, match)
@@ -181,6 +193,50 @@ internal static class SchemaHelpLoader
         throw new InvalidOperationException(
             $"error: unknown element '{TruncateForError(element, 64)}' for format '{canonical}'.{suggestion}\n" +
             $"Use: officecli help {canonical}");
+    }
+
+    // Per-format alias index: alias -> canonical schema name. Built lazily
+    // from `elementAliases` declared in the schemas of that format.
+    private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> _aliasCache = new();
+    private static readonly object _aliasCacheLock = new();
+
+    private static string? ResolveElementAlias(
+        string canonicalFormat, string requested, IReadOnlyList<string> elements)
+    {
+        IReadOnlyDictionary<string, string> map;
+        lock (_aliasCacheLock)
+        {
+            if (!_aliasCache.TryGetValue(canonicalFormat, out var cached))
+            {
+                var built = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var el in elements)
+                {
+                    using var stream = OpenSchemaStream(canonicalFormat, el);
+                    if (stream == null) continue;
+                    JsonDocument doc;
+                    try { doc = JsonDocument.Parse(stream); }
+                    catch { continue; }
+                    using (doc)
+                    {
+                        if (!doc.RootElement.TryGetProperty("elementAliases", out var aliases)
+                            || aliases.ValueKind != JsonValueKind.Array) continue;
+                        foreach (var a in aliases.EnumerateArray())
+                        {
+                            if (a.ValueKind != JsonValueKind.String) continue;
+                            var name = a.GetString();
+                            if (string.IsNullOrEmpty(name)) continue;
+                            // First declaration wins; report nothing on collision
+                            // (schemas should not declare overlapping aliases).
+                            if (!built.ContainsKey(name!)) built[name!] = el;
+                        }
+                    }
+                }
+                cached = built;
+                _aliasCache[canonicalFormat] = cached;
+            }
+            map = cached;
+        }
+        return map.TryGetValue(requested, out var canonical) ? canonical : null;
     }
 
     /// <summary>

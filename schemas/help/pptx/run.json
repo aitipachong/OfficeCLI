@@ -2,6 +2,7 @@
   "$schema": "../_schema.json",
   "format": "pptx",
   "element": "run",
+  "elementAliases": ["r"],
   "parent": "paragraph",
   "operations": {
     "add": true,

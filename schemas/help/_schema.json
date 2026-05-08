@@ -100,6 +100,11 @@
     "description": {
       "type": "string",
       "description": "element-level description (in addition to per-property descriptions). Used primarily by the synthetic `raw` element."
+    },
+    "elementAliases": {
+      "type": "array",
+      "description": "alternate element names that should resolve to this schema (e.g. `paragraph.json` declares ['p'] so that `help docx p` works the same as `help docx paragraph`). Lets path-form abbreviations used in /body/p[N], /Sheet1/col[B], etc. line up with the help index.",
+      "items": { "type": "string" }
     }
   },
   "additionalProperties": false,

@@ -2,6 +2,7 @@
   "$schema": "../_schema.json",
   "format": "xlsx",
   "element": "column",
+  "elementAliases": ["col"],
   "parent": "sheet",
   "operations": {
     "add": true,
