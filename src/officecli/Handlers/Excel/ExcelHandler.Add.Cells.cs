@@ -196,7 +196,21 @@ public partial class ExcelHandler
             for (int c = 0; c < cols; c++)
             {
                 var colLetter = IndexToColumnName(c + 1);
-                newRow.AppendChild(new Cell { CellReference = $"{colLetter}{rowIdx}" });
+                var newCell = new Cell { CellReference = $"{colLetter}{rowIdx}" };
+                // CONSISTENCY(table-row-cN): pptx AddRow accepts c1=/c2=/... to
+                // populate the new row's cells (PowerPointHandler.Add.Table.cs
+                // L332). Mirror it here so xlsx `add row --prop cols=N c1=...`
+                // is a one-shot row create + fill instead of needing N follow-up
+                // cell Sets. Stored as String-typed inline values; round-trips
+                // via Get("/Sheet/A1").Text.
+                if (properties.TryGetValue($"c{c + 1}", out var cellText) && cellText != null)
+                {
+                    EnsureCellValueLength(cellText, $"{colLetter}{rowIdx}");
+                    var safe = OfficeCli.Core.PivotTableHelper.SanitizeXmlText(cellText);
+                    newCell.CellValue = new CellValue(safe);
+                    newCell.DataType = new EnumValue<CellValues>(CellValues.String);
+                }
+                newRow.AppendChild(newCell);
             }
         }
 
