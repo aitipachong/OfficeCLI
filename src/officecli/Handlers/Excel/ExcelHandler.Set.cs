@@ -488,6 +488,15 @@ public partial class ExcelHandler
                     if (evalResult is { IsRange: true, RangeValue: { Rows: 1, Cols: 1 } rd1 } &&
                         rd1.Cells[0, 0] is { IsError: true } innerErr)
                         evalResult = innerErr;
+                    // BUG R4-C: same Area-of-1x1 unwrap for string / bool / numeric
+                    // results from OFFSET / INDIRECT. Without this the dispatch below
+                    // falls through to the "no value" branch — t and <v> are both
+                    // dropped, producing an on-disk cell that real Excel mis-parses
+                    // (Get reads correctly only because in-memory eval recomputes).
+                    if (evalResult is { IsRange: true, RangeValue: { Rows: 1, Cols: 1 } rd2 }
+                        && rd2.Cells[0, 0] is { } inner
+                        && (inner.IsString || inner.IsBool || inner.IsNumeric || inner.IsError))
+                        evalResult = inner;
                     if (evalResult is { IsNumeric: true })
                     {
                         cell.CellValue = new CellValue(evalResult.ToCellValueText());
