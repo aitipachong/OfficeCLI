@@ -300,6 +300,11 @@ internal static class ParseHelpers
         // BUG-R6-06: alternate Word theme color aliases (windowText / windowBackground)
         // are valid OOXML w:themeColor values that map to dark1/light1.
         "windowText", "windowBackground",
+        // BUG-R7-01: OOXML internal short forms used by PPT a:schemeClr@val.
+        // Accept on input so NormalizeSchemeColorName can map them back to the
+        // canonical user-facing names (dk1→dark1, lt1→light1, tx1→dark1, …).
+        "dk1", "lt1", "dk2", "lt2", "tx1", "tx2", "bg1", "bg2",
+        "hlink", "folHlink",
         "none", "auto",
     };
 
@@ -334,6 +339,17 @@ internal static class ParseHelpers
             "background2" => "light2",
             "windowtext" => "dark1",
             "windowbackground" => "light1",
+            // OOXML internal short forms (used by PPT a:schemeClr@val).
+            "dk1" => "dark1",
+            "dk2" => "dark2",
+            "lt1" => "light1",
+            "lt2" => "light2",
+            "tx1" => "dark1",
+            "tx2" => "dark2",
+            "bg1" => "light1",
+            "bg2" => "light2",
+            "hlink" => "hyperlink",
+            "folhlink" => "followedHyperlink",
             _ => v,
         };
     }
@@ -398,8 +414,8 @@ internal static class ParseHelpers
                 : "";
             throw new ArgumentException(
                 $"Invalid color value: '{value}'. Expected 6-digit hex RGB (e.g. FF0000), " +
-                $"8-digit AARRGGBB (e.g. 80FF0000), named color (e.g. red), " +
-                $"or rgb() notation (e.g. rgb(255,0,0))." + schemeHint);
+                $"8-digit AARRGGBB (e.g. 80FF0000), 3-digit shorthand (e.g. F00), " +
+                $"named color (e.g. red), or rgb() notation (e.g. rgb(255,0,0))." + schemeHint);
         }
 
         return (hex, null);

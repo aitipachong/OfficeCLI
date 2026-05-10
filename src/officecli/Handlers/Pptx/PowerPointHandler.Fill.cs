@@ -92,7 +92,8 @@ public partial class PowerPointHandler
         var rgbEl = solidFill.GetFirstChild<Drawing.RgbColorModelHex>();
         if (rgbEl?.Val?.Value != null) return FormatHexWithAlpha(rgbEl);
         var scheme = solidFill.GetFirstChild<Drawing.SchemeColor>()?.Val;
-        if (scheme?.HasValue == true) return scheme.InnerText;
+        if (scheme?.HasValue == true)
+            return ParseHelpers.NormalizeSchemeColorName(scheme.InnerText) ?? scheme.InnerText;
         return null;
     }
 
