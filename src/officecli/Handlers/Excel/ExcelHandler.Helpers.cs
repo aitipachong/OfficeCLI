@@ -681,7 +681,21 @@ public partial class ExcelHandler
     internal static string SanitizeTableIdentifier(string? name, bool userProvided = false)
     {
         if (string.IsNullOrEmpty(name)) return "_";
-        if (userProvided) return name;
+        if (userProvided)
+        {
+            // Mac Excel rejects the "Tbl{N}" pattern (Excel's internal table
+            // identifier prefix), silently renaming with a "_" suffix and
+            // triggering "found a problem" repair dialog on open. Block it
+            // up front so users get a clear error instead of the repair flow.
+            // Windows Excel auto-recovers silently which historically masked
+            // this on officeshot Windows-side validation. "Tbl" alone or
+            // "Tbl"+letters (e.g. "TblData") are NOT rejected — only the
+            // exact Tbl-followed-by-digits pattern collides.
+            if (System.Text.RegularExpressions.Regex.IsMatch(name, @"^[Tt][Bb][Ll]\d+$"))
+                throw new ArgumentException(
+                    $"Table name '{name}' matches Excel's internal Tbl{{N}} naming pattern and is rejected by Mac Excel. Use 'Table{{N}}' (default) or a descriptive name like 'SalesData'.");
+            return name;
+        }
         var looksLikeRef = LooksLikeCellReference(name)
             || System.Text.RegularExpressions.Regex.IsMatch(name, @"^[0-9]+$");
         return looksLikeRef ? name + "_" : name;
