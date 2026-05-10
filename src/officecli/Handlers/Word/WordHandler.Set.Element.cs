@@ -1582,6 +1582,21 @@ public partial class WordHandler
                                 totalSpan -= nextCell.TableCellProperties?.GridSpan?.Val?.Value ?? 1;
                                 nextCell.Remove();
                             }
+                            // BUG-R1-table-merge: un-merge (typically newSpan=1
+                            // shrinking from a prior larger gridSpan) leaves
+                            // the row short of the table's grid column count.
+                            // Insert empty placeholder cells immediately after
+                            // the anchor so the row matches the grid again.
+                            // CONSISTENCY(table-grid-pad): mirrors AddRow grid-
+                            // expansion padding in WordHandler.Add.Table.cs.
+                            while (totalSpan < gridCols)
+                            {
+                                var padPara = new Paragraph();
+                                AssignParaId(padPara);
+                                var padCell = new TableCell(padPara);
+                                cell.InsertAfterSelf(padCell);
+                                totalSpan += 1;
+                            }
                         }
                     }
                     break;
