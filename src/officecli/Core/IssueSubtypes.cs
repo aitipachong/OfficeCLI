@@ -69,6 +69,9 @@ public static class IssueSubtypes
             + string.Join(", ", defaults) + ". "
             + "Opt-in only (request by exact name; not included in --type content): "
             + string.Join(", ", OptInSubtypes) + ". "
+            + "Subtypes are format-specific — formula_* / chart_* / definedname_* apply to xlsx, "
+            + "field_* to docx, slide_field_* to pptx; requesting a subtype that does not apply to "
+            + "the queried file returns count=0 (not an error). "
             + "All values are case-insensitive and surrounding whitespace is trimmed.";
     }
 
