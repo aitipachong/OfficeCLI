@@ -488,6 +488,55 @@ public partial class ExcelHandler
             }
         }
 
+        // Defined names whose body references a sheet that no longer exists.
+        // Excel persists the stale ref (or writes #REF!) and silently returns
+        // 0 in any formula using the name — see ResolveSheetCellResult. The
+        // B3 fix in d535587a catches literal `<definedName>#REF!</definedName>`
+        // bodies; this scanner catches the still-formula-shaped form like
+        // `<definedName>Sheet99!A1:B3</definedName>` where Sheet99 was deleted
+        // before the name was cleaned up.
+        var workbook = _doc.WorkbookPart?.Workbook;
+        var definedNames = workbook?.DefinedNames?.Elements<DefinedName>();
+        if (definedNames != null)
+        {
+            foreach (var dn in definedNames)
+            {
+                if (limit.HasValue && issues.Count >= limit.Value) break;
+                var body = dn.Text?.Trim();
+                var name = dn.Name?.Value;
+                if (string.IsNullOrEmpty(body) || string.IsNullOrEmpty(name)) continue;
+                // Body that is an error literal (#REF!) is already handled
+                // by the evaluator's TT.Error path (B3 fix) — that branch
+                // propagates the error to formulas. Surface it as an issue
+                // too so it's discoverable.
+                if (body.StartsWith('#') && body.EndsWith('!'))
+                {
+                    issues.Add(new DocumentIssue
+                    {
+                        Id = $"D{++issueNum}",
+                        Type = IssueType.Content,
+                        Severity = IssueSeverity.Error,
+                        Path = $"/namedrange[{name}]",
+                        Message = $"Defined name '{name}' has error body {body}",
+                        Context = body,
+                        Suggestion = "Rebind to a valid range or remove the name."
+                    });
+                    continue;
+                }
+                if (!ChartRefSheetExists(body, out var missingSheet)) continue;
+                issues.Add(new DocumentIssue
+                {
+                    Id = $"D{++issueNum}",
+                    Type = IssueType.Content,
+                    Severity = IssueSeverity.Error,
+                    Path = $"/namedrange[{name}]",
+                    Message = $"Defined name '{name}' references missing sheet '{missingSheet}'",
+                    Context = body,
+                    Suggestion = "Restore the sheet or rebind the name to an existing range."
+                });
+            }
+        }
+
         // Chart series references pointing at sheets / cells that no longer
         // exist — same observability family as formula_not_evaluated.
         // Excel won't refuse to load a chart whose series formula references
