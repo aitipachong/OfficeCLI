@@ -869,6 +869,11 @@ public partial class ExcelHandler
             ?? properties.GetValueOrDefault("data")
             ?? throw new ArgumentException("Sparkline requires 'dataRange' (or 'range'/'data') property (e.g. A1:E1)");
 
+        // OOXML xm:sqref is ST_Sqref (bare cell address, no sheet prefix —
+        // sheet is implied by the parent worksheet). Excel silently drops the
+        // entire <extLst> on load if sqref carries a sheet prefix.
+        spkCell = NormalizeSparklineSqref(spkCell, spkSheetName);
+
         // Determine sparkline type
         // bt-2: reject invalid types (e.g. "bar") instead of silently mapping
         // to Line. Sparkline OOXML has exactly three types: line/column/stacked

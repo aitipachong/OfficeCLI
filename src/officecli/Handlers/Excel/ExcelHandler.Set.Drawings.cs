@@ -84,11 +84,15 @@ public partial class ExcelHandler
                 }
                 case "location" or "cell":
                 {
+                    // CONSISTENCY(sparkline-sqref): mirrors AddSparkline — strip sheet
+                    // prefix so <xm:sqref> stays bare ST_Sqref. Without this, Excel
+                    // silently drops the entire <extLst> on load.
+                    var newSqref = NormalizeSparklineSqref(value, spkSheet);
                     foreach (var spk in spkGroup.Descendants<X14.Sparkline>())
                     {
                         var r = spk.GetFirstChild<DocumentFormat.OpenXml.Office.Excel.ReferenceSequence>();
-                        if (r != null) r.Text = value;
-                        else spk.AppendChild(new DocumentFormat.OpenXml.Office.Excel.ReferenceSequence(value));
+                        if (r != null) r.Text = newSqref;
+                        else spk.AppendChild(new DocumentFormat.OpenXml.Office.Excel.ReferenceSequence(newSqref));
                     }
                     break;
                 }

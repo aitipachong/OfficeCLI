@@ -150,9 +150,19 @@ public static class BatchEmitter
         EmitThemeRaw(word, items);
         EmitSettingsRaw(word, items);
         EmitSection(word, items);
-        EmitHeadersFooters(word, items);
+        // Headers/footers run AFTER body: multi-section docs now emit
+        // `add header parent="/section[N]"` (see EmitHeaderFooterPart), and
+        // the /section[N] resolver only finds the carrier paragraph after
+        // EmitBody has added it. Without body in place, every /section[N]
+        // resolved to the body-level sectPr (the last section's), so
+        // adding header type=default to two different sections collided
+        // ("already exists in this section"). Body→header direction has
+        // no replay-time dependency: header parts (PAGE/PAGEREF fields,
+        // etc.) resolve their cross-refs at render time, not at batch-
+        // apply time.
         var paraIdToTargetIdx = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         EmitBody(word, items, paraIdToTargetIdx);
+        EmitHeadersFooters(word, items);
         EmitComments(word, items, paraIdToTargetIdx);
         return items;
     }
@@ -163,12 +173,27 @@ public static class BatchEmitter
         // XML that users rarely modify property-by-property; the natural
         // operation is "swap the entire theme block". Raw-set replace fits
         // that model exactly. Word.Raw returns the literal string
-        // "(no theme)" when the part is missing — gate on a leading '<' so
-        // we only emit when there's real XML to ship.
+        // "(no theme)" when the part is missing.
+        //
+        // ALWAYS emit, even for source docs that have no theme part. The
+        // blank target auto-stamps theme1.xml (for Word/LibreOffice render
+        // parity), so silently skipping the emit caused dump∘replay∘dump
+        // to drift by +1 item every pass: dump-1 saw no theme and
+        // emitted nothing; replay left blank's theme in place; dump-2
+        // saw blank's theme and emitted it. Dump-1 now emits an empty
+        // <a:theme/> placeholder for theme-less sources, which the apply
+        // path overwrites blank's seeded theme with — making dump-2 see
+        // the same empty theme and emit the same placeholder. Fixed point.
         string xml;
         try { xml = word.Raw("/theme"); }
-        catch { return; }
-        if (string.IsNullOrEmpty(xml) || !xml.StartsWith("<")) return;
+        catch { xml = ""; }
+        if (string.IsNullOrEmpty(xml) || !xml.StartsWith("<"))
+            // name="Office Theme" matches what Open XML SDK's Theme class
+            // auto-stamps on save. Without it, dump-2's read-back picks up
+            // the SDK-added attribute and emits a name-bearing placeholder,
+            // breaking the fixed point on the very first byte after the
+            // namespace declaration.
+            xml = "<a:theme xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" name=\"Office Theme\" />";
 
         items.Add(new BatchItem
         {
@@ -188,10 +213,19 @@ public static class BatchEmitter
         // way to keep Word feature toggles (evenAndOddHeaders, mirrorMargins,
         // schema-pegged compat options, …) round-tripped without
         // per-property allowlisting.
+        //
+        // ALWAYS emit, even for source docs without a settings part. The
+        // blank target auto-stamps a settings.xml (characterSpacingControl
+        // + compat block), so silently skipping the emit caused the same
+        // idempotency drift as EmitThemeRaw: dump-1 saw no settings and
+        // emitted nothing, dump-2 saw blank's leftover and emitted it.
+        // Empty placeholder clears blank's seeded settings so dump-2
+        // reads the same empty state and emits the same placeholder.
         string xml;
         try { xml = word.Raw("/settings"); }
-        catch { return; }
-        if (string.IsNullOrEmpty(xml) || !xml.StartsWith("<")) return;
+        catch { xml = ""; }
+        if (string.IsNullOrEmpty(xml) || !xml.StartsWith("<"))
+            xml = "<w:settings xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" />";
 
         items.Add(new BatchItem
         {
@@ -240,15 +274,23 @@ public static class BatchEmitter
         // `type` prop (default/first/even) instead of always emitting
         // "default" — which on a doc with both default + first headers
         // throws "Header of type 'default' already exists" on replay.
-        var headerPathToType = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var footerPathToType = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        // BUG-R5-2 / R5-F2: headerRef.<type> / footerRef.<type> live on
-        // **section** nodes (see WordHandler.Query.cs:902), not on root.
-        // The earlier R4 fix scanned root.Format and silently found nothing,
-        // so every emitted header/footer was typed "default" — round-trip
-        // failed when a doc had both default + first headers. Walk all
-        // section children to build the path→type map.
-        void HarvestRefs(DocumentNode node)
+        // In addition to (path → type), track which section's headerRef /
+        // footerRef points at the part. Multi-section docs with per-section
+        // default headers used to all emit `add header parent="/"` —
+        // AddHeader resolves "/" to a single sectPr, so the 2nd-and-later
+        // default headers tripped "Header of type 'default' already exists"
+        // on replay. Emit `parent=/section[N]` so each header targets its
+        // true owning section (mirrors ResolveTargetSectPrForHeaderFooter's
+        // /section[N] resolver).
+        var headerPathInfo = new Dictionary<string, (string Type, string? SectionPath)>(StringComparer.OrdinalIgnoreCase);
+        var footerPathInfo = new Dictionary<string, (string Type, string? SectionPath)>(StringComparer.OrdinalIgnoreCase);
+        // headerRef.<type> / footerRef.<type> live on **section** nodes
+        // (see WordHandler.Query.cs:902), not on root. An earlier fix
+        // scanned root.Format and silently found nothing, so every emitted
+        // header/footer was typed "default" — round-trip failed when a doc
+        // had both default + first headers. Walk all section children to
+        // build the path→type map.
+        void HarvestRefs(DocumentNode node, string? sectionPath)
         {
             foreach (var (key, val) in node.Format)
             {
@@ -258,54 +300,66 @@ public static class BatchEmitter
                 if (key.StartsWith("headerRef.", StringComparison.OrdinalIgnoreCase))
                 {
                     var t = key["headerRef.".Length..];
-                    if (!headerPathToType.ContainsKey(s)) headerPathToType[s] = t;
+                    if (!headerPathInfo.ContainsKey(s))
+                        headerPathInfo[s] = (t, sectionPath);
                 }
                 else if (key.StartsWith("footerRef.", StringComparison.OrdinalIgnoreCase))
                 {
                     var t = key["footerRef.".Length..];
-                    if (!footerPathToType.ContainsKey(s)) footerPathToType[s] = t;
+                    if (!footerPathInfo.ContainsKey(s))
+                        footerPathInfo[s] = (t, sectionPath);
                 }
             }
         }
-        HarvestRefs(root);
+        // Harvest sections FIRST so real section attribution wins over the
+        // body-level sectPr fallback. Then harvest root: root.Format mirrors
+        // the body-level <w:sectPr> (which OOXML treats as the FINAL section's
+        // properties), so any ref that only appears at root belongs to the
+        // last section. Emitting `parent="/"` for those is fine because
+        // AddHeader's `/` resolver also falls back to the body-level sectPr —
+        // both ends agree on the same section. Earlier the order was reversed
+        // (root first, sections second) and the `if !ContainsKey` guard
+        // wrongly let root entries shadow real section attribution.
+        List<DocumentNode> sectionList = new();
         try
         {
             var sections = word.Query("section");
-            if (sections != null)
-            {
-                foreach (var sec in sections) HarvestRefs(sec);
-            }
+            if (sections != null) sectionList = sections.ToList();
         }
         catch { /* missing section info — fall through with default typing */ }
+        foreach (var sec in sectionList) HarvestRefs(sec, sec.Path);
+        var rootFallbackSection = sectionList.Count > 0 ? sectionList[^1].Path : null;
+        HarvestRefs(root, rootFallbackSection);
 
         int hIdx = 0, fIdx = 0;
         foreach (var child in root.Children)
         {
             if (child.Type == "header")
             {
-                // BUG-DUMP23-03: skip orphaned header parts (present in the
-                // package but not referenced by any section's w:headerReference).
-                // Re-emitting them as `add header type=default` collides with
+                // Skip orphaned header parts (present in the package but
+                // not referenced by any section's w:headerReference). Re-
+                // emitting them as `add header type=default` collides with
                 // the real default header on batch replay ("Header of type
-                // 'default' already exists"). Only re-emit parts that a section
-                // actually links to.
-                if (!headerPathToType.TryGetValue(child.Path, out var ht)) continue;
+                // 'default' already exists"). Only re-emit parts that a
+                // section actually links to.
+                if (!headerPathInfo.TryGetValue(child.Path, out var hi)) continue;
                 hIdx++;
-                EmitHeaderFooterPart(word, child.Path, "header", hIdx, items, ht);
+                EmitHeaderFooterPart(word, child.Path, "header", hIdx, items, hi.Type, hi.SectionPath);
             }
             else if (child.Type == "footer")
             {
-                // BUG-DUMP23-03: same orphan guard as header above.
-                if (!footerPathToType.TryGetValue(child.Path, out var ft)) continue;
+                // Same orphan guard as header above.
+                if (!footerPathInfo.TryGetValue(child.Path, out var fi)) continue;
                 fIdx++;
-                EmitHeaderFooterPart(word, child.Path, "footer", fIdx, items, ft);
+                EmitHeaderFooterPart(word, child.Path, "footer", fIdx, items, fi.Type, fi.SectionPath);
             }
         }
     }
 
     private static void EmitHeaderFooterPart(WordHandler word, string sourcePath, string kind,
                                              int targetIndex, List<BatchItem> items,
-                                             string subTypeOverride = "default")
+                                             string subTypeOverride = "default",
+                                             string? sectionParent = null)
     {
         var partNode = word.Get(sourcePath);
         // BUG-DUMP9-08: tables are valid block-level OOXML inside hdr/ftr
@@ -332,7 +386,13 @@ public static class BatchEmitter
         items.Add(new BatchItem
         {
             Command = "add",
-            Parent = "/",
+            // Route per-section headers/footers to their owning section
+            // (e.g. /section[2]) instead of root "/", so multi-section docs
+            // that carry one default header per section don't collide on
+            // replay. Falls back to "/" when the part is not owned by any
+            // section in the harvested map (defensive — EmitHeadersFooters
+            // already filters orphans before reaching here).
+            Parent = sectionParent ?? "/",
             Type = kind,
             Props = new Dictionary<string, string> { ["type"] = subType }
         });
@@ -509,6 +569,45 @@ public static class BatchEmitter
         "columns.",
     };
 
+    // Captured once per process: blank doc's `Get("/")` root Format, normalized
+    // to string values. Used by EmitSection to skip keys whose source value
+    // matches what BlankDocCreator stamps — those keys would otherwise leak
+    // from blank into the replay target and re-appear on the next dump,
+    // breaking dump-then-replay-then-dump idempotency.
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> _blankRootBaseline =
+        new(ComputeBlankRootBaseline);
+
+    private static IReadOnlyDictionary<string, string> ComputeBlankRootBaseline()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(),
+            $"officecli_blank_baseline_{Guid.NewGuid():N}.docx");
+        try
+        {
+            OfficeCli.BlankDocCreator.Create(tempPath);
+            using var handler = new OfficeCli.Handlers.WordHandler(tempPath, editable: false);
+            var root = handler.Get("/");
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (k, v) in root.Format)
+            {
+                if (v == null) continue;
+                var s = v switch { bool b => b ? "true" : "false", _ => v.ToString() ?? "" };
+                if (s.Length > 0) result[k] = s;
+            }
+            return result;
+        }
+        catch
+        {
+            // If baseline computation fails (test harness with no temp path
+            // access, etc.), fall back to an empty baseline. EmitSection then
+            // behaves as it did before this change.
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
+    }
+
     private static void EmitSection(WordHandler word, List<BatchItem> items)
     {
         var root = word.Get("/");
@@ -525,6 +624,7 @@ public static class BatchEmitter
         {
             root.Format.Remove("protection");
         }
+        var blankBaseline = _blankRootBaseline.Value;
         var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (k, v) in root.Format)
         {
@@ -543,7 +643,21 @@ public static class BatchEmitter
             if (!include) continue;
             if (v == null) continue;
             var s = v switch { bool b => b ? "true" : "false", _ => v.ToString() ?? "" };
-            if (s.Length > 0) props[k] = s;
+            if (s.Length == 0) continue;
+            // Skip when the source's value already matches what BlankDocCreator
+            // would stamp. Otherwise dump-then-replay leaves blank's value on
+            // the target unchanged, but the SECOND dump picks it up (because
+            // the value is now explicit in the part) and emits a `set /` row
+            // dump-1 had skipped — losing idempotency. Symmetry: dump-2
+            // applies the same rule and also skips. The existing
+            // docDefaults.font.latin="" clear below is the inverse case
+            // (blank's value is undesirable — actively clear it).
+            if (blankBaseline.TryGetValue(k, out var blankVal)
+                && string.Equals(blankVal, s, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            props[k] = s;
         }
         // docDefaults.font side-effect: the bare TrySetDocDefaults("docdefaults.font", v)
         // case writes ALL four font slots (Ascii/HAnsi/EastAsia/ComplexScript)
@@ -589,6 +703,28 @@ public static class BatchEmitter
         // addressable on the Get side (style paths resolve by id, not by
         // index). Query produces id-based paths and excludes docDefaults.
         var styles = word.Query("style");
+        // Blank-baseline cleanup: BlankDocCreator always stamps a Normal
+        // style (for Word/LibreOffice render parity — Calibri 11pt, 1.08x
+        // line). When the source has no entry for styleId="Normal",
+        // skipping the emit leaks the blank's stamped Normal into the
+        // replay target — dump-2's dump then emits it as a phantom
+        // `add /styles Normal`, breaking idempotency. Always prepend a
+        // remove-Normal so target's styles end up matching source's
+        // (idempotent: Remove of a missing style is a soft success).
+        // When source HAS Normal, EmitStyles below recreates it via the
+        // builtin-name upsert path; the redundant remove is harmless and
+        // keeps the wire format independent of source/blank divergence.
+        bool sourceHasNormal = styles.Any(s =>
+            string.Equals(s.Format.TryGetValue("id", out var v) ? v?.ToString() : null,
+                          "Normal", StringComparison.Ordinal));
+        if (!sourceHasNormal)
+        {
+            items.Add(new BatchItem
+            {
+                Command = "remove",
+                Path = "/styles/Normal",
+            });
+        }
         foreach (var stub in styles)
         {
             // CONSISTENCY(slash-in-style-id): style ids/names containing '/'
@@ -1770,26 +1906,81 @@ public static class BatchEmitter
         {
             colsFromGrid = gridCols;
         }
+        // Format["cols"] back-fills from first-row cell count when source has
+        // no <w:tblGrid> at all, so it can't tell us "source had zero gridCol".
+        // _gridCols is the unbiased count (Navigation emits 0 when TableGrid
+        // is missing or empty). EmitTable uses this to drive the gridCols=0
+        // opt-out on the dumped `add table`.
+        int actualGridCols = colsFromGrid;
+        if (tableNode.Format.TryGetValue("_gridCols", out var actualGridObj) &&
+            int.TryParse(actualGridObj?.ToString(), out var ag))
+        {
+            actualGridCols = ag;
+        }
         int cols = Math.Max(colsFromGrid, colsFromRows);
         if (cols == 0) return;
 
         var tableProps = FilterEmittableProps(tableNode.Format);
         tableProps["rows"] = rows.Count.ToString();
         tableProps["cols"] = cols.ToString();
+        // Source had no <w:tblGrid> or an empty one — cells (if any) carry
+        // their own tcW, or the table is auto-fit. Without an explicit
+        // `gridCols=0`, AddTable would seed `cols` default GridColumn entries
+        // which ReadCellProps then back-fills as per-cell widths on the next
+        // dump, producing N×M extra `set tc width=…` rows the source never
+        // had (test.docx tbl[1]). Signal AddTable to leave tblGrid empty.
+        if (actualGridCols == 0)
+            tableProps["gridCols"] = "0";
+        // Drop the internal-only marker from emitted props (BatchItem.Props
+        // never carries it; only Navigation→EmitTable consumes it).
+        tableProps.Remove("_gridCols");
         // BUG-R2-P1-5: AddTable seeds all 6 default borders and overlays user
         // props on top, so a partial border spec (e.g. only border.top +
         // border.bottom for a banner-line table) replays as 6 single-borders.
         // If the source table emits only a subset of the 6 sides, prepend an
         // explicit `border=none` wipe so the visible result round-trips.
         // CONSISTENCY(border-default-overlay).
+        //
+        // The same fix applies to the zero-sides case: source tables with no
+        // <w:tblBorders> at all (Word treats as no rules) used to replay as
+        // 6 single-borders because EmitTable emitted no border prop and
+        // AddTable's default-overlay won. The second dump then saw the
+        // stamped borders and emitted six border.* props that the first
+        // dump didn't — a 6× length asymmetry per affected table. Extend
+        // the wipe to fire whenever no per-side / no-border-all key is
+        // present in source's emit.
         {
             var sideKeys = new[] { "border.top", "border.bottom", "border.left",
                 "border.right", "border.insideH", "border.insideV" };
             int presentSides = sideKeys.Count(s => tableProps.ContainsKey(s));
             bool hasBorderAll = tableProps.ContainsKey("border") || tableProps.ContainsKey("border.all");
-            if (presentSides > 0 && presentSides < 6 && !hasBorderAll)
+            if (presentSides < 6 && !hasBorderAll)
             {
-                tableProps["border"] = "none";
+                // Use the canonical "style;size" form: ApplyTableBorders'
+                // ParseBorderValue defaults size=4 for `none`, so writing
+                // `none;4` matches what the round-trip produces (six explicit
+                // <w:none w:sz="4"> elements collapsed by the all-same fold
+                // below). Without the `;4`, the FIRST dump emits `border=none`
+                // and the SECOND dump emits `border=none;4` — non-idempotent
+                // value shape.
+                tableProps["border"] = "none;4";
+            }
+            // Symmetric collapse: when all 6 sides carry the IDENTICAL folded
+            // value (same style + sz + color + space), prefer the compact
+            // `border=<v>` form so dump round-trips that started from
+            // "no <w:tblBorders>" (whose first emit becomes `border=none`)
+            // re-emit the same single key after replay rather than fanning
+            // out to six explicit per-side rows. ApplyTableBorders interprets
+            // `border=<v>` as "set all 6 sides to <v>", so the visible result
+            // is identical either way.
+            else if (presentSides == 6 && !hasBorderAll)
+            {
+                var first = tableProps[sideKeys[0]];
+                if (sideKeys.All(s => tableProps[s] == first))
+                {
+                    foreach (var s in sideKeys) tableProps.Remove(s);
+                    tableProps["border"] = first;
+                }
             }
         }
         // Nested tables sit inside a parent table cell; AddTable accepts
@@ -2477,9 +2668,25 @@ public static class BatchEmitter
                 else if (string.Equals(k, "shading.fill", StringComparison.OrdinalIgnoreCase)) sFill = v.ToString();
                 else if (string.Equals(k, "shading.color", StringComparison.OrdinalIgnoreCase)) sColor = v.ToString();
             }
+            // shading.val="clear" with no fill/color is OOXML's "no shading"
+            // form (<w:shd w:val="clear" w:fill="auto"/>). Emitting bare
+            // "clear" without semicolons makes the Set/Add color parser
+            // treat the whole value as a color name and reject it. Skip
+            // the shading emit in this case — semantically identical to
+            // the schema default (no shading).
+            bool shadingIsEffectivelyNone = sVal != null
+                && string.Equals(sVal, "clear", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(sFill)
+                && string.IsNullOrEmpty(sColor);
+            // shadingPresent gates the drop-subkeys loop below. Set true in
+            // both the real-shading case and the effectively-none case so
+            // the raw `shading.val=clear` etc. don't leak through as
+            // UNSUPPORTED top-level props on Add. Only the real-shading
+            // case populates shadingFolded; effectively-none emits nothing.
             if (sVal != null || sFill != null || sColor != null)
-            {
                 shadingPresent = true;
+            if (!shadingIsEffectivelyNone && shadingPresent)
+            {
                 // AddText format: VAL;FILL[;COLOR]. Default val to "clear" when
                 // only fill is present (mirrors AddText's single-arg path).
                 var val = string.IsNullOrEmpty(sVal) ? "clear" : sVal;
@@ -2528,11 +2735,35 @@ public static class BatchEmitter
             // UNSUPPORTED, silently losing every asymmetric per-cell margin.
         }
 
+        // <w:spacing w:line="0" w:lineRule="atLeast"> in the source means
+        // "no minimum line height" — Word treats it as auto. Get surfaces
+        // it as lineSpacing="0pt", but SpacingConverter rejects 0 on the
+        // Set/Add path (w:line=0 is undefined OOXML; Word silently single-
+        // spaces). Round-trip would fail with "Line spacing must be greater
+        // than 0". Drop the zero-value pair on emit so the replayed
+        // paragraph/style inherits the carrier's default — same visible
+        // result as the source's "no minimum" semantics.
+        bool dropLineSpacingZero = false;
+        if (raw.TryGetValue("lineSpacing", out var lsVal) && lsVal is string lsStr)
+        {
+            var t = lsStr.Trim();
+            if (t == "0" || t == "0pt" || t == "0.0pt" || t == "0x" || t == "0%")
+                dropLineSpacingZero = true;
+        }
+
         foreach (var (key, val) in raw)
         {
             if (SkipKeys.Contains(key)) continue;
             if (key.StartsWith("effective.", StringComparison.OrdinalIgnoreCase)) continue;
             if (key.EndsWith(".cs.source", StringComparison.OrdinalIgnoreCase)) continue;
+
+            // lineSpacing="0pt" companion drop — see fold comment above the loop.
+            if (dropLineSpacingZero &&
+                (string.Equals(key, "lineSpacing", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(key, "lineRule", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
 
             // padding.* fold: drop sub-keys; emit single `padding` if uniform.
             if (paddingFoldable && key.StartsWith("padding.", StringComparison.OrdinalIgnoreCase))

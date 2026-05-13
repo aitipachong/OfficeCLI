@@ -5,6 +5,16 @@
 // Ensure UTF-8 output on all platforms (Windows defaults to system codepage e.g. GBK)
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+// officecli is a CLI / AI tool that produces machine-format output (OOXML,
+// JSON, CSS, canonical DocumentNode.Format values) and accepts the same on
+// input. All three formats fix '.' as the decimal separator. Pin the
+// process-wide culture to invariant so every interpolated double, ToString,
+// and TryParse uses '.' regardless of the user's regional settings —
+// otherwise nl-NL / de-DE / fr-FR users see '141,73pt' in CSS, '0,5' in
+// `get --json` output, and silently-zero numCache reads in charts.
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+
 // Internal commands (spawned as separate processes, not user-facing)
 if (args.Length == 1 && args[0] == "__update-check__")
 {

@@ -517,6 +517,25 @@ public partial class WordHandler
             "Quote", "IntenseQuote", "ListParagraph", "NoSpacing", "TOCHeading",
             "DefaultParagraphFont", "TableNormal", "NoList",
         };
+        // Built-in style display names (parallel to the id set above). The
+        // dump→batch input often carries `id="1" name="Normal"` — numeric
+        // styleIds from the source doc paired with canonical built-in display
+        // names from that doc's styles.xml. The id-based upsert above misses
+        // this case because the blank template's "Normal" lives at
+        // styleId="Normal", not "1", so IdTaken("1") is false and the strict
+        // name check below throws. Track built-in names too so name-side
+        // collisions with a built-in entry trigger the same upsert. OOXML
+        // built-in display names follow Word's styles.xml convention
+        // (heading names are lowercase + space).
+        var builtInNamesForUpsert = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Normal",
+            "heading 1", "heading 2", "heading 3", "heading 4", "heading 5",
+            "heading 6", "heading 7", "heading 8", "heading 9",
+            "Title", "Subtitle", "Quote", "Intense Quote",
+            "List Paragraph", "No Spacing", "TOC Heading",
+            "Default Paragraph Font", "Table Normal", "No List",
+        };
         if (IdTaken(styleId))
         {
             if (builtInIdsForUpsert.Contains(styleId))
@@ -550,8 +569,31 @@ public partial class WordHandler
         // above) is allowed to repeat — multiple unnamed styles round-trip
         // from real docx files where the author left out the display name.
         if (!string.IsNullOrEmpty(styleName) && NameTaken(styleName))
-            throw new ArgumentException(
-                $"Style with name '{styleName}' already exists. Pick a unique --prop name.");
+        {
+            // Name-side upsert: mirror the styleId branch above but key on
+            // display name. Covers dump→batch where the caller carries the
+            // source doc's numeric/custom styleId alongside a canonical
+            // built-in name (e.g. id="1" name="Normal" from gov.cn corpus).
+            // Drop the colliding built-in definition and fall through so
+            // AddStyle creates the user's style with their full property
+            // bag. Non-built-in name collisions (custom display names)
+            // still throw — strictness preserved for user-authored
+            // duplicates.
+            var existingByName = stylesPart.Styles.Elements<Style>()
+                .FirstOrDefault(s => string.Equals(s.StyleName?.Val?.Value, styleName, StringComparison.Ordinal));
+            var existingIsBuiltIn = existingByName != null
+                && ((existingByName.StyleId?.Value is { } eId && builtInIdsForUpsert.Contains(eId))
+                    || builtInNamesForUpsert.Contains(styleName));
+            if (existingIsBuiltIn)
+            {
+                existingByName!.Remove();
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"Style with name '{styleName}' already exists. Pick a unique --prop name.");
+            }
+        }
 
         // Built-in styles must not have customStyle=true, or Word won't recognize them
         // (e.g. TOC won't find Heading1 if it's marked as custom).

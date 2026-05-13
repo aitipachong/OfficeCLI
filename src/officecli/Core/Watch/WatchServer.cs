@@ -968,6 +968,32 @@ internal class WatchServer : IDisposable
     /// </summary>
     private static string? FindDataPathInHtml(string html, string path)
     {
+        // CONSISTENCY(pptx-group-flatten): query may emit paths that point
+        // inside a group (`/slide[1]/group[2]/shape[3]`), but HtmlPreview
+        // currently only emits data-path on the outer group — see the
+        // CONSISTENCY note in PowerPointHandler.HtmlPreview.Shapes.cs:~1040.
+        // If the exact path isn't in the rendered HTML, walk up one segment
+        // at a time and try again so a mark on a group-internal shape
+        // resolves to the nearest ancestor that *is* rendered. Text-based
+        // find/replace still runs against the ancestor's full text content,
+        // so highlighting + find still work — only the visual outline drops
+        // to the group level.
+        var direct = FindDataPathInHtmlExact(html, path);
+        if (direct != null) return direct;
+
+        var current = path;
+        while (true)
+        {
+            var lastSlash = current.LastIndexOf('/');
+            if (lastSlash <= 0) return null;
+            current = current.Substring(0, lastSlash);
+            var hit = FindDataPathInHtmlExact(html, current);
+            if (hit != null) return hit;
+        }
+    }
+
+    private static string? FindDataPathInHtmlExact(string html, string path)
+    {
         if (string.IsNullOrEmpty(html) || string.IsNullOrEmpty(path)) return null;
         // Anchor the search on the data-path attribute. Path may contain [] so
         // we match it as a literal substring inside quotes.
@@ -1046,7 +1072,10 @@ internal class WatchServer : IDisposable
         if (dpMatch.Success)
         {
             var path = dpMatch.Groups[1].Value;
-            return html.IndexOf("data-path=\"" + path + "\"", StringComparison.Ordinal) >= 0;
+            // CONSISTENCY(pptx-group-flatten): mirror FindDataPathInHtml's
+            // ancestor fallback so a goto target inside a group still scrolls
+            // to the nearest rendered ancestor instead of being rejected.
+            return FindDataPathInHtml(html, path) != null;
         }
 
         // #anchor-id form
