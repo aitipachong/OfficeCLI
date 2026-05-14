@@ -939,6 +939,14 @@ public partial class WordHandler
     {
         var unsupported = new List<string>();
         var pProps = para.ParagraphProperties ?? para.PrependChild(new ParagraphProperties());
+        // CONSISTENCY(markRPr-pre-existed-snapshot): captured ONCE before
+        // the property iteration starts. The per-iteration pmrpExisting
+        // check inside the bare-key case below otherwise flipped to non-
+        // null as soon as the *same* Set call processed an explicit
+        // `markRPr.<key>=…` — making every subsequent bare-key iteration
+        // mirror to markRPr too, fabricating mark keys the source never
+        // had (BUG-DUMP-MARKRPR-LEAK regression form).
+        bool markRPrPreExisted = pProps.ParagraphMarkRunProperties != null;
         foreach (var (key, value) in properties)
         {
             var k = key.ToLowerInvariant();
@@ -1065,9 +1073,13 @@ public partial class WordHandler
                     // both after replay because iteration order isn't stable.
                     bool explicitMarkOverride = properties.ContainsKey($"markRPr.{key}")
                                              || properties.ContainsKey($"markrpr.{key}");
-                    if ((allParaRuns.Count == 0 || pmrpExisting != null) && !explicitMarkOverride)
+                    // Use the pre-iteration snapshot: only mirror to markRPr
+                    // when the source's markRPr existed before this Set started.
+                    // A markRPr created mid-loop by an earlier explicit
+                    // markRPr.* setter does NOT enable bare-key mirroring.
+                    if ((allParaRuns.Count == 0 || markRPrPreExisted) && !explicitMarkOverride)
                     {
-                        var markRPr = pmrpExisting
+                        var markRPr = pProps.ParagraphMarkRunProperties
                             ?? pProps.AppendChild(new ParagraphMarkRunProperties());
                         ApplyRunFormatting(markRPr, key, value);
                     }
