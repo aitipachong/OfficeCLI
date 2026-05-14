@@ -887,6 +887,22 @@ public partial class WordHandler
             // below, which the CLI layer reports independently of Tracking.
             properties.ContainsKey(key);
 
+            // CONSISTENCY(style-shading-pPr): paragraph/table styles can carry
+            // <w:shd> on either pPr (split into val/fill/color sub-keys by
+            // Navigation, folded back into "VAL;FILL[;COLOR]" compound form
+            // by BatchEmitter) or rPr (Query.cs:683 emits compact `shading=<fill>`
+            // only). Use the compound form as the signal — values that contain
+            // `;` came from pPr in the source and must round-trip to pPr.
+            // Compact values stay with the ApplyRunFormatting (rPr) probe below.
+            if ((string.Equals(key, "shading", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(key, "shd", StringComparison.OrdinalIgnoreCase))
+                && value.Contains(';')
+                && (styleType == StyleValues.Paragraph || styleType == StyleValues.Table))
+            {
+                var pPrShd = newStyle.StyleParagraphProperties ?? EnsureStyleParagraphProperties(newStyle);
+                pPrShd.Shading = ParseShadingValue(value);
+                continue;
+            }
             // 1) Run-formatting helper (covers underline/strike/highlight/caps/
             //    smallCaps/dstrike/vanish/shadow/emboss/imprint/noProof/rtl/
             //    superscript/subscript/charSpacing/shading/...).
