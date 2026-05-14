@@ -85,7 +85,15 @@ public static class PluginProcess
             return new RunResult(-1, "Failed to start plugin process.", false);
 
         // Activity timestamp shared by both reader tasks and the watchdog.
-        long lastActivityTicks = Stopwatch.GetTimestamp();
+        // Wall-clock ticks (DateTime.UtcNow.Ticks, 100ns resolution) instead
+        // of Stopwatch.GetTimestamp: Stopwatch is monotonic and on some
+        // platform / hardware combinations keeps ticking through system
+        // suspend, on others it pauses — behavior depends on QPC / TSC
+        // properties. Wall-clock unambiguously advances during suspend, so
+        // a laptop waking up after an hour mid-plugin gets an honest
+        // "idle for an hour" reading and we kill the (likely-stale) plugin
+        // instead of letting it run on dead network sockets / file handles.
+        long lastActivityTicks = DateTime.UtcNow.Ticks;
         var stderrCollector = new StringBuilder();
         var stderrLock = new object();
 
@@ -95,16 +103,13 @@ public static class PluginProcess
         bool idleTimedOut = false;
         if (opts.IdleTimeoutSeconds > 0)
         {
-            // Poll the activity tick; check at half the budget so a hung
-            // process is detected within 1.5x the configured window.
-            var budgetTicks = TimeSpan.FromSeconds(opts.IdleTimeoutSeconds).Ticks
-                              * Stopwatch.Frequency / TimeSpan.TicksPerSecond;
+            var budgetTicks = TimeSpan.FromSeconds(opts.IdleTimeoutSeconds).Ticks;
             var pollIntervalMs = Math.Max(250, opts.IdleTimeoutSeconds * 1000 / 4);
 
             while (!p.HasExited)
             {
                 if (p.WaitForExit(pollIntervalMs)) break;
-                var since = Stopwatch.GetTimestamp() - Volatile.Read(ref lastActivityTicks);
+                var since = DateTime.UtcNow.Ticks - Volatile.Read(ref lastActivityTicks);
                 if (since > budgetTicks)
                 {
                     idleTimedOut = true;
@@ -133,7 +138,7 @@ public static class PluginProcess
             string? line;
             while ((line = reader.ReadLine()) is not null)
             {
-                Volatile.Write(ref activityTicks, Stopwatch.GetTimestamp());
+                Volatile.Write(ref activityTicks, DateTime.UtcNow.Ticks);
                 if (opts.OnStdoutLine is null) continue;
                 try { opts.OnStdoutLine(line); }
                 catch (Exception ex)
@@ -161,12 +166,12 @@ public static class PluginProcess
                 // "heartbeat" field.
                 if (IsHeartbeat(line))
                 {
-                    Volatile.Write(ref activityTicks, Stopwatch.GetTimestamp());
+                    Volatile.Write(ref activityTicks, DateTime.UtcNow.Ticks);
                     continue;
                 }
 
                 // Any non-heartbeat stderr output also counts as activity.
-                Volatile.Write(ref activityTicks, Stopwatch.GetTimestamp());
+                Volatile.Write(ref activityTicks, DateTime.UtcNow.Ticks);
                 if (opts.OnStderrLine is not null)
                 {
                     try { opts.OnStderrLine(line); } catch { /* ignore sink errors */ }

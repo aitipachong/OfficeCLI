@@ -97,7 +97,7 @@ internal sealed class FormatHandlerSession : IDisposable
             NewLine = "\n",
         };
         _stdoutReader = _proc.StandardOutput;
-        Volatile.Write(ref _lastActivityTicks, Stopwatch.GetTimestamp());
+        Volatile.Write(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
 
         // Background stderr pump: heartbeat lines (`{"heartbeat":true}`)
         // reset the activity timer; everything else is diagnostic noise we
@@ -115,7 +115,7 @@ internal sealed class FormatHandlerSession : IDisposable
                 while ((line = stderr.ReadLine()) is not null)
                 {
                     if (PluginProcess.IsHeartbeat(line))
-                        Volatile.Write(ref _lastActivityTicks, Stopwatch.GetTimestamp());
+                        Volatile.Write(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
                     // Non-heartbeat lines: drained, not surfaced.
                 }
             }
@@ -190,7 +190,7 @@ internal sealed class FormatHandlerSession : IDisposable
             try
             {
                 _stdinWriter.WriteLine(request.ToJsonString());
-                Volatile.Write(ref _lastActivityTicks, Stopwatch.GetTimestamp());
+                Volatile.Write(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
 
                 // Read the reply with an idle-timeout watchdog. The budget is
                 // "no activity for idleTimeoutSec seconds" — any stderr
@@ -282,8 +282,7 @@ internal sealed class FormatHandlerSession : IDisposable
     /// </summary>
     private string? ReadReplyWithIdleWatchdog(int idleTimeoutSec, string verbForError)
     {
-        var budgetTicks = TimeSpan.FromSeconds(idleTimeoutSec).Ticks
-                          * Stopwatch.Frequency / TimeSpan.TicksPerSecond;
+        var budgetTicks = TimeSpan.FromSeconds(idleTimeoutSec).Ticks;
         var readTask = Task.Run(() => _stdoutReader!.ReadLine());
 
         while (!readTask.IsCompleted)
@@ -292,7 +291,7 @@ internal sealed class FormatHandlerSession : IDisposable
             // timeouts fire reasonably close to the configured deadline.
             var pollMs = Math.Max(250, idleTimeoutSec * 1000 / 4);
             if (readTask.Wait(pollMs)) break;
-            var since = Stopwatch.GetTimestamp() - Volatile.Read(ref _lastActivityTicks);
+            var since = DateTime.UtcNow.Ticks - Volatile.Read(ref _lastActivityTicks);
             if (since > budgetTicks)
             {
                 _broken = true;
@@ -310,7 +309,7 @@ internal sealed class FormatHandlerSession : IDisposable
         // readTask completed — propagate exceptions, then take the result.
         var line = readTask.GetAwaiter().GetResult();
         if (line is not null)
-            Volatile.Write(ref _lastActivityTicks, Stopwatch.GetTimestamp());
+            Volatile.Write(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
         return line;
     }
 

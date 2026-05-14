@@ -17,6 +17,14 @@ public class ResidentServer : IDisposable
     private readonly string _filePath;
     private readonly string _pipeName;
     private readonly bool _editable;
+    // Stderr captured during DocumentHandlerFactory.Open (i.e. while the
+    // constructor was building _handler). At that point there's no
+    // per-command Console.SetError scope, so warnings written by plugin
+    // invokers (e.g. "dump-reader produced no commands") would otherwise
+    // be swallowed by the un-drained resident-stderr pipe. Held until the
+    // first HandleRequest, which folds it into that command's stderr
+    // envelope and clears the buffer.
+    private string? _startupStderr;
     // Shutdown uses TWO independent CTSs so the ping pipe can outlive the
     // handler dispose. This establishes the critical invariant that
     // TryResident relies on:
@@ -113,7 +121,20 @@ public class ResidentServer : IDisposable
         _filePath = Path.GetFullPath(filePath);
         _pipeName = GetPipeName(_filePath);
         _editable = editable;
-        _handler = DocumentHandlerFactory.Open(_filePath, editable);
+
+        // Capture Console.Error during handler open so any warnings emitted
+        // by the dump-reader / format-handler open path (which run before
+        // any per-command stderr scope exists) are routed to the first
+        // command's reply envelope. Without this, plugin-side notices like
+        // "dump-reader produced no commands" disappear into the resident's
+        // own unread stderr pipe.
+        var startupErrSink = new StringWriter();
+        var origErr = Console.Error;
+        Console.SetError(startupErrSink);
+        try { _handler = DocumentHandlerFactory.Open(_filePath, editable); }
+        finally { Console.SetError(origErr); }
+        var captured = startupErrSink.ToString().TrimEnd('\r', '\n');
+        if (captured.Length > 0) _startupStderr = captured;
     }
 
     public static string GetPipeName(string filePath)
@@ -514,11 +535,16 @@ public class ResidentServer : IDisposable
             Console.SetOut(stdoutWriter);
             Console.SetError(stderrWriter);
 
-            // Drain any warnings produced at handler-open time (the resident
-            // constructor runs before this capture scope exists, so any
-            // Console.Error written then was lost to an unread pipe). Surface
-            // them on the next command's stderr so users see them at all.
-            OfficeCli.Core.Plugins.DumpReaderInvoker.DrainPendingWarnings();
+            // Replay any stderr captured during the constructor's
+            // DocumentHandlerFactory.Open so plugin-side warnings (e.g.
+            // "dump-reader produced no commands") reach the user on the
+            // first command's reply. One-shot drain: subsequent commands
+            // see an empty buffer.
+            if (_startupStderr is not null)
+            {
+                Console.Error.WriteLine(_startupStderr);
+                _startupStderr = null;
+            }
 
             try
             {

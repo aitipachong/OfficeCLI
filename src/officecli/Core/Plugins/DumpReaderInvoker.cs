@@ -32,37 +32,6 @@ public static class DumpReaderInvoker
     /// resolution or invocation failure; otherwise the result references a
     /// temp file the caller must dispose (or leave for OS tmp cleanup).
     /// </summary>
-    /// <summary>
-    /// Warnings produced during sibling-cache generation that the caller (e.g.
-    /// ResidentServer) should surface to the user on the next command's stderr.
-    /// The handler-open path runs at resident-startup time, before any per
-    /// command Console.SetError scope is in place — Console.Error.WriteLine
-    /// there is captured by an unread pipe and lost. Drain this list inside a
-    /// captured stderr scope to deliver the message.
-    /// </summary>
-    public static readonly Queue<string> PendingWarnings = new();
-    private static readonly object _pendingLock = new();
-
-    /// <summary>
-    /// Emit any warnings queued since the last drain to <see cref="Console.Error"/>.
-    /// Called by ResidentServer on each command boundary (where Console.Error is
-    /// captured into the response envelope), and by the direct path before
-    /// returning to the user.
-    /// </summary>
-    public static void DrainPendingWarnings()
-    {
-        lock (_pendingLock)
-        {
-            while (PendingWarnings.Count > 0)
-                Console.Error.WriteLine(PendingWarnings.Dequeue());
-        }
-    }
-
-    private static void QueueWarning(string text)
-    {
-        lock (_pendingLock) PendingWarnings.Enqueue(text);
-    }
-
     public static DumpResult Run(string sourceFullPath, string sourceExt)
     {
         var plugin = PluginRegistry.FindFor(PluginKind.DumpReader, sourceExt)
@@ -84,10 +53,24 @@ public static class DumpReaderInvoker
         int itemIndex = 0;
         Exception? replayError = null;
 
+        // v6.4: open the handler AFTER the plugin process finishes streaming.
+        // The previous design called ExecuteBatchItem inside the PluginProcess
+        // stdout reader task — i.e. on a background Task.Run thread. The
+        // OpenXml SDK's WordprocessingDocument (System.IO.Packaging.Package
+        // underneath) is not thread-safe: a heavy add-stream (5000+ items
+        // touching styles/numbering/header/footer/textbox) creates and
+        // re-opens many Update-mode zip parts from that background thread,
+        // and the SDK's internal package state intermittently throws
+        // "Entries cannot be opened multiple times in Update mode" — usually
+        // at Dispose-time save when the package tries to commit all pending
+        // parts. The `officecli batch` path doesn't hit this because items
+        // are deserialized up front and replayed synchronously on the calling
+        // thread. Mirror that here: buffer all JSONL lines first, then open
+        // the handler and replay on this thread.
+        var bufferedLines = new List<string>();
+
         try
         {
-            using var handler = DocumentHandlerFactory.Open(tmpOut, editable: true);
-
             void OnLine(string raw)
             {
                 // Strip a per-line UTF-8 BOM (U+FEFF). Some Windows JSON
@@ -106,34 +89,10 @@ public static class DumpReaderInvoker
                         $"Dump-reader plugin '{plugin.Manifest.Name}' emitted a JSON array; protocol v1 requires JSONL (one BatchItem per line).")
                     { Code = "corrupt_batch" };
 
-                BatchItem? item;
-                try
-                {
-                    item = JsonSerializer.Deserialize(line, BatchJsonContext.Default.BatchItem);
-                }
-                catch (JsonException ex)
-                {
-                    throw new CliException(
-                        $"Dump-reader plugin '{plugin.Manifest.Name}' emitted invalid JSON at item #{itemIndex}: {ex.Message}")
-                    { Code = "plugin_contract_violation" };
-                }
-                if (item is null)
-                    throw new CliException(
-                        $"Dump-reader plugin '{plugin.Manifest.Name}' emitted null at item #{itemIndex}.")
-                    { Code = "plugin_contract_violation" };
-
-                try
-                {
-                    CommandBuilder.ExecuteBatchItem(handler, item, json: false);
-                }
-                catch (Exception ex)
-                {
-                    throw new CliException(
-                        $"Dump-reader plugin '{plugin.Manifest.Name}' command #{itemIndex} ({item.Command}) failed while replaying: {ex.Message}", ex)
-                    { Code = "plugin_command_failed" };
-                }
-
-                itemIndex++;
+                // Buffer raw line; defer JSON parse + replay to the
+                // main-thread loop after plugin exit. JSON parse errors
+                // surface there with the same item-index semantics.
+                bufferedLines.Add(line);
             }
 
             var idle = plugin.Manifest.ResolveIdleTimeout("dump");
@@ -178,15 +137,55 @@ public static class DumpReaderInvoker
                     },
                 };
 
+            // v6.4: now that the plugin has exited and all JSONL is buffered,
+            // open the handler on this thread and replay synchronously. See
+            // the rationale comment at the bufferedLines declaration above
+            // (OpenXml SDK package state not thread-safe under heavy
+            // multi-part Update-mode mutation).
+            using (var handler = DocumentHandlerFactory.Open(tmpOut, editable: true))
+            {
+                foreach (var line in bufferedLines)
+                {
+                    BatchItem? item;
+                    try
+                    {
+                        item = JsonSerializer.Deserialize(line, BatchJsonContext.Default.BatchItem);
+                    }
+                    catch (JsonException ex)
+                    {
+                        throw new CliException(
+                            $"Dump-reader plugin '{plugin.Manifest.Name}' emitted invalid JSON at item #{itemIndex}: {ex.Message}")
+                        { Code = "plugin_contract_violation" };
+                    }
+                    if (item is null)
+                        throw new CliException(
+                            $"Dump-reader plugin '{plugin.Manifest.Name}' emitted null at item #{itemIndex}.")
+                        { Code = "plugin_contract_violation" };
+
+                    try
+                    {
+                        CommandBuilder.ExecuteBatchItem(handler, item, json: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new CliException(
+                            $"Dump-reader plugin '{plugin.Manifest.Name}' command #{itemIndex} ({item.Command}) failed while replaying: {ex.Message}", ex)
+                        { Code = "plugin_command_failed" };
+                    }
+
+                    itemIndex++;
+                }
+            }
+
             // Empty output + exit 0 is ambiguous: the .doc might genuinely be
-            // blank, or the plugin might have silently skipped content it does
-            // not yet know how to translate. Queue a warning that the host
-            // will surface on the next command boundary (ResidentServer drains
-            // PendingWarnings inside its per-command stderr scope, so the
-            // message reaches the user even though the dump runs at handler
-            // open time — outside any captured-stderr scope).
+            // blank, or the plugin might have silently skipped content it
+            // does not yet know how to translate. Surface a warning so users
+            // do not discover the empty conversion only by opening the
+            // result. Console.Error is captured by callers — ResidentServer
+            // wraps the handler-open call in a temporary Console.SetError
+            // scope so this line reaches the first command's reply envelope.
             if (itemIndex == 0)
-                QueueWarning(
+                Console.Error.WriteLine(
                     $"[warning] dump-reader plugin '{plugin.Manifest.Name}' produced no commands for {Path.GetFileName(sourceFullPath)}. " +
                     $"The generated {targetExt} will be blank — this is usually a plugin gap, not a source-file property.");
         }
