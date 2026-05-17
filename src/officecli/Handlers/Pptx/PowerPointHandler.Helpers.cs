@@ -946,6 +946,32 @@ public partial class PowerPointHandler
                     }
                 }
             }
+            // Inline math without an oMathPara wrapper — author tools emit just
+            // <m:oMath>...</m:oMath> directly inside the a14:m container, and
+            // the View / equation readback path used to silently drop those.
+            // Mirror the oMathPara branch above so bare oMath round-trips.
+            if (xml.Contains("oMath"))
+            {
+                var bareStart = xml.IndexOf("<m:oMath", StringComparison.Ordinal);
+                if (bareStart < 0) bareStart = xml.IndexOf("<oMath", StringComparison.Ordinal);
+                if (bareStart >= 0)
+                {
+                    var bareEndTag = xml.Contains("</m:oMath>") ? "</m:oMath>" : "</oMath>";
+                    var bareEnd = xml.IndexOf(bareEndTag, StringComparison.Ordinal);
+                    if (bareEnd >= 0)
+                    {
+                        var oMathXml = xml[bareStart..(bareEnd + bareEndTag.Length)];
+                        if (!oMathXml.Contains("xmlns:m="))
+                            oMathXml = oMathXml.Replace("<m:oMath", "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"");
+                        var bareWrapper = new OpenXmlUnknownElement("m", "oMath", "http://schemas.openxmlformats.org/officeDocument/2006/math");
+                        var bareInnerStart = oMathXml.IndexOf('>') + 1;
+                        var bareInnerEnd = oMathXml.LastIndexOf('<');
+                        if (bareInnerStart > 0 && bareInnerEnd > bareInnerStart)
+                            bareWrapper.InnerXml = oMathXml[bareInnerStart..bareInnerEnd];
+                        return bareWrapper;
+                    }
+                }
+            }
         }
         catch { }
         return null;
