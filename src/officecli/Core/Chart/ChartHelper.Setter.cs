@@ -230,8 +230,15 @@ internal static partial class ChartHelper
                                 };
                                 dl.AppendChild(new C.DataLabelPosition { Val = dLblPos });
                             }
-                            // Insert dLbls before gapWidth/overlap/showMarker/holeSize/axId per schema order
-                            var dlInsertBefore = chartTypeEl.GetFirstChild<C.GapWidth>() as OpenXmlElement
+                            // Insert dLbls before dropLines/hiLowLines/upDownBars/gapWidth/overlap/
+                            // showMarker/holeSize/firstSliceAngle/axId per schema order. CT_StockChart
+                            // and CT_LineChart both place dLbls before dropLines/hiLowLines/upDownBars;
+                            // anchoring only on axId would land dLbls after hiLowLines (validator emits
+                            // "unexpected child element 'dLbls' ... expected 'axId'").
+                            var dlInsertBefore = chartTypeEl.GetFirstChild<C.DropLines>() as OpenXmlElement
+                                ?? chartTypeEl.GetFirstChild<C.HighLowLines>() as OpenXmlElement
+                                ?? chartTypeEl.GetFirstChild<C.UpDownBars>() as OpenXmlElement
+                                ?? chartTypeEl.GetFirstChild<C.GapWidth>() as OpenXmlElement
                                 ?? chartTypeEl.GetFirstChild<C.Overlap>() as OpenXmlElement
                                 ?? chartTypeEl.GetFirstChild<C.ShowMarker>() as OpenXmlElement
                                 ?? chartTypeEl.GetFirstChild<C.HoleSize>() as OpenXmlElement
