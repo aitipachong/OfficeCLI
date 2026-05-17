@@ -76,13 +76,27 @@ public partial class PowerPointHandler
                     case "slidewidth" or "width":
                         var sldSz = presentation.GetFirstChild<SlideSize>()
                             ?? presentation.AppendChild(new SlideSize());
-                        sldSz.Cx = Core.EmuConverter.ParseEmuAsInt(value);
+                        var cxVal = Core.EmuConverter.ParseEmuAsInt(value);
+                        // Zero/near-zero slide dimensions produce schema-invalid
+                        // OOXML — ECMA-376 sets MinInclusive=914400 (1 inch) on
+                        // sldSz/@cx and @cy. Negative is already rejected by
+                        // ParseEmuAsInt; 0 was silently accepted and yielded a
+                        // file that fails `validate` and crashes PowerPoint at
+                        // open. Match the ParseEmuAsInt error shape.
+                        if (cxVal <= 0)
+                            throw new ArgumentException(
+                                $"Invalid '{key}' value: '{value}'. Slide width must be greater than 0 (at least 914400 EMU / 1 inch per OOXML schema).");
+                        sldSz.Cx = cxVal;
                         sldSz.Type = SlideSizeValues.Custom;
                         break;
                     case "slideheight" or "height":
                         var sldSz2 = presentation.GetFirstChild<SlideSize>()
                             ?? presentation.AppendChild(new SlideSize());
-                        sldSz2.Cy = Core.EmuConverter.ParseEmuAsInt(value);
+                        var cyVal = Core.EmuConverter.ParseEmuAsInt(value);
+                        if (cyVal <= 0)
+                            throw new ArgumentException(
+                                $"Invalid '{key}' value: '{value}'. Slide height must be greater than 0 (at least 914400 EMU / 1 inch per OOXML schema).");
+                        sldSz2.Cy = cyVal;
                         sldSz2.Type = SlideSizeValues.Custom;
                         break;
                     case "slidesize":
