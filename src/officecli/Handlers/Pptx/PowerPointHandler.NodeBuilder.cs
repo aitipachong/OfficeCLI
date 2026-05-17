@@ -91,7 +91,7 @@ public partial class PowerPointHandler
             if (grpXfrm?.Extents?.Cx != null) grpNode.Format["width"] = FormatEmu(grpXfrm.Extents.Cx.Value);
             if (grpXfrm?.Extents?.Cy != null) grpNode.Format["height"] = FormatEmu(grpXfrm.Extents.Cy.Value);
             if (grpXfrm?.Rotation != null && grpXfrm.Rotation.Value != 0)
-                grpNode.Format["rotation"] = $"{grpXfrm.Rotation.Value / 60000.0:0.##}";
+                grpNode.Format["rotation"] = $"{grpXfrm.Rotation.Value / 60000.0:0.######}";
             var grpFillColor = ReadColorFromFill(grp.GroupShapeProperties?.GetFirstChild<Drawing.SolidFill>());
             if (grpFillColor != null) grpNode.Format["fill"] = grpFillColor;
             else if (grp.GroupShapeProperties?.GetFirstChild<Drawing.NoFill>() != null) grpNode.Format["fill"] = "none";
@@ -999,7 +999,7 @@ public partial class PowerPointHandler
 
         // Rotation (plain number in degrees, no suffix, so Set can consume the value directly)
         if (xfrm?.Rotation != null && xfrm.Rotation.Value != 0)
-            node.Format["rotation"] = $"{xfrm.Rotation.Value / 60000.0:0.##}";
+            node.Format["rotation"] = $"{xfrm.Rotation.Value / 60000.0:0.######}";
 
         // Text margin
         var bodyPr = shape.TextBody?.Elements<Drawing.BodyProperties>().FirstOrDefault();
@@ -1388,7 +1388,7 @@ public partial class PowerPointHandler
             if (picXfrm.Extents.Cy is not null) node.Format["height"] = FormatEmu(picXfrm.Extents.Cy!);
         }
         if (picXfrm?.Rotation != null && picXfrm.Rotation.Value != 0)
-            node.Format["rotation"] = $"{picXfrm.Rotation.Value / 60000.0:0.##}";
+            node.Format["rotation"] = $"{picXfrm.Rotation.Value / 60000.0:0.######}";
 
         // Opacity (via AlphaModulateFixedEffect on blip)
         var picBlip = pic.BlipFill?.GetFirstChild<Drawing.Blip>();
@@ -1656,7 +1656,7 @@ public partial class PowerPointHandler
 
         // Rotation
         if (xfrm?.Rotation?.HasValue == true && xfrm.Rotation.Value != 0)
-            node.Format["rotation"] = $"{xfrm.Rotation.Value / 60000.0:0.##}";
+            node.Format["rotation"] = $"{xfrm.Rotation.Value / 60000.0:0.######}";
 
         // Z-order (1-based position among content elements: 1 = back, N = front).
         // CONSISTENCY(zorder): shape/picture/group all emit zorder when parent is a
