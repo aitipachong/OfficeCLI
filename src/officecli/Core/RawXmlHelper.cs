@@ -277,6 +277,7 @@ internal static class RawXmlHelper
     /// </summary>
     public static List<ValidationError> ValidateDocument(OpenXmlPackage package)
     {
+        var errors = PreflightXmlParts(package);
         var validator = new OpenXmlValidator(DocumentFormat.OpenXml.FileFormatVersions.Microsoft365);
         // BUG-R6-08: documents containing w:numPicBullet can trip an NRE
         // inside SDK validation when one of its child accessors hits a
@@ -284,7 +285,6 @@ internal static class RawXmlHelper
         // entry doesn't bring the whole `validate` command down. Surface
         // the exception as a synthetic ValidationError instead of
         // bubbling out as a process-level crash.
-        var errors = new List<ValidationError>();
         IEnumerable<DocumentFormat.OpenXml.Validation.ValidationErrorInfo> raw;
         try
         {
@@ -340,6 +340,47 @@ internal static class RawXmlHelper
                     "ValidatorException",
                     $"Failed to materialise validation error: {ex.GetType().Name}: {ex.Message}",
                     null, null));
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// Walk every XML part in the package and try to parse it. OpenXmlValidator
+    /// silently skips parts that can't be read, so a deck whose presentation.xml
+    /// or any slide part is malformed XML (well-formed zip, broken XML inside)
+    /// otherwise reports "validate passed: no errors found" — a dangerous
+    /// false negative that hides obvious corruption. Surface a synthetic
+    /// MalformedXml validation error for each part that fails to parse so the
+    /// caller sees real failure instead of clean success.
+    /// </summary>
+    private static List<ValidationError> PreflightXmlParts(OpenXmlPackage package)
+    {
+        var errors = new List<ValidationError>();
+        foreach (var part in package.GetAllParts())
+        {
+            // Only inspect XML parts; binary streams (images, fonts, embedded
+            // OLE) don't participate in schema validation.
+            var ct = part.ContentType ?? "";
+            if (!ct.Contains("xml", StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                using var s = part.GetStream(FileMode.Open, FileAccess.Read);
+                using var r = XmlReader.Create(s, new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Prohibit,
+                    XmlResolver = null,
+                    IgnoreWhitespace = false,
+                });
+                while (r.Read()) { /* drain */ }
+            }
+            catch (Exception ex)
+            {
+                errors.Add(new ValidationError(
+                    "MalformedXml",
+                    $"Part contains malformed XML and was skipped by schema validation: {ex.GetType().Name}: {ex.Message}",
+                    null,
+                    part.Uri.ToString()));
             }
         }
         return errors;
