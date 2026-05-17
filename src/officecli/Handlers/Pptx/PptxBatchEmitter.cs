@@ -278,6 +278,11 @@ public static partial class PptxBatchEmitter
         // surface in the slide subtree's children today (notes live under
         // /slide[N]/notes); PR2 will reach in and emit them.
         EmitNotes(ppt, slidePath, items, ctx);
+
+        // Legacy slide comments — also off the shape tree (SlideCommentsPart).
+        // Emit AFTER notes so the per-slide row order is stable: shapes →
+        // notes → comments, mirroring how a reader would traverse the slide.
+        EmitComments(ppt, slidePath, items, ctx);
     }
 
     // Touch the raw slide XML to find content that has no handler vocabulary

@@ -51,4 +51,51 @@ public static partial class PptxBatchEmitter
             Props = props,
         });
     }
+
+    // Slide-level legacy comments (`<p:cm>`) live in SlideCommentsPart, not
+    // the shape tree, so the standard EmitSlide walk never reaches them —
+    // dump silently lost every author/date/anchor on a deck that carried
+    // review comments. Re-emit each as `add comment parent=/slide[N]` using
+    // the same vocabulary AddSlideComment accepts (text/author/initials/x/y/
+    // date). Index-1 is emitted with no `--index`, so AddSlideComment appends
+    // monotonically and the source order is preserved on replay.
+    private static void EmitComments(PowerPointHandler ppt, string slidePath,
+                                     List<BatchItem> items, SlideEmitContext ctx)
+    {
+        var slideMatch = System.Text.RegularExpressions.Regex.Match(slidePath, @"^/slide\[(\d+)\]$");
+        if (!slideMatch.Success) return;
+        var slideIdx = int.Parse(slideMatch.Groups[1].Value);
+
+        List<DocumentNode> commentNodes;
+        try { commentNodes = ppt.EnumerateComments(slideIdx); }
+        catch { return; }
+        if (commentNodes.Count == 0) return;
+
+        foreach (var cmt in commentNodes)
+        {
+            var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(cmt.Text))
+                props["text"] = cmt.Text!;
+            // Mirror the AddSlideComment vocabulary verbatim. `index` is a
+            // node-level Get-only field (the per-author monotonic counter
+            // PowerPoint assigns); replaying it would force-collide with the
+            // counter AddSlideComment maintains on the target deck.
+            foreach (var key in new[] { "author", "initials", "x", "y", "date" })
+            {
+                if (cmt.Format.TryGetValue(key, out var v) && v != null)
+                {
+                    var s = v.ToString() ?? "";
+                    if (s.Length > 0) props[key] = s;
+                }
+            }
+
+            items.Add(new BatchItem
+            {
+                Command = "add",
+                Parent = slidePath,
+                Type = "comment",
+                Props = props.Count > 0 ? props : null,
+            });
+        }
+    }
 }
