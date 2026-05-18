@@ -592,13 +592,26 @@ public static partial class WordBatchEmitter
             props.Remove("docDefaults.font");
             props["docDefaults.font.latin"] = bareFont;
         }
-        // BUG-X6-05: BlankDocCreator stamps `Times New Roman` into
-        // docDefaults RunFonts. Source docs that omit the slot (use theme
-        // fonts) round-trip with the blank's TNR baked in. Force an
+        // BUG-X6-05: BlankDocCreator (minimal path) stamps `Times New Roman`
+        // into docDefaults RunFonts. Source docs that omit the slot (use
+        // theme fonts) round-trip with the blank's TNR baked in. Force an
         // explicit empty `docDefaults.font.latin=` so the Set path clears
-        // the blank's TNR back to absent. Same for docGrid.type which the
-        // blank sets to `default`.
-        if (!props.ContainsKey("docDefaults.font.latin")
+        // the blank's TNR back to absent.
+        //
+        // BUG-R6-01: only do this when the SOURCE truly lacks a docDefaults
+        // latin/ascii font. The baseline-match skip above can suppress an
+        // emit for a source that DOES carry `docDefaults.font=<X>` simply
+        // because the blank already has the same value — in that case the
+        // injection below was firing with "" and clearing the very font the
+        // source intended to keep (e.g. Calibri → blank rFonts). Guard on
+        // raw source presence, not on the post-baseline-filter `props`.
+        bool sourceHasDocDefaultsFont =
+            (root.Format.TryGetValue("docDefaults.font", out var srcFont)
+             && !string.IsNullOrEmpty(srcFont?.ToString()))
+            || (root.Format.TryGetValue("docDefaults.font.latin", out var srcLatin)
+                && !string.IsNullOrEmpty(srcLatin?.ToString()));
+        if (!sourceHasDocDefaultsFont
+            && !props.ContainsKey("docDefaults.font.latin")
             && !props.ContainsKey("docDefaults.font"))
         {
             props["docDefaults.font.latin"] = "";
