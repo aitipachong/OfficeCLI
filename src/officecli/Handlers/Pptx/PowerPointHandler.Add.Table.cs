@@ -382,10 +382,14 @@ public partial class PowerPointHandler
                 }
                 int newColCount = existingColCount;
 
-                // Row height: default from first existing row, or 370840 EMU (~1cm)
+                // Row height: default from first existing row, or 370840 EMU (~1cm).
+                // CONSISTENCY(positive-size): ST_TableCellSize disallows negatives.
                 long newRowHeight = properties.TryGetValue("height", out var rhVal)
                     ? ParseEmu(rhVal)
                     : rowTable.Elements<Drawing.TableRow>().FirstOrDefault()?.Height?.Value ?? 370840;
+                if (newRowHeight < 0)
+                    throw new ArgumentException(
+                        $"Invalid height '{rhVal}': table row height cannot be negative.");
 
                 var newTblRow = new Drawing.TableRow { Height = newRowHeight };
                 for (int c = 0; c < newColCount; c++)
@@ -452,6 +456,10 @@ public partial class PowerPointHandler
                     : (existingGridCols.Count > 0
                         ? (long)existingGridCols.Average(gc => gc.Width?.Value ?? 914400)
                         : 914400); // default ~2.54cm
+                // CONSISTENCY(positive-size): ST_PositiveSize2D disallows negatives.
+                if (colWidth < 0)
+                    throw new ArgumentException(
+                        $"Invalid width '{wVal}': table column width cannot be negative.");
 
                 // Create and insert the new grid column
                 var newGridCol = new Drawing.GridColumn { Width = colWidth };
