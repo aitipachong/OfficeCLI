@@ -383,8 +383,17 @@ public static partial class WordBatchEmitter
         {
             try
             {
-                var settingsNode = word.Get("/settings");
-                bool sourceHadToggle = settingsNode.Format.TryGetValue("evenAndOddHeaders", out var ev)
+                // BUG-DUMP-R4-02: `Get("/settings")` returns a node whose
+                // Format dict is empty — PopulateDocSettings is only called
+                // by GetRootNode, not when /settings is resolved directly.
+                // Reading `Format["evenAndOddHeaders"]` off the settings node
+                // therefore always returned false, so dump emitted a phantom
+                // `noEvenAndOddHeaders=true` even when the source's
+                // settings.xml carried the toggle. Read from root, which IS
+                // populated, mirroring the `titlePage` check above (that one
+                // reads off /section[N] which also runs its own populator).
+                var rootNode = word.Get("/");
+                bool sourceHadToggle = rootNode.Format.TryGetValue("evenAndOddHeaders", out var ev)
                                      && ev is bool eb && eb;
                 if (!sourceHadToggle)
                     addHeaderProps["noEvenAndOddHeaders"] = "true";
