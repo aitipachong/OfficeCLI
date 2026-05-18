@@ -1833,7 +1833,50 @@ public partial class PowerPointHandler
                     string? borderColor = null;
                     long? borderWidth = null;
                     string? borderDash = null;
-                    if (!isNone)
+                    // Sub-key axis selectors: border.width / border.color /
+                    // border.dash (and the edge-qualified .left.width etc).
+                    // Without this routing, "border.width=-5" fell through to
+                    // the loose space-branch and set borderColor="-5" — a
+                    // silent corruption. Detect the sub-key suffix and route
+                    // the value to the matching axis, then reject negatives
+                    // for width to match OOXML ST_LineWidth's non-negative
+                    // requirement (mirrors line.width's ParseEmuAsInt guard).
+                    bool isWidthOnly = k.EndsWith(".width", StringComparison.Ordinal);
+                    bool isColorOnly = k.EndsWith(".color", StringComparison.Ordinal);
+                    bool isDashOnly = k.EndsWith(".dash", StringComparison.Ordinal);
+                    if (!isNone && (isWidthOnly || isColorOnly || isDashOnly))
+                    {
+                        if (isWidthOnly)
+                        {
+                            // ParseLineWidth treats bare numbers as pt,
+                            // routes through ParseEmuAsInt which rejects
+                            // negatives and INT32 overflow. Catch the
+                            // rejection and re-raise with a border-shaped
+                            // message so the caller sees the key, not a
+                            // generic "dimension" diagnostic.
+                            try
+                            {
+                                borderWidth = Core.EmuConverter.ParseLineWidth(value);
+                            }
+                            catch (ArgumentException)
+                            {
+                                throw new ArgumentException($"Invalid border width: '{value}' (must be >= 0).");
+                            }
+                        }
+                        else if (isColorOnly)
+                        {
+                            borderColor = value.TrimStart('#').ToUpperInvariant();
+                        }
+                        else
+                        {
+                            var d = value.ToLowerInvariant();
+                            if (d is "solid" or "dot" or "dash" or "lgdash" or "dashdot" or "sysdot" or "sysdash")
+                                borderDash = d;
+                            else
+                                throw new ArgumentException($"Invalid border dash value: '{value}'. Valid values: solid, dot, dash, lgDash, dashDot, sysDot, sysDash.");
+                        }
+                    }
+                    else if (!isNone)
                     {
                         if (value.Contains(';'))
                         {
@@ -1847,6 +1890,16 @@ public partial class PowerPointHandler
                                 if (!wStr.EndsWith("pt", StringComparison.OrdinalIgnoreCase))
                                     wStr += "pt";
                                 borderWidth = Core.EmuConverter.ParseEmu(wStr);
+                                // OOXML ST_LineWidth requires >= 0. ParseEmu
+                                // returns a signed long with no sign guard;
+                                // reject negatives here so border.width=-5 no
+                                // longer silently writes a negative w
+                                // attribute that downstream readers truncate.
+                                // Mirrors line.width's ParseLineWidth path
+                                // (ParseEmuAsInt rejects negatives) and the
+                                // padding/margin guards below.
+                                if (borderWidth.Value < 0)
+                                    throw new ArgumentException($"Invalid border width: '{scParts[1]}' (must be >= 0).");
                             }
                             // Part 2: color
                             if (scParts.Length > 2 && !string.IsNullOrEmpty(scParts[2]))
@@ -1870,7 +1923,11 @@ public partial class PowerPointHandler
                                 if (bp.EndsWith("pt", StringComparison.OrdinalIgnoreCase) ||
                                     bp.EndsWith("cm", StringComparison.OrdinalIgnoreCase) ||
                                     bp.EndsWith("px", StringComparison.OrdinalIgnoreCase))
+                                {
                                     borderWidth = Core.EmuConverter.ParseEmu(bp);
+                                    if (borderWidth.Value < 0)
+                                        throw new ArgumentException($"Invalid border width: '{bp}' (must be >= 0).");
+                                }
                                 else if (bp.ToLowerInvariant() is "solid" or "dot" or "dash" or "lgdash" or "dashdot" or "sysdot" or "sysdash")
                                     borderDash = bp.ToLowerInvariant();
                                 else if (bp.Length >= 3 && !bp.Equals("none", StringComparison.OrdinalIgnoreCase))
