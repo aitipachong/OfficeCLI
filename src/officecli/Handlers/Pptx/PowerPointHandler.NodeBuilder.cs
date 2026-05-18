@@ -778,6 +778,34 @@ public partial class PowerPointHandler
 
         // Collect font info
         var firstRun = shape.TextBody?.Descendants<Drawing.Run>().FirstOrDefault();
+        // Heterogeneity probe: shape-level `size` and `color` summarize the
+        // textbox's run formatting. When runs disagree, surfacing the first
+        // run's value silently is a foot-gun — an agent reading
+        // Format["color"] can't tell the textbox actually has mixed colors.
+        // Drop the key in that case so `ContainsKey` is the contract.
+        var allRuns = shape.TextBody?.Descendants<Drawing.Run>().ToList()
+                      ?? new List<Drawing.Run>();
+        bool hasMixedSize = false;
+        bool hasMixedColor = false;
+        if (allRuns.Count > 1)
+        {
+            string? firstSizeKey = null;
+            string? firstColorKey = null;
+            bool sizeSeen = false, colorSeen = false;
+            foreach (var r in allRuns)
+            {
+                var rp = r.RunProperties;
+                var sz = rp?.FontSize?.Value;
+                var szKey = sz.HasValue ? sz.Value.ToString() : "(unset)";
+                if (!sizeSeen) { firstSizeKey = szKey; sizeSeen = true; }
+                else if (firstSizeKey != szKey) hasMixedSize = true;
+
+                var col = ReadColorFromFill(rp?.GetFirstChild<Drawing.SolidFill>());
+                var colKey = col ?? "(unset)";
+                if (!colorSeen) { firstColorKey = colKey; colorSeen = true; }
+                else if (firstColorKey != colKey) hasMixedColor = true;
+            }
+        }
         if (firstRun?.RunProperties != null)
         {
             var fontLatinTf = firstRun.RunProperties.GetFirstChild<Drawing.LatinFont>()?.Typeface?.Value;
@@ -799,7 +827,7 @@ public partial class PowerPointHandler
             if (fontCsTf != null) node.Format["font.cs"] = fontCsTf;
 
             var fontSize = firstRun.RunProperties.FontSize?.Value;
-            if (fontSize.HasValue) node.Format["size"] = $"{fontSize.Value / 100.0:0.##}pt";
+            if (fontSize.HasValue && !hasMixedSize) node.Format["size"] = $"{fontSize.Value / 100.0:0.##}pt";
 
             if (firstRun.RunProperties.Bold?.HasValue == true) node.Format["bold"] = firstRun.RunProperties.Bold.Value;
             if (firstRun.RunProperties.Italic?.HasValue == true) node.Format["italic"] = firstRun.RunProperties.Italic.Value;
@@ -839,7 +867,7 @@ public partial class PowerPointHandler
 
             // Text color (from first run) — solid or gradient
             var runColor = ReadColorFromFill(firstRun.RunProperties.GetFirstChild<Drawing.SolidFill>());
-            if (runColor != null) node.Format["color"] = runColor;
+            if (runColor != null && !hasMixedColor) node.Format["color"] = runColor;
             var runGradFill = firstRun.RunProperties.GetFirstChild<Drawing.GradientFill>();
             if (runGradFill != null)
                 node.Format["textFill"] = ReadGradientString(runGradFill);
