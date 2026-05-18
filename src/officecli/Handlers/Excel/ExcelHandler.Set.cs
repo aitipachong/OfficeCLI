@@ -424,6 +424,16 @@ public partial class ExcelHandler
                         // R13-2: accept date-with-time variants (T and space separators).
                         if (!explicitTypeIsString && TryParseIsoDateFlexible(cellValue, out var dt))
                         {
+                            // Excel's date serial epoch is 1899-12-30 (preserving the
+                            // 1900 leap bug). Dates earlier than that map to negative
+                            // serials, which Excel renders as ####### or silently
+                            // clamps to the epoch — neither is what the user asked
+                            // for. Reject up front so the round-trip is honest
+                            // instead of writing serial 0 and reading back "1899-12-30".
+                            if (dt < new System.DateTime(1900, 1, 1))
+                                throw new ArgumentException(
+                                    $"Cannot store '{cellValue}' as date; Excel does not support dates before 1900-01-01 " +
+                                    $"(serial epoch is 1899-12-30). Use type=string to keep the literal text.");
                             cell.CellValue = new CellValue(dt.ToOADate().ToString(System.Globalization.CultureInfo.InvariantCulture));
                             cell.DataType = null;
                             if (!properties.ContainsKey("numberformat") && !properties.ContainsKey("numfmt") && !properties.ContainsKey("format"))

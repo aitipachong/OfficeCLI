@@ -501,6 +501,13 @@ public partial class ExcelHandler
                     if (!string.IsNullOrEmpty(dateText)
                         && TryParseIsoDateFlexible(dateText, out var dt))
                     {
+                        // Mirrors Set's pre-1900 guard: Excel's serial epoch is
+                        // 1899-12-30; earlier dates round-trip as the epoch and
+                        // mislead the user. Reject instead of silently clamping.
+                        if (dt < new System.DateTime(1900, 1, 1))
+                            throw new ArgumentException(
+                                $"Cannot store '{dateText}' as date; Excel does not support dates before 1900-01-01 " +
+                                $"(serial epoch is 1899-12-30). Use type=string to keep the literal text.");
                         cell.CellValue = new CellValue(
                             dt.ToOADate().ToString(System.Globalization.CultureInfo.InvariantCulture));
                     }
