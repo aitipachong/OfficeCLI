@@ -2576,7 +2576,7 @@ public partial class PowerPointHandler
         newRun.RunProperties = rProps;
         var runText = properties.GetValueOrDefault("text", "");
         XmlTextValidator.ValidateOrThrow(runText, "text");
-        newRun.Text = new Drawing.Text { Text = runText.Replace("\\n", "\n") };
+        newRun.Text = new Drawing.Text { Text = OfficeCli.Core.TextEscape.Resolve(runText) };
         return newRun;
     }
 

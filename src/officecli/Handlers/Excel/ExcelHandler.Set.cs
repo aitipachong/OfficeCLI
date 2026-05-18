@@ -367,7 +367,7 @@ public partial class ExcelHandler
                         goto case "formula";
                     // CONSISTENCY(escape-sequences): mirror PPTX/Word — interpret
                     // \n and \t two-char escapes as real newline / tab.
-                    var cellValue = effectiveValue.Replace("\\n", "\n").Replace("\\t", "\t");
+                    var cellValue = OfficeCli.Core.TextEscape.Resolve(effectiveValue);
                     // Warn when overwriting an existing formula with a literal value.
                     // Without this, `set --prop value=N` on a formula cell silently
                     // drops the formula — the same conflict-class as supplying both

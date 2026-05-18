@@ -707,7 +707,7 @@ public partial class ExcelHandler
         }
         var txBody = new XDR.TextBody(bodyPr, new Drawing.ListStyle());
 
-        var lines = shpText.Replace("\\n", "\n").Split('\n');
+        var lines = OfficeCli.Core.TextEscape.Resolve(shpText).Split('\n');
         foreach (var line in lines)
         {
             var rPr = new Drawing.RunProperties { Language = "en-US" };

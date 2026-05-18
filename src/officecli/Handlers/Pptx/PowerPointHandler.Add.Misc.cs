@@ -721,7 +721,7 @@ public partial class PowerPointHandler
         {
             XmlTextValidator.ValidateOrThrow(phText, "text");
             // Accept both literal backslash-n (typical shell escape) and real LF.
-            var lines = phText.Replace("\\n", "\n").Split('\n');
+            var lines = OfficeCli.Core.TextEscape.Resolve(phText).Split('\n');
             foreach (var line in lines)
             {
                 var p = new Drawing.Paragraph();
