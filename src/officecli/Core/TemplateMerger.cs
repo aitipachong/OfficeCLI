@@ -94,43 +94,33 @@ internal static class TemplateMerger
 
     private static MergeResult MergeDocx(string filePath, Dictionary<string, string> data)
     {
-        using (var handler = new Handlers.WordHandler(filePath, editable: true))
-        {
-            foreach (var kvp in data)
-            {
-                var placeholder = "{{" + kvp.Key + "}}";
-                handler.Set("/", new Dictionary<string, string>
-                {
-                    ["find"] = placeholder,
-                    ["replace"] = kvp.Value
-                });
-            }
-        }
+        var usedKeys = new HashSet<string>();
+        int totalReplacements = 0;
 
-        // handler.Set("/", find/replace) only walks the body. Header/footer/footnote/
-        // endnote/comment text lives in sibling parts and would otherwise pass through
-        // unchanged — ScanUnresolvedDocx already inspects them, so without this pass
-        // the merge silently leaves {{key}} intact and reports them as unresolved.
-        // CONSISTENCY(merge-aux-parts): keep the part list aligned with
-        // ScanUnresolvedDocx so anything we scan is also actually replaced.
-        ReplacePlaceholdersInAuxDocxParts(filePath, data);
+        // CONSISTENCY(merge-single-pass): walk every <w:t> in body + aux parts
+        // in one pass with a single-pass regex substitute. The earlier
+        // per-key handler.Set(find/replace) loop fed each substituted value
+        // back through the next iteration, so a value like "{{name}}" inside
+        // data["greeting"] would itself be replaced — and only keys whose
+        // placeholder still survived the cascade counted as "used".
+        ReplacePlaceholdersInDocx(filePath, data, usedKeys, count => totalReplacements += count);
 
         // Scan for unresolved placeholders
         var unresolved = ScanUnresolvedDocx(filePath);
-        // Keys that were provided and are not still unresolved were successfully replaced
-        var usedKeys = data.Keys.Where(k => !unresolved.Contains(k)).ToList();
 
-        return new MergeResult(usedKeys.Count, unresolved, usedKeys);
+        return new MergeResult(totalReplacements, unresolved, usedKeys.ToList());
     }
 
-    private static void ReplacePlaceholdersInAuxDocxParts(string filePath, Dictionary<string, string> data)
+    private static void ReplacePlaceholdersInDocx(string filePath, Dictionary<string, string> data, HashSet<string> usedKeys, Action<int> bumpReplacements)
     {
         using var doc = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(filePath, true);
         var mainPart = doc.MainDocumentPart;
         if (mainPart == null) return;
 
-        IEnumerable<(DocumentFormat.OpenXml.Packaging.OpenXmlPart Part, DocumentFormat.OpenXml.OpenXmlPartRootElement? Root)> auxParts()
+        IEnumerable<(DocumentFormat.OpenXml.Packaging.OpenXmlPart Part, DocumentFormat.OpenXml.OpenXmlPartRootElement? Root)> allParts()
         {
+            if (mainPart.Document != null)
+                yield return (mainPart, mainPart.Document);
             foreach (var hp in mainPart.HeaderParts)
                 yield return (hp, hp.Header);
             foreach (var fp in mainPart.FooterParts)
@@ -143,7 +133,7 @@ internal static class TemplateMerger
                 yield return (mainPart.WordprocessingCommentsPart, mainPart.WordprocessingCommentsPart.Comments);
         }
 
-        foreach (var (part, root) in auxParts())
+        foreach (var (part, root) in allParts())
         {
             if (root == null) continue;
             bool changed = false;
@@ -151,14 +141,8 @@ internal static class TemplateMerger
             {
                 var original = t.Text ?? "";
                 if (original.Length == 0 || !original.Contains("{{")) continue;
-                var replaced = original;
-                foreach (var kvp in data)
-                {
-                    var ph = "{{" + kvp.Key + "}}";
-                    if (replaced.Contains(ph))
-                        replaced = replaced.Replace(ph, kvp.Value);
-                }
-                if (!ReferenceEquals(replaced, original) && replaced != original)
+                var replaced = SinglePassReplace(original, data, out var matched, usedKeys, bumpReplacements);
+                if (matched && replaced != original)
                 {
                     t.Text = replaced;
                     t.Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve;
@@ -167,6 +151,39 @@ internal static class TemplateMerger
             }
             if (changed) root.Save();
         }
+    }
+
+    /// <summary>
+    /// Replace every <c>{{key}}</c> in <paramref name="input"/> in a single
+    /// left-to-right scan. The substituted value is never re-fed through
+    /// the next iteration, so a kvp value containing <c>{{other}}</c> stays
+    /// literal. Tracks which keys actually appeared in the template
+    /// (<paramref name="usedKeys"/>) and the total number of substitutions
+    /// (<paramref name="bumpReplacements"/>). Placeholders whose name is
+    /// not in <paramref name="data"/> are left intact so
+    /// <c>ScanUnresolved*</c> can report them.
+    /// </summary>
+    private static string SinglePassReplace(string input, Dictionary<string, string> data, out bool matched, HashSet<string>? usedKeys = null, Action<int>? bumpReplacements = null)
+    {
+        matched = false;
+        if (string.IsNullOrEmpty(input) || !input.Contains("{{"))
+            return input;
+
+        int localCount = 0;
+        var result = PlaceholderPattern.Replace(input, m =>
+        {
+            var key = m.Groups[1].Value;
+            if (data.TryGetValue(key, out var replacement))
+            {
+                usedKeys?.Add(key);
+                localCount++;
+                return replacement;
+            }
+            return m.Value;
+        });
+        if (localCount > 0) bumpReplacements?.Invoke(localCount);
+        matched = localCount > 0;
+        return result;
     }
 
     private static List<string> ScanUnresolvedDocx(string filePath)
@@ -238,17 +255,7 @@ internal static class TemplateMerger
                     var cellText = GetCellText(cell, sst);
                     if (string.IsNullOrEmpty(cellText) || !cellText.Contains("{{")) continue;
 
-                    var newText = cellText;
-                    foreach (var kvp in data)
-                    {
-                        var placeholder = "{{" + kvp.Key + "}}";
-                        if (newText.Contains(placeholder))
-                        {
-                            newText = newText.Replace(placeholder, kvp.Value);
-                            usedKeys.Add(kvp.Key);
-                            totalReplacements++;
-                        }
-                    }
+                    var newText = SinglePassReplace(cellText, data, out _, usedKeys, count => totalReplacements += count);
 
                     if (newText != cellText)
                     {
@@ -395,19 +402,8 @@ internal static class TemplateMerger
         var fullText = string.Concat(runs.Select(r => r.Text?.Text ?? ""));
         if (!fullText.Contains("{{")) return 0;
 
-        var newText = fullText;
         int replacements = 0;
-
-        foreach (var kvp in data)
-        {
-            var placeholder = "{{" + kvp.Key + "}}";
-            if (newText.Contains(placeholder))
-            {
-                newText = newText.Replace(placeholder, kvp.Value);
-                usedKeys.Add(kvp.Key);
-                replacements++;
-            }
-        }
+        var newText = SinglePassReplace(fullText, data, out _, usedKeys, count => replacements += count);
 
         if (replacements == 0) return 0;
 
