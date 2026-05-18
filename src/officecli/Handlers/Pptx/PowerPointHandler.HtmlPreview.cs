@@ -439,7 +439,24 @@ public partial class PowerPointHandler
         {
             var dataUri = BlipToDataUri(blipFill, part);
             if (dataUri != null)
-                return $"background:url('{dataUri}') center/cover no-repeat;";
+            {
+                var css = $"background:url('{dataUri}') center/cover no-repeat;";
+                // R59-5: surface <a:alphaModFix amt="..."/> as CSS opacity so
+                // the HTML preview matches PowerPoint's faded image bg render.
+                // amt is 0..100000 (100000 = opaque). Skip when opaque/default
+                // to keep the emitted CSS minimal.
+                var alphaMod = blipFill.GetFirstChild<Drawing.Blip>()?.GetFirstChild<Drawing.AlphaModulationFixed>();
+                if (alphaMod?.Amount?.HasValue == true)
+                {
+                    var amt = alphaMod.Amount.Value;
+                    if (amt < 100000)
+                    {
+                        var opacity = amt / 100000.0;
+                        css += $"opacity:{opacity:0.##};";
+                    }
+                }
+                return css;
+            }
         }
 
         return "";
