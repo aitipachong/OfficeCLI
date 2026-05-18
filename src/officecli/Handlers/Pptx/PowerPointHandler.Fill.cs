@@ -173,7 +173,31 @@ public partial class PowerPointHandler
               || IsGradientColorString(normalized))
             newFill = BuildGradientFill(normalized);
         else
+        {
+            // CONSISTENCY(scheme-fill-transform-preserve): re-setting the same
+            // scheme color (with no user-supplied +lumMod/+shade suffix) on a
+            // shape that already carries lumMod/lumOff/shade/tint/satMod/hueMod
+            // transforms must NOT strip them — the user expects a no-op when
+            // they re-apply the same theme slot. R49 (756a9a13) only covered
+            // mutations of an UNRELATED shape; this handles the same-shape
+            // case. Skip when the new value carries its own transform chain
+            // ("accent1+lumMod=75000" or "accent1:lumMod=75000") — that's an
+            // explicit overwrite.
+            if (!value.Contains('+') && !value.Contains(':'))
+            {
+                var existingSolid = spPr.GetFirstChild<Drawing.SolidFill>();
+                var existingScheme = existingSolid?.GetFirstChild<Drawing.SchemeColor>();
+                var newScheme = TryParseSchemeColor(value);
+                if (existingScheme != null && newScheme.HasValue
+                    && existingScheme.Val?.Value == newScheme.Value
+                    && existingScheme.Elements().Any(c =>
+                        Array.IndexOf(ColorTransformLocalNames, c.LocalName) >= 0))
+                {
+                    return; // preserve transforms — no-op
+                }
+            }
             newFill = BuildSolidFill(value);
+        }
 
         spPr.RemoveAllChildren<Drawing.SolidFill>();
         spPr.RemoveAllChildren<Drawing.NoFill>();
