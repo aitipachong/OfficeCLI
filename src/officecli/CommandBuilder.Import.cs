@@ -241,13 +241,22 @@ static partial class CommandBuilder
 
             if (json)
             {
-                var jsonObj = new System.Text.Json.Nodes.JsonObject
+                var mergeData = new System.Text.Json.Nodes.JsonObject
                 {
-                    ["success"] = true,
                     ["output"] = Path.GetFullPath(output),
                     ["replacedKeys"] = mergeResult.UsedKeys.Count,
                     ["unresolvedPlaceholders"] = new System.Text.Json.Nodes.JsonArray(
                         mergeResult.UnresolvedPlaceholders.Select(p => (System.Text.Json.Nodes.JsonNode)p).ToArray())
+                };
+                var unresolvedCount = mergeResult.UnresolvedPlaceholders.Count;
+                var message = unresolvedCount > 0
+                    ? $"Merged {mergeResult.UsedKeys.Count} key(s), {unresolvedCount} unresolved placeholder(s)"
+                    : $"Merged {mergeResult.UsedKeys.Count} key(s)";
+                var jsonObj = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["success"] = true,
+                    ["data"] = mergeData,
+                    ["message"] = message,
                 };
                 Console.WriteLine(jsonObj.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = false }));
             }
