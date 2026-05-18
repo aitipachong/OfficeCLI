@@ -13,6 +13,38 @@ namespace OfficeCli.Handlers;
 
 public partial class PowerPointHandler
 {
+    // CONSISTENCY(effect-color-8digit): shadow/glow readback contract is
+    // CSS-form 8-digit hex '#RRGGBBAA' (schema/help/pptx/shape.json
+    // shadow.readback / glow.readback). FormatHexWithAlpha falls back to
+    // 6-digit when the underlying srgbClr has no a:alpha child, which broke
+    // the round-trip promise for the opaque case. Coerce hex colors emitted
+    // into the composite shadow/glow strings to 8-digit; scheme color names
+    // (accent1, dark1, …) pass through unchanged.
+    private static string EnsureEightDigitHexForEffect(string color)
+    {
+        if (string.IsNullOrEmpty(color)) return color;
+        // Color may carry transforms ("000000+lumMod50"). Coerce only the
+        // base hex token (before the first '+'); scheme color names
+        // (accent1, dark1, …) pass through unchanged.
+        var plusIdx = color.IndexOf('+');
+        var head = plusIdx >= 0 ? color[..plusIdx] : color;
+        var tail = plusIdx >= 0 ? color[plusIdx..] : "";
+        var hadHash = head.StartsWith('#');
+        var hex = hadHash ? head[1..] : head;
+        if (hex.Length == 6 && hex.All(Uri.IsHexDigit))
+        {
+            // Schema readback contract: '#RRGGBBAA'. Ensure both '#' and the
+            // trailing 'FF' alpha byte are present.
+            return $"#{hex.ToUpperInvariant()}FF{tail}";
+        }
+        if (hex.Length == 8 && hex.All(Uri.IsHexDigit) && !hadHash)
+        {
+            // Already 8-digit but lacking '#' — add the leading hash.
+            return $"#{hex.ToUpperInvariant()}{tail}";
+        }
+        return color;
+    }
+
     private List<DocumentNode> GetSlideChildNodes(SlidePart slidePart, int slideNum, int depth)
     {
         var children = new List<DocumentNode>();
@@ -926,7 +958,7 @@ public partial class PowerPointHandler
             var outerShadow = activeEffectList.GetFirstChild<Drawing.OuterShadow>();
             if (outerShadow != null)
             {
-                var shadowColor = ReadColorFromElement(outerShadow) ?? "000000";
+                var shadowColor = EnsureEightDigitHexForEffect(ReadColorFromElement(outerShadow) ?? "000000");
                 var blurPt = outerShadow.BlurRadius?.HasValue == true ? $"{outerShadow.BlurRadius.Value / 12700.0:0.##}" : "4";
                 var angleDeg = outerShadow.Direction?.HasValue == true ? $"{outerShadow.Direction.Value / 60000.0:0.##}" : "45";
                 var distPt = outerShadow.Distance?.HasValue == true ? $"{outerShadow.Distance.Value / 12700.0:0.##}" : "3";
@@ -941,7 +973,7 @@ public partial class PowerPointHandler
             var glow = activeEffectList.GetFirstChild<Drawing.Glow>();
             if (glow != null)
             {
-                var glowColor = ReadColorFromElement(glow) ?? "000000";
+                var glowColor = EnsureEightDigitHexForEffect(ReadColorFromElement(glow) ?? "000000");
                 var radiusPt = glow.Radius?.HasValue == true ? $"{glow.Radius.Value / 12700.0:0.##}" : "8";
                 var glowAlpha = glow.Descendants<Drawing.Alpha>().FirstOrDefault();
                 // OOXML default: <a:glow> without <a:alpha> is fully opaque.
@@ -1471,7 +1503,7 @@ public partial class PowerPointHandler
             var picOuterShadow = picEffectList.GetFirstChild<Drawing.OuterShadow>();
             if (picOuterShadow != null)
             {
-                var shadowColor = ReadColorFromElement(picOuterShadow) ?? "000000";
+                var shadowColor = EnsureEightDigitHexForEffect(ReadColorFromElement(picOuterShadow) ?? "000000");
                 var blurPt = picOuterShadow.BlurRadius?.HasValue == true ? $"{picOuterShadow.BlurRadius.Value / 12700.0:0.##}" : "4";
                 var angleDeg = picOuterShadow.Direction?.HasValue == true ? $"{picOuterShadow.Direction.Value / 60000.0:0.##}" : "45";
                 var distPt = picOuterShadow.Distance?.HasValue == true ? $"{picOuterShadow.Distance.Value / 12700.0:0.##}" : "3";
@@ -1482,7 +1514,7 @@ public partial class PowerPointHandler
             var picGlow = picEffectList.GetFirstChild<Drawing.Glow>();
             if (picGlow != null)
             {
-                var glowColor = ReadColorFromElement(picGlow) ?? "000000";
+                var glowColor = EnsureEightDigitHexForEffect(ReadColorFromElement(picGlow) ?? "000000");
                 var radiusPt = picGlow.Radius?.HasValue == true ? $"{picGlow.Radius.Value / 12700.0:0.##}" : "8";
                 var glowAlpha = picGlow.Descendants<Drawing.Alpha>().FirstOrDefault();
                 var glowOpacity = glowAlpha?.Val?.HasValue == true ? $"{glowAlpha.Val.Value / 1000.0:0.##}" : "75";
