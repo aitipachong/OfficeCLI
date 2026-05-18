@@ -1292,6 +1292,12 @@ public partial class WordHandler
         {
             switch (key.ToLowerInvariant())
             {
+                case "skipgridsync":
+                    // CONSISTENCY(tblgrid-preserve): consumed inline by the
+                    // width branch as a side-effect modifier. Recognized
+                    // here so dump→batch replay doesn't flag the emitter-
+                    // injected skipGridSync=true as UNSUPPORTED.
+                    break;
                 case "text":
                     // Defer text handling until after formatting is applied
                     deferredText = value;
