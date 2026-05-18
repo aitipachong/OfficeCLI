@@ -489,6 +489,18 @@ public partial class PowerPointHandler
                 }
                 if (properties.TryGetValue("spacing", out var rSpacing) || properties.TryGetValue("charspacing", out rSpacing))
                     rProps.Spacing = (int)(ParseHelpers.SafeParseDouble(rSpacing, "charspacing") * 100);
+                // kern: raw OOXML hundredths-of-a-point integer, matches Set
+                // path semantics. Validated against ST_TextNonNegativePoint
+                // range [0, 400000]; symmetric with the Set rPr attribute
+                // branch (PowerPointHandler.ShapeProperties.cs) so that
+                // `add run kern=N` no longer reports UNSUPPORTED.
+                if (properties.TryGetValue("kern", out var rKern))
+                {
+                    if (!int.TryParse(rKern, out var kv) || kv < 0 || kv > 400000)
+                        throw new ArgumentException(
+                            $"Invalid kern '{rKern}': OOXML ST_TextNonNegativePoint requires an integer in [0, 400000] (hundredths of a point).");
+                    rProps.Kerning = kv;
+                }
                 if (properties.TryGetValue("baseline", out var rBaseline))
                 {
                     rProps.Baseline = rBaseline.ToLowerInvariant() switch
