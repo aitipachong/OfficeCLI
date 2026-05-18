@@ -247,7 +247,7 @@ public partial class PowerPointHandler
         // segment so /slide[1]/group[1] still parses as "remove the group at
         // root" (ancestor empty, leaf = group[1]) rather than "remove slide
         // with group ancestor 1".
-        var slideMatch = Regex.Match(path, @"^/slide\[(\d+)\](?:((?:/group\[\d+\])*)/(\w+)\[(\d+)\])?$");
+        var slideMatch = Regex.Match(path, @"^/slide\[(\d+)\](?:((?:/group\[\d+\])*)/(\w+)\[(\w+)\])?$");
         if (!slideMatch.Success)
             throw new ArgumentException($"Invalid path: {path}. Expected format: /slide[N] or /slide[N]/element[M] (e.g. /slide[1], /slide[1]/shape[2])");
 
@@ -306,7 +306,27 @@ public partial class PowerPointHandler
         }
 
         var elementType = slideMatch.Groups[3].Value;
-        var elementIdx = int.Parse(slideMatch.Groups[4].Value);
+        var elementIdxToken = slideMatch.Groups[4].Value;
+
+        // Placeholder remove: accept both numeric index (/slide[N]/placeholder[K])
+        // and type-name selectors (/slide[N]/placeholder[title]) that Query emits.
+        // ResolvePlaceholderShape materializes layout-inherited placeholders onto
+        // the slide; removing that materialized Shape is the canonical delete.
+        if (elementType == "placeholder")
+        {
+            if (!string.IsNullOrEmpty(groupAncestorChain))
+                throw new ArgumentException("placeholder remove does not support /group[K] ancestors");
+            var phShape = ResolvePlaceholderShape(slidePart, elementIdxToken);
+            var phShapeId = phShape.NonVisualShapeProperties?.NonVisualDrawingProperties?.Id?.Value ?? 0;
+            if (phShapeId != 0)
+                RemoveShapeAnimations(GetSlide(slidePart), (uint)phShapeId);
+            phShape.Remove();
+            GetSlide(slidePart).Save();
+            return null;
+        }
+
+        if (!int.TryParse(elementIdxToken, out var elementIdx))
+            throw new ArgumentException($"Invalid index '{elementIdxToken}' for element type '{elementType}'. Expected a positive integer.");
 
         if (elementType == "shape")
         {
