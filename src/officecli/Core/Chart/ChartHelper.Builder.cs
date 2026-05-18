@@ -651,7 +651,9 @@ internal static partial class ChartHelper
                 categories, seriesData[i].values, color));
         }
 
-        lineChart.AppendChild(new C.ShowMarker { Val = true });
+        // ShowMarker is opt-in: only emit when user sets the prop (Setter
+        // handles "showmarker" / "showmarkers"). Hard-coding true broke
+        // dump→replay for line charts that should have no markers.
         lineChart.AppendChild(new C.AxisId { Val = catAxisId });
         lineChart.AppendChild(new C.AxisId { Val = valAxisId });
         return lineChart;
