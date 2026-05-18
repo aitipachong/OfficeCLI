@@ -1038,10 +1038,20 @@ public partial class PowerPointHandler
                     bodyPr.RemoveAllChildren<Drawing.NoAutoFit>();
                     switch (value.ToLowerInvariant())
                     {
-                        case "true" or "normal" or "normautofit" or "auto" or "shrink": bodyPr.AppendChild(new Drawing.NormalAutoFit()); break;
+                        case "true" or "normal" or "normautofit" or "auto": bodyPr.AppendChild(new Drawing.NormalAutoFit()); break;
                         case "shape" or "spautofit" or "resize": bodyPr.AppendChild(new Drawing.ShapeAutoFit()); break;
                         case "false" or "none": bodyPr.AppendChild(new Drawing.NoAutoFit()); break;
-                        default: throw new ArgumentException($"Invalid autofit value: '{value}'. Valid values: true/normal/shrink, shape/resize, false/none.");
+                        // 'shrink' previously aliased to 'normal' (same plain
+                        // <a:normAutofit/> with no fontScale/lnSpcReduction
+                        // attributes), so callers asking for shrink-on-overflow
+                        // got identical XML to autofit=normal. Reject the alias
+                        // instead of silently lying — implementing real shrink
+                        // requires picking fontScale/lnSpcReduction values per
+                        // overflow geometry, which is its own feature. Callers
+                        // wanting shrink-on-overflow today should use
+                        // autofit=normal and tune fontScale via raw-set.
+                        case "shrink": throw new ArgumentException($"Invalid autofit value: 'shrink'. PowerPoint's shrink-on-overflow requires fontScale/lnSpcReduction attributes that officecli does not synthesize; use autofit=normal (plain normAutofit) and tune via raw-set if needed. Valid values: true/normal, shape/resize, false/none.");
+                        default: throw new ArgumentException($"Invalid autofit value: '{value}'. Valid values: true/normal, shape/resize, false/none.");
                     }
                     break;
                 }
