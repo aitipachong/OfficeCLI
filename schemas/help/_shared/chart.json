@@ -513,7 +513,7 @@
         "zero",
         "span"
       ],
-      "add": false,
+      "add": true,
       "set": true,
       "get": true,
       "description": "how empty cells render (gap leaves a hole, zero plots as 0, span connects across).",
@@ -1384,7 +1384,7 @@
     },
     "varyColors": {
       "type": "string",
-      "add": false,
+      "add": true,
       "set": true,
       "get": true,
       "description": "vary colors by data point (true|false; single-series charts).",
