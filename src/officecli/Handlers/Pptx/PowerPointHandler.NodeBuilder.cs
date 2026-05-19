@@ -1761,6 +1761,15 @@ public partial class PowerPointHandler
                 _ => dashValue
             };
         }
+        // Gradient on the connector line — emit round-trippable spec so dump→batch
+        // replay rebuilds the gradient instead of falling back to a bare <a:ln/>
+        // (which would inherit the theme's default thin stroke). Mirrors the shape
+        // outline gradient readback above.
+        var cxnLineGradFill = ln?.GetFirstChild<Drawing.GradientFill>();
+        if (cxnLineGradFill != null)
+        {
+            node.Format["line.gradient"] = ReadGradientString(cxnLineGradFill);
+        }
         var solidFill = ln?.GetFirstChild<Drawing.SolidFill>();
         var rgb = solidFill?.GetFirstChild<Drawing.RgbColorModelHex>();
         // CONSISTENCY(canonical-key): canonical 'color'; 'lineColor' was legacy.
