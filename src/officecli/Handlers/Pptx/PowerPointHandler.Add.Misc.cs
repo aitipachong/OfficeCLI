@@ -302,19 +302,45 @@ public partial class PowerPointHandler
     private string AddGroup(string parentPath, int? index, Dictionary<string, string> properties)
     {
                 var grpSlideMatch = Regex.Match(parentPath, @"^/slide\[(\d+)\]$");
-                if (!grpSlideMatch.Success)
-                    throw new ArgumentException("Groups must be added to a slide: /slide[N]");
+                // CONSISTENCY(nested-group): accept a /slide[N]/group[K]... parent
+                // chain so dump-replay of nested groups round-trips. AddEmptyGroup
+                // inserts into the resolved container element; sibling lookups use
+                // GroupShape children there instead of the slide-level shape tree.
+                var grpNestedMatch = Regex.Match(parentPath, @"^/slide\[(\d+)\](/group\[\d+\])+$");
+                if (!grpSlideMatch.Success && !grpNestedMatch.Success)
+                    throw new ArgumentException("Groups must be added to a slide or a nested group: /slide[N] or /slide[N]/group[K]");
 
-                var grpSlideIdx = int.Parse(grpSlideMatch.Groups[1].Value);
+                var grpSlideIdx = int.Parse((grpSlideMatch.Success ? grpSlideMatch : grpNestedMatch).Groups[1].Value);
                 var grpSlideParts = GetSlideParts().ToList();
                 if (grpSlideIdx < 1 || grpSlideIdx > grpSlideParts.Count)
                     throw new ArgumentException($"Slide {grpSlideIdx} not found (total: {grpSlideParts.Count})");
 
                 var grpSlidePart = grpSlideParts[grpSlideIdx - 1];
-                var grpShapeTree = GetSlide(grpSlidePart).CommonSlideData?.ShapeTree
+                var grpSlideShapeTree = GetSlide(grpSlidePart).CommonSlideData?.ShapeTree
                     ?? throw new InvalidOperationException("Slide has no shape tree");
 
-                var grpId = AcquireShapeId(grpShapeTree, properties);
+                // Resolve container: slide-level ShapeTree or a nested GroupShape.
+                // For Add purposes either works (both expose ChildElements + can
+                // host a new GroupShape via InsertAtPosition).
+                OpenXmlCompositeElement grpShapeTree = grpSlideShapeTree;
+                if (grpNestedMatch.Success)
+                {
+                    var nestedTokens = Regex.Matches(parentPath.Substring($"/slide[{grpSlideIdx}]".Length), @"/group\[(\d+)\]");
+                    OpenXmlCompositeElement cursor = grpSlideShapeTree;
+                    foreach (Match nm in nestedTokens)
+                    {
+                        var gi = int.Parse(nm.Groups[1].Value);
+                        var nestedGroups = cursor.Elements<GroupShape>().ToList();
+                        if (gi < 1 || gi > nestedGroups.Count)
+                            throw new ArgumentException($"Group {gi} not found under {parentPath} (total: {nestedGroups.Count})");
+                        cursor = nestedGroups[gi - 1];
+                    }
+                    grpShapeTree = cursor;
+                }
+
+                // ID allocation must scan the whole slide (shape IDs are slide-scoped),
+                // not the container; use the slide-level shape tree even for nested groups.
+                var grpId = AcquireShapeId(grpSlideShapeTree, properties);
                 var grpName = properties.GetValueOrDefault("name", $"Group {grpShapeTree.Elements<GroupShape>().Count() + 1}");
 
                 // Parse shape paths to group: shapes="1,2,3" (shape indices)
@@ -336,7 +362,7 @@ public partial class PowerPointHandler
                     if (!hasGeometry)
                         throw new ArgumentException("'shapes' property required: comma-separated shape indices to group (e.g. shapes=1,2,3), or supply geometry (x,y,width,height) for an empty group to be filled by subsequent `add shape parent=/slide[N]/group[K]` calls.");
 
-                    return AddEmptyGroup(grpSlidePart, grpShapeTree, grpSlideIdx, grpId, grpName, index, properties);
+                    return AddEmptyGroup(grpSlidePart, grpShapeTree, grpSlideIdx, grpId, grpName, index, properties, parentPath);
                 }
 
                 // CONSISTENCY(query-path-roundtrip): help advertises @id=/@name=
@@ -529,9 +555,9 @@ public partial class PowerPointHandler
     /// branch). Required for `dump | batch` round-trip: dump emits a
     /// geometry-only group followed by per-child shape adds.
     /// </summary>
-    private string AddEmptyGroup(SlidePart grpSlidePart, ShapeTree grpShapeTree, int grpSlideIdx,
+    private string AddEmptyGroup(SlidePart grpSlidePart, OpenXmlCompositeElement grpShapeTree, int grpSlideIdx,
                                  uint grpId, string grpName, int? index,
-                                 Dictionary<string, string> properties)
+                                 Dictionary<string, string> properties, string parentPath = "")
     {
         long emptyX = (properties.TryGetValue("x", out var ex) || properties.TryGetValue("left", out ex)) ? ParseEmu(ex) : 0;
         long emptyY = (properties.TryGetValue("y", out var ey) || properties.TryGetValue("top", out ey)) ? ParseEmu(ey) : 0;
@@ -567,7 +593,9 @@ public partial class PowerPointHandler
 
         GetSlide(grpSlidePart).Save();
         var emptyCount = grpShapeTree.Elements<GroupShape>().Count();
-        return $"/slide[{grpSlideIdx}]/group[{emptyCount}]";
+        var parentPrefix = string.IsNullOrEmpty(parentPath) || parentPath == $"/slide[{grpSlideIdx}]"
+            ? $"/slide[{grpSlideIdx}]" : parentPath;
+        return $"{parentPrefix}/group[{emptyCount}]";
     }
 
     // CONSISTENCY(add-dispatch-shape): mirrors AddGroup/AddShape resolution flow.

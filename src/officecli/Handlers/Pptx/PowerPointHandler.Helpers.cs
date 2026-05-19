@@ -1677,12 +1677,16 @@ public partial class PowerPointHandler
     // for every content element type, not just typed Shape.
     private static void ApplyZOrder(DocumentFormat.OpenXml.Packaging.SlidePart slidePart, OpenXmlElement shape, string value)
     {
-        var shapeTree = shape.Parent as ShapeTree
-            ?? throw new InvalidOperationException("Shape is not in a ShapeTree");
+        // CONSISTENCY(nested-group): a shape nested inside a GroupShape has the
+        // group as its DOM parent. ZOrder still applies within that local sibling
+        // scope — accept ShapeTree or any GroupShape container.
+        var container = shape.Parent as OpenXmlCompositeElement;
+        if (container is not ShapeTree && container is not GroupShape)
+            throw new InvalidOperationException("Shape is not in a ShapeTree or GroupShape");
 
         // Get all content elements (Shape, Picture, GraphicFrame, GroupShape, ConnectionShape)
         // that participate in z-order (skip structural elements like nvGrpSpPr, grpSpPr)
-        var contentElements = shapeTree.ChildElements
+        var contentElements = container.ChildElements
             .Where(e => e is Shape or Picture or GraphicFrame or GroupShape or ConnectionShape)
             .ToList();
         var currentIndex = contentElements.IndexOf(shape);
@@ -1721,28 +1725,28 @@ public partial class PowerPointHandler
         if (targetIndex >= contentElements.Count - 1)
         {
             // Front: append after last content element (or at end of tree)
-            shapeTree.AppendChild(shape);
+            container.AppendChild(shape);
         }
         else if (targetIndex <= 0)
         {
             // Back: insert before the first content element
-            var firstContent = shapeTree.ChildElements
+            var firstContent = container.ChildElements
                 .FirstOrDefault(e => e is Shape or Picture or GraphicFrame or GroupShape or ConnectionShape);
             if (firstContent != null)
                 firstContent.InsertBeforeSelf(shape);
             else
-                shapeTree.AppendChild(shape);
+                container.AppendChild(shape);
         }
         else
         {
             // Refresh content list after removal
-            var updatedContent = shapeTree.ChildElements
+            var updatedContent = container.ChildElements
                 .Where(e => e is Shape or Picture or GraphicFrame or GroupShape or ConnectionShape)
                 .ToList();
             if (targetIndex < updatedContent.Count)
                 updatedContent[targetIndex].InsertBeforeSelf(shape);
             else
-                shapeTree.AppendChild(shape);
+                container.AppendChild(shape);
         }
     }
 
