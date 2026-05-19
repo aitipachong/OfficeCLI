@@ -1111,7 +1111,13 @@ internal static partial class ChartHelper
     {
         var stops = gradFill.GetFirstChild<Drawing.GradientStopList>()
             ?.Elements<Drawing.GradientStop>().ToList();
-        if (stops == null || stops.Count < 2) return null;
+        // R28-B4: a 1-stop gradient is an edge case (Excel/PowerPoint normally
+        // require ≥2 stops) but does occur in hand-edited or third-party files.
+        // Returning null silently dropped it on dump; instead emit the single
+        // color so ApplySeriesGradient (which already tolerates 1-stop input
+        // via its duplicate-on-empty fallback) reconstructs an equivalent
+        // gradient. Zero stops still cannot round-trip — return null then.
+        if (stops == null || stops.Count == 0) return null;
         var parts = new List<string>();
         foreach (var stop in stops)
         {

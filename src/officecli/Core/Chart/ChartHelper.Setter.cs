@@ -2876,8 +2876,14 @@ internal static partial class ChartHelper
             colorsPart = gradientSpec[..colonIdx];
         }
 
-        var colors = colorsPart.Split('-').Select(c => c.Trim()).ToArray();
-        if (colors.Length < 2) return;
+        var colors = colorsPart.Split('-').Select(c => c.Trim()).Where(c => c.Length > 0).ToArray();
+        if (colors.Length == 0) return;
+        // R28-B4: tolerate a 1-stop spec (the Reader emits one when the
+        // source had a single GradientStop) by duplicating the color so
+        // the resulting gradient is well-formed (≥2 stops) and visually
+        // equivalent to a solid fill. Matches the BuildGradientFill
+        // duplicate-on-empty fallback.
+        if (colors.Length == 1) colors = new[] { colors[0], colors[0] };
 
         var gradFill = new Drawing.GradientFill();
         var gsLst = new Drawing.GradientStopList();
