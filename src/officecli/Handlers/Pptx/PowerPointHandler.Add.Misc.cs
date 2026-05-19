@@ -621,6 +621,19 @@ public partial class PowerPointHandler
                 .FirstOrDefault(p => p?.Type?.Value == PlaceholderValues.Title
                     || p?.Type?.Value == PlaceholderValues.CenteredTitle)
             : null;
+        // Detect whether the caller explicitly provided an idx — distinguishes
+        // "user passed no idx, want bare <p:ph type='subTitle'/>" from "user
+        // didn't bother and we should pick one". Dump→batch replay relies on
+        // this: NodeBuilder emits phIndex only when the source XML had an
+        // idx attribute, so the absence of the key on the prop bag carries
+        // semantic weight for the round trip. Without this distinction, a
+        // bare <p:ph type='subTitle'/> source replayed as
+        // <p:ph type='subTitle' idx='1'/>, and the idx=1 binding inherited
+        // body's default bullet style from the layout/master cascade.
+        bool callerProvidedIdx =
+            properties.ContainsKey("phIndex")
+            || properties.ContainsKey("phindex")
+            || properties.ContainsKey("idx");
         if (isTitleType)
         {
             boundToLayout = titleLayoutSlot != null;
@@ -640,6 +653,18 @@ public partial class PowerPointHandler
                         ?.GetFirstChild<PlaceholderShape>())
                     .FirstOrDefault(p => p?.Index?.Value == parsedIdx);
                 boundToLayout = slot != null;
+            }
+            else if (phTypeVal == PlaceholderValues.SubTitle && !callerProvidedIdx)
+            {
+                // Subtitle bound by type alone — leave Index unset so the
+                // emitted <p:ph type="subTitle"/> matches a source that had
+                // no idx attribute. Layout binding still resolves via type.
+                var layoutMatch = layoutPartCheck?.SlideLayout?.CommonSlideData?.ShapeTree
+                    ?.Elements<Shape>()
+                    .Select(s => s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties
+                        ?.GetFirstChild<PlaceholderShape>())
+                    .FirstOrDefault(p => p?.Type?.Value == phTypeVal);
+                boundToLayout = layoutMatch != null;
             }
             else
             {
