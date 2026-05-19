@@ -2760,9 +2760,12 @@ internal static partial class ChartHelper
         return dash.ToLowerInvariant() switch
         {
             "solid" => Drawing.PresetLineDashValues.Solid,
-            "dot" or "sysdot" => Drawing.PresetLineDashValues.SystemDot,
-            "dash" or "sysdash" => Drawing.PresetLineDashValues.SystemDash,
+            "dot" => Drawing.PresetLineDashValues.Dot,
+            "sysdot" => Drawing.PresetLineDashValues.SystemDot,
+            "dash" => Drawing.PresetLineDashValues.Dash,
+            "sysdash" => Drawing.PresetLineDashValues.SystemDash,
             "dashdot" => Drawing.PresetLineDashValues.DashDot,
+            "dashdotdot" => Drawing.PresetLineDashValues.SystemDashDotDot,
             "sysdashdot" or "sysdash_dot" => Drawing.PresetLineDashValues.SystemDashDot,
             "sysdashdotdot" or "sysdash_dot_dot" => Drawing.PresetLineDashValues.SystemDashDotDot,
             "longdash" or "lgdash" => Drawing.PresetLineDashValues.LargeDash,
