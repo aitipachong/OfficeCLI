@@ -521,7 +521,7 @@
     },
     "list": {
       "type": "string",
-      "description": "list style for shape paragraphs (bullet|ordered|none).",
+      "description": "list style for shape paragraphs (bullet|numbered|alpha|roman|none|<char>).",
       "aliases": [
         "liststyle"
       ],

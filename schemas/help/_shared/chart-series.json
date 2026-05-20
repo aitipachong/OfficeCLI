@@ -116,7 +116,7 @@
       "type": "string",
       "set": true,
       "get": true,
-      "description": "per-series marker symbol. Values: circle, dash, diamond, dot, picture, plus, square, star, triangle, x, none. Supports 'symbol:size:COLOR' compound form (e.g. 'circle:8:FF0000'). Applies to line/scatter/radar series.",
+      "description": "per-series marker symbol. Values: circle, dash, diamond, dot, plus, square, star, triangle, x, none, auto. Supports 'symbol:size:COLOR' compound form (e.g. 'circle:8:FF0000'). Applies to line/scatter/radar series. (picture markers are not implemented.)",
       "examples": [
         "--prop marker=circle",
         "--prop marker=\"circle:8:FF0000\""
