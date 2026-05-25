@@ -41,6 +41,17 @@ public partial class PowerPointHandler
             var unindexedSlideMatch = Regex.Match(selector, @"^\s*slide\s*>\s*(.+)$", RegexOptions.IgnoreCase);
             if (unindexedSlideMatch.Success)
                 selector = unindexedSlideMatch.Groups[1].Value;
+            else
+            {
+                // CSS descendant combinator `slide chart` — subject is the
+                // right-hand element, ancestor on the left is advisory.
+                // Without this, the type-match loop below ate the leading
+                // "slide" and returned slide nodes, silently swallowing the
+                // chart subject.
+                var unindexedDescendantMatch = Regex.Match(selector, @"^\s*slide\s+(\w[\w\[\]=@'""]*.*)$", RegexOptions.IgnoreCase);
+                if (unindexedDescendantMatch.Success)
+                    selector = unindexedDescendantMatch.Groups[1].Value;
+            }
         }
 
         // Strip any remaining combinator prefixes like "table > " so that

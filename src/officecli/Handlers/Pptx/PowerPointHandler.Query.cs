@@ -1287,6 +1287,18 @@ public partial class PowerPointHandler
             var unindexedPrefix = Regex.Match(typeSource, @"^\s*slide\s*>\s*", RegexOptions.IgnoreCase);
             if (unindexedPrefix.Success)
                 typeSource = typeSource.Substring(unindexedPrefix.Length);
+            else
+            {
+                // CSS descendant combinator `slide chart` — same subject rule
+                // as `slide > chart`: subject is the right-hand element. The
+                // ParseShapeSelector pass above already handled this for
+                // attribute fan-out; rawType needs the matching strip so the
+                // dispatch table (line ~1342 `if rawType == "slide"`) does
+                // not return the ancestor.
+                var unindexedDescendant = Regex.Match(typeSource, @"^\s*slide\s+(?=\w)", RegexOptions.IgnoreCase);
+                if (unindexedDescendant.Success)
+                    typeSource = typeSource.Substring(unindexedDescendant.Length);
+            }
         }
         var typeMatch = Regex.Match(typeSource, @"^([\w]+)");
         var rawType = typeMatch.Success ? typeMatch.Groups[1].Value.ToLowerInvariant() : "";
