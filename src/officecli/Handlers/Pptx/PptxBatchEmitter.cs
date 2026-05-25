@@ -934,6 +934,55 @@ public static partial class PptxBatchEmitter
                 if (doc.Root.GetNamespaceOfPrefix(prefix) != null) continue;
                 doc.Root.SetAttributeValue(System.Xml.Linq.XNamespace.Xmlns + prefix, uri);
             }
+            // R42-T2: drop unused non-ambient xmlns decls from the slice root.
+            //
+            // Pass 1 extracts a transition AlternateContent slice that declares
+            // ONLY xmlns:p159 because that's what its <mc:Choice> references.
+            // After replay, the SDK serializes the slide such that the SAME
+            // AlternateContent picks up sibling decls (xmlns:am3d, xmlns:a16,
+            // ...) from the slide root, because the SDK propagates every
+            // root-level namespace down to top-level children when it can't
+            // prove they are unused. Pass 2 then extracts a slice carrying
+            // xmlns:am3d that pass 1 did not — same semantics, drifting bytes.
+            //
+            // A non-ambient prefix is "used" by this slice iff it appears on an
+            // element name, an attribute name, OR as a token inside
+            // mc:Choice/@Requires or any @mc:Ignorable. Anything else is dead
+            // weight inherited from the parent and should be stripped to keep
+            // the slice byte-stable across rounds.
+            var mcNs = System.Xml.Linq.XNamespace.Get("http://schemas.openxmlformats.org/markup-compatibility/2006");
+            var usedPrefixes = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var el in doc.Root.DescendantsAndSelf())
+            {
+                if (!string.IsNullOrEmpty(el.Name.NamespaceName))
+                {
+                    var p = el.GetPrefixOfNamespace(el.Name.Namespace);
+                    if (!string.IsNullOrEmpty(p)) usedPrefixes.Add(p);
+                }
+                foreach (var attr in el.Attributes())
+                {
+                    if (attr.IsNamespaceDeclaration) continue;
+                    if (!string.IsNullOrEmpty(attr.Name.NamespaceName))
+                    {
+                        var p = el.GetPrefixOfNamespace(attr.Name.Namespace);
+                        if (!string.IsNullOrEmpty(p)) usedPrefixes.Add(p);
+                    }
+                    // mc:Choice/@Requires + mc:Ignorable are space-separated
+                    // prefix lists referencing namespaces by their bound name.
+                    if (attr.Name == mcNs + "Ignorable" || attr.Name.LocalName == "Requires"
+                        || attr.Name.LocalName == "Ignorable")
+                    {
+                        foreach (var tok in attr.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                            usedPrefixes.Add(tok);
+                    }
+                }
+            }
+            var stripDecls = doc.Root.Attributes()
+                .Where(a => a.IsNamespaceDeclaration
+                            && !ambientPrefixes.Contains(a.Name.LocalName)
+                            && !usedPrefixes.Contains(a.Name.LocalName))
+                .ToList();
+            foreach (var d in stripDecls) d.Remove();
             // Drop redundant prefix decls on descendants that match the root's
             // (mirrors CanonicalizeRawXml but on the post-rewrite tree).
             var rootDecls = doc.Root.Attributes()
