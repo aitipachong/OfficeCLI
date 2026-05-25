@@ -773,8 +773,17 @@ public partial class WordHandler
         }
     }
 
-    public string Move(string sourcePath, string? targetParentPath, InsertPosition? position)
+    public string Move(string sourcePath, string? targetParentPath, InsertPosition? position, Dictionary<string, string>? properties = null)
     {
+        // Detect track-change branch: any trackChange.author/date/id signals
+        // the high-level "auto-pair moveFrom/moveTo" form. Bare `trackChange=`
+        // is NOT consumed here — only the sub-keys; the low-level synthesis
+        // form (--prop trackChange=moveFrom on `add run`) still lives in Add.
+        if (properties != null && HasTrackChangeMoveProps(properties))
+        {
+            return MoveWithTrackChange(sourcePath, targetParentPath, position, properties);
+        }
+
         // Virtual table column path — same-table only. OOXML has no <w:col>
         // element; the move is a (gridCol + per-row tc) shuffle in lockstep.
         var colMoveMatch = Regex.Match(sourcePath, @"^/body/tbl\[(\d+)\]/col\[(\d+)\]$");
@@ -891,6 +900,161 @@ public partial class WordHandler
         var siblings = targetParent.ChildElements.Where(e => e.LocalName == element.LocalName).ToList();
         var newIdx = siblings.IndexOf(element) + 1;
         return $"{effectiveParentPath}/{element.LocalName}[{newIdx}]";
+    }
+
+    /// <summary>
+    /// True if any of the trackChange sub-keys (author/date/id) appear in the
+    /// caller-supplied --prop dict. Case-insensitive — the CLI dict already
+    /// uses OrdinalIgnoreCase but plugin/JSON paths may not.
+    /// </summary>
+    private static bool HasTrackChangeMoveProps(Dictionary<string, string> props)
+    {
+        foreach (var key in props.Keys)
+        {
+            var k = key.ToLowerInvariant();
+            if (k == "trackchange.author" || k == "trackchange.date" || k == "trackchange.id")
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// High-level run-level move + trackChange: source stays in place wrapped
+    /// in &lt;w:moveFrom&gt; (with w:t→w:delText conversion); dest is a clone
+    /// of the source content wrapped in &lt;w:moveTo&gt; appended to target
+    /// paragraph. Both share the same w:id so Word recognises the pair.
+    /// Returns the dest path.
+    /// </summary>
+    private string MoveWithTrackChange(string sourcePath, string? targetParentPath, InsertPosition? position, Dictionary<string, string> properties)
+    {
+        var srcParts = ParsePath(sourcePath);
+        var element = NavigateToElement(srcParts)
+            ?? throw new ArgumentException($"Source not found: {sourcePath}");
+
+        // Run-level only (paragraph-level move tracking needs different
+        // OOXML — w:moveFromRangeStart/End + w:moveToRangeStart/End markers
+        // outside the paragraph boundary; out of scope for Phase 3).
+        if (element.LocalName != "r")
+            throw new ArgumentException(
+                $"move + trackChange is supported for run-level paths only (got {element.LocalName}). "
+                + "Paragraph-level move tracking (moveFromRangeStart/End markers) is not yet supported.");
+
+        // Reject re-moving an element already inside a moveFrom/moveTo —
+        // would produce nested move markers which Word treats as malformed.
+        if (element.Ancestors<MoveFromRun>().Any() || element.Ancestors<MoveToRun>().Any())
+            throw new InvalidOperationException(
+                "Source run is already inside a moveFrom/moveTo wrapper; nested move tracking is not supported.");
+
+        // Resolve target parent (--to is required for trackChange branch).
+        var anchorFullPath = position?.After ?? position?.Before;
+        if (string.IsNullOrEmpty(targetParentPath) && anchorFullPath != null && anchorFullPath.StartsWith("/"))
+        {
+            var lastSlash = anchorFullPath.LastIndexOf('/');
+            if (lastSlash > 0)
+                targetParentPath = anchorFullPath[..lastSlash];
+        }
+        if (string.IsNullOrEmpty(targetParentPath))
+            throw new ArgumentException(
+                "move + trackChange requires --to <paragraph-path>; reordering within the same parent is not meaningful for run-level move tracking.");
+
+        OpenXmlElement targetParent;
+        var tgtParts = ParsePath(targetParentPath);
+        targetParent = NavigateToElement(tgtParts)
+            ?? throw new ArgumentException($"Target parent not found: {targetParentPath}");
+
+        if (targetParent.LocalName != "p")
+            throw new ArgumentException(
+                $"move + trackChange target parent must be a paragraph (got {targetParent.LocalName}). "
+                + "Runs must live inside a paragraph.");
+
+        // Pull trackChange.* props (case-insensitive lookup).
+        string? tcAuthor = null, tcDate = null, tcId = null;
+        foreach (var kv in properties)
+        {
+            var k = kv.Key.ToLowerInvariant();
+            if (k == "trackchange.author") tcAuthor = kv.Value;
+            else if (k == "trackchange.date") tcDate = kv.Value;
+            else if (k == "trackchange.id") tcId = kv.Value;
+        }
+        if (string.IsNullOrEmpty(tcAuthor)) tcAuthor = "OfficeCLI";
+        DateTime tcDt = DateTime.UtcNow;
+        if (!string.IsNullOrEmpty(tcDate))
+            DateTime.TryParse(tcDate, out tcDt);
+        var sharedId = !string.IsNullOrEmpty(tcId) ? tcId! : GenerateRevisionId();
+
+        // Build the moveTo side first using a deep clone of the source run
+        // (keep <w:t> intact). Append it to target paragraph at the requested
+        // position. We compute the new path before wrapping the source so
+        // r-index counts on the source side don't drift.
+        var destRun = (Run)element.CloneNode(deep: true);
+        var moveTo = new MoveToRun
+        {
+            Id = sharedId,
+            Author = tcAuthor,
+            Date = tcDt,
+        };
+        moveTo.AppendChild(destRun);
+
+        // Resolve insert anchors for the dest side (relative to targetParent).
+        OpenXmlElement? afterAnchor = null, beforeAnchor = null;
+        if (position?.After != null)
+        {
+            var anchorPath = position.After;
+            if (!anchorPath.StartsWith("/"))
+                anchorPath = targetParentPath!.TrimEnd('/') + "/" + anchorPath;
+            afterAnchor = NavigateToElement(ParsePath(anchorPath))
+                ?? throw new ArgumentException($"After anchor not found: {position.After}");
+        }
+        else if (position?.Before != null)
+        {
+            var anchorPath = position.Before;
+            if (!anchorPath.StartsWith("/"))
+                anchorPath = targetParentPath!.TrimEnd('/') + "/" + anchorPath;
+            beforeAnchor = NavigateToElement(ParsePath(anchorPath))
+                ?? throw new ArgumentException($"Before anchor not found: {position.Before}");
+        }
+
+        if (afterAnchor != null) afterAnchor.InsertAfterSelf(moveTo);
+        else if (beforeAnchor != null) beforeAnchor.InsertBeforeSelf(moveTo);
+        else if (position?.Index is int idx)
+        {
+            var sameTypeSiblings = targetParent.ChildElements
+                .Where(e => e.LocalName == "r" || e is MoveToRun || e is MoveFromRun).ToList();
+            if (idx >= 0 && idx < sameTypeSiblings.Count)
+                sameTypeSiblings[idx].InsertBeforeSelf(moveTo);
+            else
+                targetParent.AppendChild(moveTo);
+        }
+        else targetParent.AppendChild(moveTo);
+
+        // Now wrap the source in moveFrom + convert w:t → w:delText.
+        // CONSISTENCY(word-track-change): same w:t→w:delText rule used by
+        // WordHandler.Add.Text.cs for trackChange=moveFrom on `add run`.
+        var srcParent = element.Parent
+            ?? throw new InvalidOperationException("Source run has no parent");
+        var moveFrom = new MoveFromRun
+        {
+            Id = sharedId,
+            Author = tcAuthor,
+            Date = tcDt,
+        };
+        foreach (var t in element.Elements<Text>().ToList())
+        {
+            var dt = new DeletedText(t.Text ?? "") { Space = t.Space };
+            t.Parent?.ReplaceChild(dt, t);
+        }
+        srcParent.ReplaceChild(moveFrom, element);
+        moveFrom.AppendChild(element);
+
+        _doc.MainDocumentPart?.Document?.Save();
+
+        // Path to dest run: moveTo is now a sibling among target paragraph's
+        // children. The Run lives inside it; the watcher / GetAllRuns model
+        // descends into MoveToRun (Descendants<Run>()), so the run keeps a
+        // stable r[N] index in the target paragraph's run list.
+        var allRunsInTarget = targetParent.Descendants<Run>().ToList();
+        var rIdx = allRunsInTarget.IndexOf(destRun) + 1;
+        return $"{targetParentPath.TrimEnd('/')}/r[{rIdx}]";
     }
 
     public (string NewPath1, string NewPath2) Swap(string path1, string path2)

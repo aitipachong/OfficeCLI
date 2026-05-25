@@ -1688,7 +1688,8 @@ public class ResidentServer : IDisposable
     {
         var path = req.GetArg("path", "/");
         var to = req.GetArgOrNull("to");
-        var resultPath = _handler.Move(path, to, BuildInsertPosition(req));
+        var props = req.GetProps();
+        var resultPath = _handler.Move(path, to, BuildInsertPosition(req), props.Count > 0 ? props : null);
         Console.WriteLine($"Moved to {resultPath}");
     }
 

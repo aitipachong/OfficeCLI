@@ -72,7 +72,7 @@ public interface IDocumentHandler : IDisposable
     /// Remove element at path. Returns an optional warning message (e.g. formula cells affected by shift).
     /// </summary>
     string? Remove(string path);
-    string Move(string sourcePath, string? targetParentPath, InsertPosition? position);
+    string Move(string sourcePath, string? targetParentPath, InsertPosition? position, Dictionary<string, string>? properties = null);
     string CopyFrom(string sourcePath, string targetParentPath, InsertPosition? position);
 
     // === Raw Layer ===

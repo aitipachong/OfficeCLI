@@ -580,8 +580,9 @@ public partial class PowerPointHandler
         return null;
     }
 
-    public string Move(string sourcePath, string? targetParentPath, InsertPosition? position)
+    public string Move(string sourcePath, string? targetParentPath, InsertPosition? position, Dictionary<string, string>? properties = null)
     {
+        // pptx has no track-change concept; `properties` is accepted for IDocumentHandler parity but ignored.
         var index = position?.Index;
         sourcePath = ResolveIdPath(sourcePath);
         sourcePath = ResolveLastPredicates(sourcePath);

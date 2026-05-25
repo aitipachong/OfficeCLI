@@ -159,8 +159,9 @@ public partial class ExcelHandler
         }
     }
 
-    public string Move(string sourcePath, string? targetParentPath, InsertPosition? position)
+    public string Move(string sourcePath, string? targetParentPath, InsertPosition? position, Dictionary<string, string>? properties = null)
     {
+        // xlsx has no track-change concept; `properties` is accepted for IDocumentHandler parity but ignored.
         var index = position?.Index;
         var segments = sourcePath.TrimStart('/').Split('/', 2);
         var sheetName = segments[0];

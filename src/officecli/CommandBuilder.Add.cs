@@ -349,6 +349,10 @@ static partial class CommandBuilder
         var moveIndexOpt = new Option<int?>("--index") { Description = "Insert position (0-based). If omitted, appends to end" };
         var moveAfterOpt = new Option<string?>("--after") { Description = "Move after the element at this path" };
         var moveBeforeOpt = new Option<string?>("--before") { Description = "Move before the element at this path" };
+        // --prop currently carries trackChange.author/date/id for the
+        // run-level move-tracking branch in WordHandler. Other handlers
+        // (xlsx/pptx) accept the option for parity but ignore the values.
+        var movePropsOpt = new Option<string[]>("--prop") { Description = "Property to set on the move (e.g. --prop trackChange.author=Alice for tracked moves)", AllowMultipleArgumentsPerToken = true };
 
         var moveCommand = new Command("move", "Move an element to a new position or parent");
         moveCommand.Add(moveFileArg);
@@ -357,6 +361,7 @@ static partial class CommandBuilder
         moveCommand.Add(moveIndexOpt);
         moveCommand.Add(moveAfterOpt);
         moveCommand.Add(moveBeforeOpt);
+        moveCommand.Add(movePropsOpt);
         moveCommand.Add(jsonOption);
 
         moveCommand.SetAction(result => { var json = result.GetValue(jsonOption); return SafeRun(() =>
@@ -367,6 +372,7 @@ static partial class CommandBuilder
             var index = result.GetValue(moveIndexOpt);
             var after = result.GetValue(moveAfterOpt);
             var before = result.GetValue(moveBeforeOpt);
+            var props = result.GetValue(movePropsOpt);
 
             // Validate mutual exclusivity of --index, --after, --before
             var posCount = (index.HasValue ? 1 : 0) + (after != null ? 1 : 0) + (before != null ? 1 : 0);
@@ -382,6 +388,8 @@ static partial class CommandBuilder
                 : before != null ? InsertPosition.BeforeElement(before)
                 : null;
 
+            var moveProps = ParsePropsArray(props);
+
             if (TryResident(file.FullName, req =>
             {
                 req.Command = "move";
@@ -390,10 +398,11 @@ static partial class CommandBuilder
                 if (position?.Index.HasValue == true) req.Args["index"] = position.Index.Value.ToString();
                 if (position?.After != null) req.Args["after"] = position.After;
                 if (position?.Before != null) req.Args["before"] = position.Before;
+                if (moveProps.Count > 0) req.Props = moveProps;
             }, json) is {} rc) return rc;
 
             using var handler = DocumentHandlerFactory.Open(file.FullName, editable: true);
-            var resultPath = handler.Move(path, to, position);
+            var resultPath = handler.Move(path, to, position, moveProps.Count > 0 ? moveProps : null);
             var message = $"Moved to {resultPath}";
             if (json) Console.WriteLine(OutputFormatter.WrapEnvelopeText(message));
             else Console.WriteLine(message);
