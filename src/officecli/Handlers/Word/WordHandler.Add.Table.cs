@@ -545,6 +545,18 @@ public partial class WordHandler
         return $"{parentPath}/tbl[{(idx >= 0 ? idx + 1 : tbls.Count)}]";
     }
 
+    /// <summary>True when properties carries any trackChange.* sub-key.</summary>
+    private static bool HasRowTrackChangeProps(Dictionary<string, string> properties)
+    {
+        foreach (var k in properties.Keys)
+        {
+            if (k.StartsWith("trackChange.", StringComparison.OrdinalIgnoreCase)
+                || k.StartsWith("trackchange.", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     private string AddRow(OpenXmlElement parent, string parentPath, int? index, Dictionary<string, string> properties)
     {
         if (parent is not Table targetTable)
@@ -652,6 +664,46 @@ public partial class WordHandler
                 continue;
             }
             LastAddUnsupportedProps.Add(key);
+        }
+
+        // High-level row-insertion revision: any trackChange.* sub-key (author/
+        // date/id) marks the newly-added row as inserted by placing a bare
+        // <w:ins/> marker inside <w:trPr>. Mirrors the `add run + trackChange.*
+        // → <w:ins> wrapper` pattern (Phase 1) but uses OOXML's row-level
+        // marker-in-Pr form rather than a wrapper.
+        //
+        // KNOWN LIMITATION (A-route boundary): we do NOT cascade by wrapping
+        // every cell's inner run in <w:ins> too. Word UI requires the cascade
+        // to display the row as "newly inserted" visually; without it the row
+        // appears unmarked in Word even though accept-all / reject-all still
+        // identify it as a revision. Authoring a fully-rendered row insertion
+        // is out of CLI scope — use Word directly. The trPr/ins marker remains
+        // useful for: programmatic accept/reject, query revision, and
+        // round-trip preservation.
+        if (HasRowTrackChangeProps(properties))
+        {
+            string? rowTcAuthor = null, rowTcDate = null, rowTcId = null;
+            properties.TryGetValue("trackChange.author", out rowTcAuthor);
+            if (rowTcAuthor == null) properties.TryGetValue("trackchange.author", out rowTcAuthor);
+            properties.TryGetValue("trackChange.date", out rowTcDate);
+            if (rowTcDate == null) properties.TryGetValue("trackchange.date", out rowTcDate);
+            properties.TryGetValue("trackChange.id", out rowTcId);
+            if (rowTcId == null) properties.TryGetValue("trackchange.id", out rowTcId);
+
+            newRowProps ??= newRow.PrependChild(new TableRowProperties());
+            var marker = new Inserted
+            {
+                Author = string.IsNullOrEmpty(rowTcAuthor) ? "OfficeCLI" : rowTcAuthor,
+                Date = !string.IsNullOrEmpty(rowTcDate) && DateTime.TryParse(rowTcDate, out var rowD)
+                    ? rowD : DateTime.UtcNow,
+                Id = !string.IsNullOrEmpty(rowTcId) ? rowTcId : GenerateRevisionId(),
+            };
+            newRowProps.AppendChild(marker);
+
+            // Remove trackChange.* from unsupported list (consumed).
+            LastAddUnsupportedProps.RemoveAll(k =>
+                k.StartsWith("trackChange.", StringComparison.OrdinalIgnoreCase)
+                || k.StartsWith("trackchange.", StringComparison.OrdinalIgnoreCase));
         }
 
         if (index.HasValue)
