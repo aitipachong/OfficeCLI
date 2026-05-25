@@ -566,6 +566,61 @@ public partial class PowerPointHandler : IDocumentHandler
                 var layoutActualRid = saSlidePart.GetIdOfPart(layoutPart);
                 var colorsActualRid = saSlidePart.GetIdOfPart(colorsPart);
                 var styleActualRid  = saSlidePart.GetIdOfPart(stylePart);
+
+                // Inject a minimal <p:graphicFrame> into the slide's spTree
+                // so GetSmartArtsOnSlide (which finds SmartArt only via the
+                // graphicFrame + dgm:relIds anchor) can see this SmartArt on
+                // the next dump. Without the host frame, a SmartArt created
+                // by direct `add-part smartart` is silently dropped on dump.
+                // The dump-emitter path passes `skip-frame=true` because it
+                // raw-set appends the source's full graphicFrame (with real
+                // position/size/name) immediately after — otherwise we'd
+                // emit a stub-plus-real pair on every replay.
+                var skipFrame = properties != null
+                    && properties.TryGetValue("skip-frame", out var sf)
+                    && (sf == "true" || sf == "1");
+                if (!skipFrame)
+                {
+                    var saSlide = GetSlide(saSlidePart);
+                    var saSpTree = saSlide.CommonSlideData?.ShapeTree;
+                    if (saSpTree != null)
+                    {
+                        // Allocate a non-colliding cNvPr id within the slide.
+                        uint nextId = 1;
+                        foreach (var nv in saSpTree.Descendants<DocumentFormat.OpenXml.Drawing.NonVisualDrawingProperties>())
+                        {
+                            if (nv.Id?.Value >= nextId) nextId = nv.Id!.Value + 1;
+                        }
+                        // CT_GraphicalObjectFrame: nvGraphicFramePr / xfrm /
+                        // graphic. xfrm carries a default 6"x4.5" host area
+                        // anchored at (1in, 1in) — PowerPoint will rescale
+                        // on first render anyway; the values just keep the
+                        // shape selectable.
+                        const long EmuIn = 914400;
+                        var gf = new DocumentFormat.OpenXml.Presentation.GraphicFrame(
+                            new DocumentFormat.OpenXml.Presentation.NonVisualGraphicFrameProperties(
+                                new DocumentFormat.OpenXml.Presentation.NonVisualDrawingProperties { Id = nextId, Name = $"Diagram {nextId}" },
+                                new DocumentFormat.OpenXml.Presentation.NonVisualGraphicFrameDrawingProperties(
+                                    new DocumentFormat.OpenXml.Drawing.GraphicFrameLocks { NoChangeAspect = true }),
+                                new DocumentFormat.OpenXml.Presentation.ApplicationNonVisualDrawingProperties()),
+                            new DocumentFormat.OpenXml.Presentation.Transform(
+                                new DocumentFormat.OpenXml.Drawing.Offset { X = 1 * EmuIn, Y = 1 * EmuIn },
+                                new DocumentFormat.OpenXml.Drawing.Extents { Cx = 6 * EmuIn, Cy = (long)(4.5 * EmuIn) }),
+                            new DocumentFormat.OpenXml.Drawing.Graphic(
+                                new DocumentFormat.OpenXml.Drawing.GraphicData(
+                                    new DocumentFormat.OpenXml.Drawing.Diagrams.RelationshipIds
+                                    {
+                                        DataPart = dataActualRid,
+                                        LayoutPart = layoutActualRid,
+                                        ColorPart = colorsActualRid,
+                                        StylePart = styleActualRid,
+                                    })
+                                { Uri = "http://schemas.openxmlformats.org/drawingml/2006/diagram" }));
+                        saSpTree.AppendChild(gf);
+                        saSlide.Save();
+                    }
+                }
+
                 var encoded = $"data={dataActualRid};layout={layoutActualRid};colors={colorsActualRid};quickStyle={styleActualRid}";
                 return (encoded, parentPartPath);
 

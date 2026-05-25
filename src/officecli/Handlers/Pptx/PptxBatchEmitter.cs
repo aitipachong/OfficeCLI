@@ -1017,6 +1017,10 @@ public static partial class PptxBatchEmitter
         {
             // add-part smartart with pinned rIds. Props carry the source's
             // rIds; replay's AddPart calls AddNewPart<T>(rId) for each.
+            // `skip-frame=true` suppresses add-part's stub graphicFrame
+            // injection — the raw-set append below carries the source's
+            // full graphicFrame (with real position/size/name/cNvPr id), so
+            // letting add-part also inject a stub would produce a duplicate.
             items.Add(new BatchItem
             {
                 Command = "add-part",
@@ -1028,6 +1032,7 @@ public static partial class PptxBatchEmitter
                     ["layout"] = sa.LayoutRelId,
                     ["colors"] = sa.ColorsRelId,
                     ["quickStyle"] = sa.QuickStyleRelId,
+                    ["skip-frame"] = "true",
                 },
             });
 
