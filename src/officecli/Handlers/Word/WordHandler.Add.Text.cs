@@ -1118,6 +1118,66 @@ public partial class WordHandler
             pprChange.AppendChild(new PreviousParagraphProperties());
             pProps.AppendChild(pprChange);
         }
+
+        // High-level paragraph-insertion revision: ANY trackChange.* sub-key
+        // (author/date/id) WITHOUT a trackChange=<kind> literal means "this
+        // paragraph was just inserted as a tracked change". Mirrors the
+        // equivalent in AddRun (Phase 1) and the inverse in Mutations.Remove
+        // (Phase 4: remove paragraph + trackChange.author produces ¶ del +
+        // content del wrappers).
+        //
+        // Word UI semantic: pressing Enter in revision mode inserts a new
+        // paragraph and marks BOTH the new ¶ AND any typed content as ins.
+        // We emit:
+        //   1. <w:pPr><w:rPr><w:ins .../></w:rPr></w:pPr>  — ¶ mark
+        //   2. <w:ins><w:r>...</w:r></w:ins>               — content wrapper
+        //      (only when --prop text=... auto-created an inner run)
+        // Each gets a distinct auto-allocated revision id sharing the same
+        // author + date — accept-all sees them as related but independent.
+        if (string.IsNullOrEmpty(pTcKind))  // pTcKind from line 1098 above
+        {
+            string? hTcAuthor = null, hTcDate = null, hTcId = null;
+            properties.TryGetValue("trackChange.author", out hTcAuthor);
+            if (hTcAuthor == null) properties.TryGetValue("trackchange.author", out hTcAuthor);
+            properties.TryGetValue("trackChange.date", out hTcDate);
+            if (hTcDate == null) properties.TryGetValue("trackchange.date", out hTcDate);
+            properties.TryGetValue("trackChange.id", out hTcId);
+            if (hTcId == null) properties.TryGetValue("trackchange.id", out hTcId);
+
+            if (!string.IsNullOrEmpty(hTcAuthor) || !string.IsNullOrEmpty(hTcDate) || !string.IsNullOrEmpty(hTcId))
+            {
+                var author = string.IsNullOrEmpty(hTcAuthor) ? "OfficeCLI" : hTcAuthor!;
+                DateTime date = !string.IsNullOrEmpty(hTcDate) && DateTime.TryParse(hTcDate, out var hd)
+                    ? hd : DateTime.UtcNow;
+                // ¶ mark: <w:pPr><w:rPr><w:ins/></w:rPr></w:pPr>
+                var pMarkRPr = pProps.ParagraphMarkRunProperties
+                              ?? pProps.PrependChild(new ParagraphMarkRunProperties());
+                pMarkRPr.AppendChild(new Inserted
+                {
+                    Author = author,
+                    Date = date,
+                    Id = !string.IsNullOrEmpty(hTcId) ? hTcId : GenerateRevisionId(),
+                });
+
+                // Content: wrap each direct-child Run that was auto-created
+                // from --prop text=... (paragraph-level text/html/sym) in
+                // <w:ins>. Skip Runs that are already inside an ins/del/move
+                // wrapper. Each wrapper gets its own auto-allocated id when
+                // hTcId was not explicit (otherwise reuse it for the ¶ mark
+                // only, per the Phase 4 remove-paragraph convention).
+                foreach (var r in para.Elements<Run>().ToList())
+                {
+                    var ins = new InsertedRun
+                    {
+                        Author = author,
+                        Date = date,
+                        Id = GenerateRevisionId(),
+                    };
+                    para.ReplaceChild(ins, r);
+                    ins.AppendChild(r);
+                }
+            }
+        }
         return resultPath;
     }
 
