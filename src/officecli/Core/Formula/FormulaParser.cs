@@ -1318,7 +1318,18 @@ internal static class FormulaParser
                 if (supArg == null)
                     naryProps.AppendChild(new M.HideSuperArgument { Val = M.BooleanValues.True });
 
-                // Parse the base expression (next arg or next element)
+                // Parse the base expression (next arg or next element).
+                // Skip a pure-whitespace Text token between the limits and the
+                // base: \sum_{n=1}^{\infty} \frac{1}{n^s} tokenises the space
+                // before \frac as its own Text(" "). Without this skip,
+                // ParseSingleArg would consume the space and return an empty
+                // run, leaving \frac stranded as a sibling outside <m:e/>.
+                while (pos < tokens.Count
+                    && tokens[pos].Type == TokenType.Text
+                    && string.IsNullOrWhiteSpace(tokens[pos].Value))
+                {
+                    pos++;
+                }
                 OpenXmlElement baseArg;
                 if (pos < tokens.Count && tokens[pos].Type == TokenType.LBrace)
                 {
