@@ -238,15 +238,22 @@ public partial class WordHandler
             format["size.cs"] = $"{szCsHalfPt / 2.0:0.##}pt";
         }
 
-        // bold.cs / italic.cs — boolean flags.
+        // bold.cs / italic.cs — boolean OnOff toggles. Honor the Val attribute:
+        // <w:bCs val="false"/> exists in the rPrChange-driven flow when Set
+        // explicitly turns the CS toggle off (parity with bare bold/italic
+        // readback which goes through IsToggleOn). Surface the key only when
+        // the toggle is on, otherwise Get would falsely report bold.cs=true
+        // after a Set bold.cs=false.
         var bCsEl = primary?.GetFirstChild<BoldComplexScript>()
             ?? fallback?.GetFirstChild<BoldComplexScript>();
-        if (bCsEl != null && !format.ContainsKey("bold.cs"))
+        if (bCsEl != null && (bCsEl.Val == null || bCsEl.Val.Value)
+            && !format.ContainsKey("bold.cs"))
             format["bold.cs"] = true;
 
         var iCsEl = primary?.GetFirstChild<ItalicComplexScript>()
             ?? fallback?.GetFirstChild<ItalicComplexScript>();
-        if (iCsEl != null && !format.ContainsKey("italic.cs"))
+        if (iCsEl != null && (iCsEl.Val == null || iCsEl.Val.Value)
+            && !format.ContainsKey("italic.cs"))
             format["italic.cs"] = true;
     }
 }
