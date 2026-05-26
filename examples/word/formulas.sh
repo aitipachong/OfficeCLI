@@ -126,6 +126,84 @@ $CLI add "$OUT" /body --type equation --prop 'formula=B(\nu, T) = \frac{2h\nu^{3
 $CLI add "$OUT" /body --type paragraph --prop text="30. Lorentz Transformation:"
 $CLI add "$OUT" /body --type equation --prop 'formula=t^{\prime} = \gamma \left(t - \frac{vx}{c^{2}}\right), \quad \gamma = \frac{1}{\sqrt{1 - \frac{v^{2}}{c^{2}}}}'
 
+# ==================== VIII. Advanced Notation ====================
+$CLI add "$OUT" /body --type paragraph --prop text="VIII. Advanced Notation" --prop style=Heading2
+
+$CLI add "$OUT" /body --type paragraph --prop text="31. Matrix (pmatrix):"
+$CLI add "$OUT" /body --type equation --prop 'formula=A = \begin{pmatrix} a_{11} & a_{12} & a_{13} \\ a_{21} & a_{22} & a_{23} \\ a_{31} & a_{32} & a_{33} \end{pmatrix}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="32. Determinant (vmatrix):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\det(A) = \begin{vmatrix} a & b \\ c & d \end{vmatrix} = ad - bc'
+
+$CLI add "$OUT" /body --type paragraph --prop text="33. Bracketed Matrix (bmatrix):"
+$CLI add "$OUT" /body --type equation --prop 'formula=I_{3} = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="34. Piecewise Function (cases):"
+$CLI add "$OUT" /body --type equation --prop 'formula=|x| = \begin{cases} x, & x \geq 0 \\ -x, & x < 0 \end{cases}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="35. Auto-sized Delimiters (various brackets):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\left[ \frac{a}{b} \right] + \left\{ \frac{c}{d} \right\} + \left| \frac{e}{f} \right| + \left\langle \frac{g}{h} \right\rangle'
+
+$CLI add "$OUT" /body --type paragraph --prop text="36. Floor and Ceiling:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\left\lfloor \frac{n}{2} \right\rfloor + \left\lceil \frac{n}{2} \right\rceil = n'
+
+$CLI add "$OUT" /body --type paragraph --prop text="37. Underbrace and Overbrace:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\underbrace{1 + 2 + \cdots + n}_{n \text{ terms}} = \overbrace{\frac{n(n+1)}{2}}^{\text{closed form}}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="38. Overset (definition):"
+$CLI add "$OUT" /body --type equation --prop 'formula=f(x) \overset{\text{def}}{=} \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="39. Math Fonts (mathbb / mathcal / mathbf / mathrm):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\forall x \in \mathbb{R}, \exists \mathcal{L} : \mathbf{v} \mapsto \mathrm{d}\mathbf{v}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="40. Cancellation:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\frac{(x+1) \cancel{(x-1)}}{\cancel{(x-1)}} = x + 1'
+
+$CLI add "$OUT" /body --type paragraph --prop text="41. Cancel-to (limit):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\lim_{x \to \infty} \cancelto{0}{\frac{1}{x}} + 1 = 1'
+
+$CLI add "$OUT" /body --type paragraph --prop text="42. Boxed Result:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\boxed{E = mc^{2}}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="43. Accents (bar / vec / tilde / ddot):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\bar{x} = \frac{1}{n} \sum x_{i}, \quad \vec{F} = m\ddot{\vec{r}}, \quad \tilde{f}(\xi)'
+
+$CLI add "$OUT" /body --type paragraph --prop text="44. Overline and Underline:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\overline{A \cup B} = \overline{A} \cap \overline{B}, \quad \underline{x} \leq x \leq \overline{x}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="45. Hyperbolic and Inverse Trig:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\arctan(x) = \int_{0}^{x} \frac{dt}{1+t^{2}}, \quad \cosh^{2}(x) - \sinh^{2}(x) = 1'
+
+$CLI add "$OUT" /body --type paragraph --prop text="46. Custom Operator (operatorname):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\operatorname{lcm}(a, b) \cdot \gcd(a, b) = |ab|'
+
+$CLI add "$OUT" /body --type paragraph --prop text="47. Modular Arithmetic:"
+$CLI add "$OUT" /body --type equation --prop 'formula=a \equiv b \pmod{n} \iff n \mid (a - b), \quad 17 \bmod 5 = 2'
+
+$CLI add "$OUT" /body --type paragraph --prop text="48. Double Integral with Text:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\iint_{D} f(x,y) \, dA \quad \text{where } D = \{(x,y) : x^{2}+y^{2} \leq 1\}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="49. Big Operators (bigcup / bigcap / coprod):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\bigcup_{i=1}^{n} A_{i} \supseteq \bigcap_{i=1}^{n} A_{i}, \quad \coprod_{i \in I} X_{i}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="50. Greek Letters (full uppercase set):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\Gamma, \Theta, \Xi, \Pi, \Phi, \Psi, \Omega \in \{\alpha, \beta, \gamma, \delta, \epsilon, \zeta, \eta, \theta\}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="51. Dots (ldots / cdots / vdots / ddots):"
+$CLI add "$OUT" /body --type equation --prop 'formula=M = \begin{pmatrix} a_{11} & \cdots & a_{1n} \\ \vdots & \ddots & \vdots \\ a_{m1} & \cdots & a_{mn} \end{pmatrix}, \quad x_{1}, x_{2}, \ldots, x_{n}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="52. Spacing Control (quad / qquad / thinsp):"
+$CLI add "$OUT" /body --type equation --prop 'formula=a + b \, c \; d \quad e \qquad f'
+
+$CLI add "$OUT" /body --type paragraph --prop text="53. Colored Math (textcolor / color):"
+$CLI add "$OUT" /body --type equation --prop 'formula=\textcolor{red}{x^{2}} + \textcolor{blue}{2xy} + \textcolor{green}{y^{2}} = \color{purple}{(x+y)^{2}}'
+
+$CLI add "$OUT" /body --type paragraph --prop text="54. Set Theory:"
+$CLI add "$OUT" /body --type equation --prop 'formula=A \subseteq B \iff \forall x \in A, x \in B; \quad A \setminus B = \{x : x \in A \land x \notin B\}; \quad \emptyset \subset A'
+
+$CLI add "$OUT" /body --type paragraph --prop text="55. Norm and Inner Product:"
+$CLI add "$OUT" /body --type equation --prop 'formula=\|x\|_{2} = \sqrt{\langle x, x \rangle} = \sqrt{\sum_{i=1}^{n} x_{i}^{2}}'
+
 $CLI close "$OUT"
 
 echo "Generated: $OUT"
