@@ -190,6 +190,17 @@ static partial class CommandBuilder
                 var oldCount = (handler as OfficeCli.Handlers.PowerPointHandler)?.GetSlideCount() ?? 0;
                 var resultPath = handler.Add(parentPath, type!, position, tracking);
                 var unsupported = tracking.UnusedKeys.ToList();
+                // Merge handler-internal unsupported props (handlers that
+                // iterate the dictionary via foreach can't surface unknowns
+                // through tracking.UnusedKeys — the enumerator marks every
+                // key as accessed by design, see
+                // TrackingPropertyDictionary.cs:24-37. Those handlers write
+                // bare unknown keys to LastAddUnsupportedProps instead, and
+                // the ResidentServer path already merges this list — mirror
+                // that here so the non-resident CLI path surfaces the same
+                // warnings).
+                if (handler is OfficeCli.Handlers.WordHandler wordAddH)
+                    unsupported.AddRange(wordAddH.LastAddUnsupportedProps);
                 var message = $"Added {type!.ToLowerInvariant()} at {resultPath}";
                 var spatialLine = GetPptSpatialLine(handler, resultPath);
                 var overlapNames = spatialLine != null ? CheckPositionOverlap(handler, resultPath) : new();

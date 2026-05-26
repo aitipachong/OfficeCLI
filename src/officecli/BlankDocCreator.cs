@@ -223,6 +223,13 @@ public static class BlankDocCreator
         document.AddNamespaceDeclaration("wne", "http://schemas.microsoft.com/office/word/2006/wordml");
         document.AddNamespaceDeclaration("wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing");
         document.AddNamespaceDeclaration("wp14", "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing");
+        // w14 (Office 2010 wordml extensions — paraId / textId / docId) was
+        // listed in mc:Ignorable below but never declared on the root, so
+        // every blank docx failed validation with "Ignorable contains an
+        // invalid prefix 'w14'". paraId attributes do get emitted by Add
+        // helpers on every paragraph, so leaving this undeclared was a
+        // real schema violation, not cosmetic.
+        document.AddNamespaceDeclaration("w14", "http://schemas.microsoft.com/office/word/2010/wordml");
         document.AddNamespaceDeclaration("a", "http://schemas.openxmlformats.org/drawingml/2006/main");
         document.AddNamespaceDeclaration("pic", "http://schemas.openxmlformats.org/drawingml/2006/picture");
         document.AddNamespaceDeclaration("wps", "http://schemas.microsoft.com/office/word/2010/wordprocessingShape");

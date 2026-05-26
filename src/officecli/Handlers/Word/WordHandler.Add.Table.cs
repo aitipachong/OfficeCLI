@@ -505,6 +505,23 @@ public partial class WordHandler
                         }
                         break;
                     }
+                default:
+                    // Bare key that didn't match any known table prop. Common
+                    // typos previously silently failed (e.g. `columns=4`
+                    // before the `cols` alias was added; `column`, `rowcount`,
+                    // `border-all`, …). Surface via LastAddUnsupportedProps
+                    // so the CLI emits a WARNING — the table is still built
+                    // (best-effort) but the user sees that their key was
+                    // ignored. Skip dynamic patterns: r{N}c{M} cell-content
+                    // keys (consumed in the row-building loop below) and any
+                    // dotted key (the second foreach further down routes
+                    // those through TypedAttributeFallback and tracks
+                    // unsupporteds itself).
+                    if (tk.Contains('.')) break;
+                    if (System.Text.RegularExpressions.Regex.IsMatch(
+                            tkl, @"^r\d+c\d+$")) break;
+                    LastAddUnsupportedProps.Add(tk);
+                    break;
             }
         }
 
