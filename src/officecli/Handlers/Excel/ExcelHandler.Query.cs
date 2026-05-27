@@ -1097,7 +1097,7 @@ public partial class ExcelHandler
         var elementName = elementMatch.Success ? elementMatch.Groups[1].Value.ToLowerInvariant() : "";
         bool isKnownType = string.IsNullOrEmpty(elementName)
             // CONSISTENCY(ole-alias): "oleobject" mirrors Add's case switch
-            || elementName is "cell" or "row" or "col" or "column" or "sheet" or "validation" or "comment" or "note" or "table" or "listobject" or "chart" or "pivottable" or "pivot" or "slicer" or "shape" or "picture" or "sparkline" or "namedrange" or "definedname" or "media" or "image" or "ole" or "oleobject" or "object" or "embed" or "hyperlink"
+            || elementName is "cell" or "row" or "col" or "column" or "sheet" or "validation" or "comment" or "note" or "table" or "listobject" or "chart" or "pivottable" or "pivot" or "slicer" or "shape" or "picture" or "sparkline" or "namedrange" or "definedname" or "media" or "image" or "ole" or "oleobject" or "object" or "embed" or "hyperlink" or "rowbreak" or "colbreak"
             || (elementName.Length <= 3 && Regex.IsMatch(elementName, @"^[A-Z]+$", RegexOptions.IgnoreCase));
         if (!isKnownType)
         {
@@ -1349,6 +1349,41 @@ public partial class ExcelHandler
                 var groups = spkGroups.Elements<X14.SparklineGroup>().ToList();
                 for (int i = 0; i < groups.Count; i++)
                     results.Add(SparklineGroupToNode(sheetName, groups[i], i + 1));
+            }
+            return results;
+        }
+
+        // Page break queries: rowbreak / colbreak. Enumerate the RowBreaks /
+        // ColumnBreaks child of each sheet, mirroring the per-sheet sparkline
+        // dispatch above and producing the same node shape as the Get path
+        // (/Sheet1/{row,col}break[N], see :407-435).
+        if (elementName is "rowbreak" or "colbreak")
+        {
+            var wantRow = elementName == "rowbreak";
+            foreach (var (sheetName, worksheetPart) in GetWorksheets())
+            {
+                if (parsed.Sheet != null && !sheetName.Equals(parsed.Sheet, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var ws = GetSheet(worksheetPart);
+                var breaks = wantRow
+                    ? ws.GetFirstChild<RowBreaks>()?.Elements<Break>().ToList()
+                    : ws.GetFirstChild<ColumnBreaks>()?.Elements<Break>().ToList();
+                if (breaks == null) continue;
+
+                for (int i = 0; i < breaks.Count; i++)
+                {
+                    var brk = breaks[i];
+                    var node = new DocumentNode
+                    {
+                        Path = $"/{sheetName}/{elementName}[{i + 1}]",
+                        Type = elementName,
+                        Format = wantRow
+                            ? new() { ["row"] = brk.Id?.Value ?? 0u, ["manual"] = brk.ManualPageBreak?.Value ?? false }
+                            : new() { ["col"] = (int)(brk.Id?.Value ?? 0u), ["manual"] = brk.ManualPageBreak?.Value ?? false }
+                    };
+                    results.Add(node);
+                }
             }
             return results;
         }
