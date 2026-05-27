@@ -2604,8 +2604,27 @@ public partial class WordHandler
 
         if (path is "/" or "" or "/body")
         {
+            // R21-1: root find/replace must sweep EVERY part that holds
+            // paragraphs, not just the body — header/footer/footnote/endnote/
+            // comment text was silently left unreplaced. Mirror the part
+            // fan-out in EnsureAllParaIds (the canonical full-part list).
             if (mainPart?.Document?.Body != null)
                 paragraphs.AddRange(mainPart.Document.Body.Descendants<Paragraph>());
+            if (mainPart != null)
+            {
+                foreach (var headerPart in mainPart.HeaderParts)
+                    if (headerPart.Header != null)
+                        paragraphs.AddRange(headerPart.Header.Descendants<Paragraph>());
+                foreach (var footerPart in mainPart.FooterParts)
+                    if (footerPart.Footer != null)
+                        paragraphs.AddRange(footerPart.Footer.Descendants<Paragraph>());
+                if (mainPart.FootnotesPart?.Footnotes != null)
+                    paragraphs.AddRange(mainPart.FootnotesPart.Footnotes.Descendants<Paragraph>());
+                if (mainPart.EndnotesPart?.Endnotes != null)
+                    paragraphs.AddRange(mainPart.EndnotesPart.Endnotes.Descendants<Paragraph>());
+                if (mainPart.WordprocessingCommentsPart?.Comments != null)
+                    paragraphs.AddRange(mainPart.WordprocessingCommentsPart.Comments.Descendants<Paragraph>());
+            }
             return paragraphs;
         }
 
