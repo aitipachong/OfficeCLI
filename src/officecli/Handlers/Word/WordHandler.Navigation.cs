@@ -3429,10 +3429,13 @@ public partial class WordHandler
         if (rh?.Val?.Value != null)
         {
             // CONSISTENCY(unit-qualified-readback): docx stores row height
-            // in twips (1pt = 20 twips); emit as "{n}pt" to match xlsx/pptx
-            // unit-qualified readback (CLAUDE.md canonical value rule).
-            var heightPt = rh.Val.Value / 20.0;
-            node.Format["height"] = $"{heightPt.ToString(System.Globalization.CultureInfo.InvariantCulture)}pt";
+            // in twips (1440 twips = 1 inch = 2.54 cm); emit as "{n}cm" to
+            // match the input vocabulary (Set accepts "2cm") and the other
+            // docx length readbacks (pageWidth/pageHeight). Prior code
+            // emitted pt and broke `set height=2cm` → `get height=56.7pt`
+            // round-trip.
+            var heightCm = rh.Val.Value * 2.54 / 1440.0;
+            node.Format["height"] = $"{heightCm.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}cm";
             if (rh.HeightType?.Value == HeightRuleValues.Exact)
                 node.Format["height.rule"] = "exact";
         }
