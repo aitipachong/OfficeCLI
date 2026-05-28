@@ -872,7 +872,7 @@ public partial class WordHandler
             "rstyle", "rStyle",
             "tabs", "tabstops",
             "border", "borders", "shd", "shading",
-            "font", "size", "bold", "italic", "color", "highlight",
+            "font", "size", "fontsize", "fontSize", "bold", "italic", "color", "highlight",
             "underline", "strike", "strikethrough", "doublestrike", "dstrike",
             "vanish", "outline", "shadow", "emboss", "imprint", "noproof",
             "rtl", "vertAlign", "vertalign", "superscript", "subscript",
@@ -1736,7 +1736,7 @@ public partial class WordHandler
         var addRunCuratedBare = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "type", "text", "html", "anchor", "anchorid",
-            "font", "size", "bold", "italic", "color", "highlight",
+            "font", "size", "fontsize", "fontSize", "bold", "italic", "color", "highlight",
             "underline", "strike", "strikethrough", "doublestrike", "dstrike",
             "vanish", "outline", "shadow", "emboss", "imprint", "noproof",
             "rtl", "vertalign", "superscript", "subscript",
