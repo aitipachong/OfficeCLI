@@ -2290,6 +2290,10 @@ public partial class PowerPointHandler
                         var transAttrs = transInMc.Groups[1].Value;
                         var spdM = System.Text.RegularExpressions.Regex.Match(transAttrs, @"spd=""(\w+)""");
                         if (spdM.Success) node.Format["transitionSpeed"] = spdM.Groups[1].Value;
+                        var advM = System.Text.RegularExpressions.Regex.Match(transAttrs, @"advTm=""(\d+)""");
+                        if (advM.Success) node.Format["advanceTime"] = advM.Groups[1].Value;
+                        var clickM = System.Text.RegularExpressions.Regex.Match(transAttrs, @"advClick=""(\d+)""");
+                        if (clickM.Success) node.Format["advanceClick"] = clickM.Groups[1].Value == "1";
                     }
                     return;
                 }
@@ -2337,6 +2341,10 @@ public partial class PowerPointHandler
                     var transAttrs = transInMc.Groups[1].Value;
                     var spdM = System.Text.RegularExpressions.Regex.Match(transAttrs, @"spd=""(\w+)""");
                     if (spdM.Success) node.Format["transitionSpeed"] = spdM.Groups[1].Value;
+                    var advM = System.Text.RegularExpressions.Regex.Match(transAttrs, @"advTm=""(\d+)""");
+                    if (advM.Success) node.Format["advanceTime"] = advM.Groups[1].Value;
+                    var clickM = System.Text.RegularExpressions.Regex.Match(transAttrs, @"advClick=""(\d+)""");
+                    if (clickM.Success) node.Format["advanceClick"] = clickM.Groups[1].Value == "1";
                 }
                 return;
             }

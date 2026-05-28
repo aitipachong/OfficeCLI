@@ -763,11 +763,17 @@ public partial class PowerPointHandler
                     System.Globalization.CultureInfo.InvariantCulture, out _))
                 throw new ArgumentException($"Invalid advanceTime: '{value}' (expected a non-negative integer in milliseconds, or 'none' to clear).");
         }
-        var acMorph = slide.ChildElements.FirstOrDefault(c =>
-            c.LocalName == "AlternateContent" && c.InnerXml.Contains("morph"));
-        if (acMorph != null)
+        // Any mc:AlternateContent that wraps a <p:transition> descendant counts
+        // here, not just morph — p14 (vortex/switch/flip/ripple/glitter/prism/doors/…)
+        // and p15 (prstTrans) transitions also live inside mc:AlternateContent.
+        // Falling through to FindOrCreateTransition would append a second bare
+        // <p:transition> sibling, which PowerPoint rejects with 0x80070570.
+        var acWrap = slide.ChildElements.FirstOrDefault(c =>
+            c.LocalName == "AlternateContent"
+            && c.Descendants().Any(d => d.LocalName == "transition"));
+        if (acWrap != null)
         {
-            foreach (var trans in acMorph.Descendants().Where(d => d.LocalName == "transition"))
+            foreach (var trans in acWrap.Descendants().Where(d => d.LocalName == "transition"))
             {
                 if (isClear)
                     trans.RemoveAttribute("advTm", "");
@@ -796,11 +802,15 @@ public partial class PowerPointHandler
     /// </summary>
     internal static void SetAdvanceClick(Slide slide, bool value)
     {
-        var acMorph = slide.ChildElements.FirstOrDefault(c =>
-            c.LocalName == "AlternateContent" && c.InnerXml.Contains("morph"));
-        if (acMorph != null)
+        // See SetAdvanceTime: any AlternateContent that wraps a <p:transition>
+        // (morph/p14/p15) must be updated in place rather than producing a
+        // second bare sibling.
+        var acWrap = slide.ChildElements.FirstOrDefault(c =>
+            c.LocalName == "AlternateContent"
+            && c.Descendants().Any(d => d.LocalName == "transition"));
+        if (acWrap != null)
         {
-            foreach (var trans in acMorph.Descendants().Where(d => d.LocalName == "transition"))
+            foreach (var trans in acWrap.Descendants().Where(d => d.LocalName == "transition"))
             {
                 // Schema default for CT_SlideTransition @advClick is true. Strip the attribute
                 // when value matches default to avoid writing redundant XML on round-trip.
