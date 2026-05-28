@@ -1416,8 +1416,8 @@ public partial class WordHandler
     private bool IsFullPageSize(long widthEmu, long heightEmu)
     {
         var pg = GetPageLayout();
-        var pgW = (long)(pg.WidthCm / 2.54 * 914400);
-        var pgH = (long)(pg.HeightCm / 2.54 * 914400);
+        var pgW = (long)(pg.WidthCm / 2.54 * EmuConverter.EmuPerInch);
+        var pgH = (long)(pg.HeightCm / 2.54 * EmuConverter.EmuPerInch);
         return widthEmu > pgW * 0.9 && heightEmu > pgH * 0.9;
     }
 

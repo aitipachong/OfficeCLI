@@ -140,7 +140,7 @@ public partial class ExcelHandler
             {
                 var emu = OfficeCli.Core.EmuConverter.ParseEmu(trimmed);
                 // 9525 EMU = 1 px; 7 px ≈ 1 char unit (Calibri 11pt MDW baseline)
-                var px = emu / 9525.0;
+                var px = emu / EmuConverter.EmuPerPxF;
                 chars = px / 7.0;
             }
             catch (Exception ex)

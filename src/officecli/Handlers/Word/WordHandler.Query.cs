@@ -548,9 +548,9 @@ public partial class WordHandler
             // pptx already returns them; this aligns docx with that contract.
             var inlineExtent = chartInfo.Inline?.Extent;
             if (inlineExtent?.Cx?.HasValue == true)
-                chartNode.Format["width"] = $"{inlineExtent.Cx.Value / 360000.0:F1}cm";
+                chartNode.Format["width"] = $"{inlineExtent.Cx.Value / EmuConverter.EmuPerCmF:F1}cm";
             if (inlineExtent?.Cy?.HasValue == true)
-                chartNode.Format["height"] = $"{inlineExtent.Cy.Value / 360000.0:F1}cm";
+                chartNode.Format["height"] = $"{inlineExtent.Cy.Value / EmuConverter.EmuPerCmF:F1}cm";
 
             if (chartInfo.IsExtended)
             {

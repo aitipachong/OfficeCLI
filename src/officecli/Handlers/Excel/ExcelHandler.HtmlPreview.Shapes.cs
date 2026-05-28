@@ -49,8 +49,8 @@ public partial class ExcelHandler
                 // Approximate to-row/col from ext (EMU) — used only for sizing
                 var cx = oca.Extent?.Cx?.Value ?? 0;
                 var cy = oca.Extent?.Cy?.Value ?? 0;
-                toCol = fromCol + Math.Max(1, (int)(cx / 914400.0 * 8)); // rough
-                toRow = fromRow + Math.Max(1, (int)(cy / 914400.0 * 6));
+                toCol = fromCol + Math.Max(1, (int)(cx / EmuConverter.EmuPerInchF * 8)); // rough
+                toRow = fromRow + Math.Max(1, (int)(cy / EmuConverter.EmuPerInchF * 6));
             }
             else
             {

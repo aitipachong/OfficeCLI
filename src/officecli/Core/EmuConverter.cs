@@ -27,6 +27,20 @@ internal static class EmuConverter
     /// <summary>Convert EMU to points (no rounding). 1 pt = 12700 EMU.</summary>
     public static double EmuToPoints(long emu) => emu / EmuPerPointF;
 
+    /// <summary>EMU per pixel at 96 DPI. 1 px = 9525 EMU (exact). int / double pair,
+    /// same usage rule as <see cref="EmuPerPoint"/>. (Renderers that scale for retina
+    /// use their own local ratio — do not assume px is always 9525.)</summary>
+    public const int EmuPerPx = 9525;
+    public const double EmuPerPxF = 9525.0;
+
+    /// <summary>EMU per centimetre. 1 cm = 360000 EMU (exact). int / double pair.</summary>
+    public const int EmuPerCm = 360000;
+    public const double EmuPerCmF = 360000.0;
+
+    /// <summary>EMU per inch. 1 in = 914400 EMU (exact). int / double pair.</summary>
+    public const int EmuPerInch = 914400;
+    public const double EmuPerInchF = 914400.0;
+
     /// <summary>
     /// Parse a dimension/position string into EMU (long).
     /// Supported formats: "914400" (raw EMU), "914400emu", "2.54cm", "1in", "72pt", "96px".
@@ -51,11 +65,11 @@ internal static class EmuConverter
         }
         else if (value.EndsWith("cm", StringComparison.OrdinalIgnoreCase))
         {
-            result = ParseWithUnit(value, 2, 360000.0, "cm");
+            result = ParseWithUnit(value, 2, EmuPerCmF, "cm");
         }
         else if (value.EndsWith("in", StringComparison.OrdinalIgnoreCase))
         {
-            result = ParseWithUnit(value, 2, 914400.0, "in");
+            result = ParseWithUnit(value, 2, EmuPerInchF, "in");
         }
         else if (value.EndsWith("pc", StringComparison.OrdinalIgnoreCase))
         {
@@ -68,7 +82,7 @@ internal static class EmuConverter
         }
         else if (value.EndsWith("px", StringComparison.OrdinalIgnoreCase))
         {
-            result = ParseWithUnit(value, 2, 9525.0, "px");
+            result = ParseWithUnit(value, 2, EmuPerPxF, "px");
         }
         else if (value.EndsWith("Q", StringComparison.OrdinalIgnoreCase))
         {
@@ -167,7 +181,7 @@ internal static class EmuConverter
     public static string FormatEmu(long emu)
     {
         if (emu == 0) return "0cm";
-        var cm = emu / 360000.0;
+        var cm = emu / EmuPerCmF;
         var cmStr = cm.ToString("0.##", CultureInfo.InvariantCulture);
         // The "0.##" cm format loses precision below ~3600 EMU per side
         // (less than 0.01cm rounds away). For values that round either

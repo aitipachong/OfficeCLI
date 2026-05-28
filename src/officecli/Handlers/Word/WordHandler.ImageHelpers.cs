@@ -182,8 +182,8 @@ public partial class WordHandler
             parts.Add($"name=\"{name}\"");
         if (extent != null)
         {
-            var wCm = extent.Cx != null ? $"{extent.Cx.Value / 360000.0:F1}cm" : "?";
-            var hCm = extent.Cy != null ? $"{extent.Cy.Value / 360000.0:F1}cm" : "?";
+            var wCm = extent.Cx != null ? $"{extent.Cx.Value / EmuConverter.EmuPerCmF:F1}cm" : "?";
+            var hCm = extent.Cy != null ? $"{extent.Cy.Value / EmuConverter.EmuPerCmF:F1}cm" : "?";
             parts.Add($"{wCm}×{hCm}");
         }
         return parts.Count > 0 ? string.Join(", ", parts) : "unknown";
@@ -202,8 +202,8 @@ public partial class WordHandler
         };
         if (docProps?.Id?.HasValue == true) node.Format["id"] = docProps.Id.Value;
         if (docProps?.Name?.Value != null) node.Format["name"] = docProps.Name.Value;
-        if (extent?.Cx != null) node.Format["width"] = $"{extent.Cx.Value / 360000.0:F1}cm";
-        if (extent?.Cy != null) node.Format["height"] = $"{extent.Cy.Value / 360000.0:F1}cm";
+        if (extent?.Cx != null) node.Format["width"] = $"{extent.Cx.Value / EmuConverter.EmuPerCmF:F1}cm";
+        if (extent?.Cy != null) node.Format["height"] = $"{extent.Cy.Value / EmuConverter.EmuPerCmF:F1}cm";
         if (docProps?.Description?.Value != null) node.Format["alt"] = docProps.Description.Value;
 
         // Surface the backing image part rel id so `get --save <path>`
@@ -260,7 +260,7 @@ public partial class WordHandler
                 // hPosition=0.0cm after round-trip. Treat 0 as "no
                 // positional override" to keep dump→batch idempotent.
                 if (offset != null && long.TryParse(offset.Text, out var hEmu) && hEmu != 0)
-                    node.Format["hPosition"] = $"{hEmu / 360000.0:F1}cm";
+                    node.Format["hPosition"] = $"{hEmu / EmuConverter.EmuPerCmF:F1}cm";
                 if (hPos.RelativeFrom?.HasValue == true)
                     node.Format["hRelative"] = hPos.RelativeFrom.InnerText;
             }
@@ -271,7 +271,7 @@ public partial class WordHandler
                 var offset = vPos.GetFirstChild<DW.PositionOffset>();
                 // BUG-R7-11: see hPosition note above.
                 if (offset != null && long.TryParse(offset.Text, out var vEmu) && vEmu != 0)
-                    node.Format["vPosition"] = $"{vEmu / 360000.0:F1}cm";
+                    node.Format["vPosition"] = $"{vEmu / EmuConverter.EmuPerCmF:F1}cm";
                 if (vPos.RelativeFrom?.HasValue == true)
                     node.Format["vRelative"] = vPos.RelativeFrom.InnerText;
             }

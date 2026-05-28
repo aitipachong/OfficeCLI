@@ -225,8 +225,8 @@ public partial class WordHandler
                 return;
             }
 
-            var widthPx = imgCxEmu / 9525;
-            var heightPx = imgCyEmu / 9525;
+            var widthPx = imgCxEmu / EmuConverter.EmuPerPx;
+            var heightPx = imgCyEmu / EmuConverter.EmuPerPx;
             string widthAttr = widthPx > 0 ? $" width=\"{widthPx}\"" : "";
             string heightAttr = heightPx > 0 ? $" height=\"{heightPx}\"" : "";
 
@@ -374,7 +374,7 @@ public partial class WordHandler
             var wAttr = ln.GetAttributes().FirstOrDefault(a => a.LocalName == "w").Value;
             double borderPx = 1;
             if (long.TryParse(wAttr, out var wEmu) && wEmu > 0)
-                borderPx = Math.Max(1, wEmu / 9525.0); // EMU → px
+                borderPx = Math.Max(1, wEmu / EmuConverter.EmuPerPxF); // EMU → px
             var solidFill = ln.Elements().FirstOrDefault(e => e.LocalName == "solidFill");
             var srgb = solidFill?.Elements().FirstOrDefault(e => e.LocalName == "srgbClr");
             var colorHex = srgb?.GetAttributes().FirstOrDefault(a => a.LocalName == "val").Value;
@@ -391,8 +391,8 @@ public partial class WordHandler
             var blurAttr = outerShdw.GetAttributes().FirstOrDefault(a => a.LocalName == "blurRad").Value;
             var distAttr = outerShdw.GetAttributes().FirstOrDefault(a => a.LocalName == "dist").Value;
             var dirAttr = outerShdw.GetAttributes().FirstOrDefault(a => a.LocalName == "dir").Value;
-            double blurPx = long.TryParse(blurAttr, out var blurEmu) ? blurEmu / 9525.0 : 4;
-            double distPx = long.TryParse(distAttr, out var distEmu) ? distEmu / 9525.0 : 4;
+            double blurPx = long.TryParse(blurAttr, out var blurEmu) ? blurEmu / EmuConverter.EmuPerPxF : 4;
+            double distPx = long.TryParse(distAttr, out var distEmu) ? distEmu / EmuConverter.EmuPerPxF : 4;
             double dirDeg = long.TryParse(dirAttr, out var dirVal) ? dirVal / 60000.0 : 45;
             var offX = distPx * Math.Cos(dirDeg * Math.PI / 180);
             var offY = distPx * Math.Sin(dirDeg * Math.PI / 180);
@@ -470,8 +470,8 @@ public partial class WordHandler
     private void RenderGroupHtml(StringBuilder sb, OpenXmlElement group, long groupWidthEmu, long groupHeightEmu,
         List<Drawing>? floatImages = null)
     {
-        var widthPx = groupWidthEmu / 9525;
-        var heightPx = groupHeightEmu / 9525;
+        var widthPx = groupWidthEmu / EmuConverter.EmuPerPx;
+        var heightPx = groupHeightEmu / EmuConverter.EmuPerPx;
 
         // Get the group's child coordinate space from grpSpPr > xfrm
         long chOffX = 0, chOffY = 0, chExtCx = groupWidthEmu, chExtCy = groupHeightEmu;
@@ -545,8 +545,8 @@ public partial class WordHandler
         string style;
         if (standalone)
         {
-            var widthPx = extCx / 9525;
-            var heightPx = extCy / 9525;
+            var widthPx = extCx / EmuConverter.EmuPerPx;
+            var heightPx = extCy / EmuConverter.EmuPerPx;
             style = $"display:inline-block;width:{widthPx}px;min-height:{heightPx}px;vertical-align:top";
 
             // Rotation on standalone shapes too (was only applied inside groups)
@@ -604,7 +604,7 @@ public partial class WordHandler
         var tIns = GetLongAttr(bodyPr, "tIns", 45720);
         var rIns = GetLongAttr(bodyPr, "rIns", 91440);
         var bIns = GetLongAttr(bodyPr, "bIns", 45720);
-        style += $";padding:{tIns / 9525}px {rIns / 9525}px {bIns / 9525}px {lIns / 9525}px";
+        style += $";padding:{tIns / EmuConverter.EmuPerPx}px {rIns / EmuConverter.EmuPerPx}px {bIns / EmuConverter.EmuPerPx}px {lIns / EmuConverter.EmuPerPx}px";
 
         sb.Append($"<div style=\"{style}\">");
 
@@ -636,8 +636,8 @@ public partial class WordHandler
                     try
                     {
                         var imgExtent = imgDrawing.Descendants<DW.Extent>().FirstOrDefault();
-                        var imgW = imgExtent?.Cx?.Value > 0 ? imgExtent.Cx.Value / 9525 : 100;
-                        var imgH = imgExtent?.Cy?.Value > 0 ? imgExtent.Cy.Value / 9525 : 100;
+                        var imgW = imgExtent?.Cx?.Value > 0 ? imgExtent.Cx.Value / EmuConverter.EmuPerPx : 100;
+                        var imgH = imgExtent?.Cy?.Value > 0 ? imgExtent.Cy.Value / EmuConverter.EmuPerPx : 100;
                         // Read distT/distB/distL/distR for image margins (EMU)
                         var inline = imgDrawing.Descendants<DW.Inline>().FirstOrDefault();
                         var anchor = imgDrawing.Descendants<DW.Anchor>().FirstOrDefault();
@@ -656,7 +656,7 @@ public partial class WordHandler
                             distL = (long)(anchor.DistanceFromLeft?.Value ?? 0);
                             distR = (long)(anchor.DistanceFromRight?.Value ?? 0);
                         }
-                        var marginCss = $"margin:{distT/9525}px {distR/9525}px {distB/9525}px {distL/9525}px";
+                        var marginCss = $"margin:{distT/EmuConverter.EmuPerPx}px {distR/EmuConverter.EmuPerPx}px {distB/EmuConverter.EmuPerPx}px {distL/EmuConverter.EmuPerPx}px";
                         var crop = GetCropPercents(imgDrawing);
                         if (crop.HasValue)
                         {

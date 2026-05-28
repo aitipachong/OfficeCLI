@@ -2627,7 +2627,7 @@ public partial class PowerPointHandler
             double minHeightCm = needPt / 72.0 * 2.54;
             // Round up to 0.05cm for cleaner values
             minHeightCm = Math.Ceiling(minHeightCm * 20) / 20.0;
-            long minHeightEmu = (long)Math.Round(minHeightCm * 360000.0);
+            long minHeightEmu = (long)Math.Round(minHeightCm * EmuConverter.EmuPerCmF);
             return $"text overflow: need ≥{defaultLinePt:F0}pt, usable 0pt (shape {shapeHeightPt:F0}pt < margins {marginPt:F0}pt). suggest.height={EmuConverter.FormatEmu(minHeightEmu)}";
         }
 
@@ -2732,7 +2732,7 @@ public partial class PowerPointHandler
             double minHeightCm = (estimatedHeight + marginPt) / 72.0 * 2.54;
             // Round up to 0.05cm for cleaner values
             minHeightCm = Math.Ceiling(minHeightCm * 20) / 20.0;
-            long minHeightEmu = (long)Math.Round(minHeightCm * 360000.0);
+            long minHeightEmu = (long)Math.Round(minHeightCm * EmuConverter.EmuPerCmF);
             return $"text overflow: {totalLines} lines at {fontSizePt:F1}pt need {estimatedHeight:F0}pt, usable {usableHeight:F0}pt. suggest.height={EmuConverter.FormatEmu(minHeightEmu)}";
         }
         return null;

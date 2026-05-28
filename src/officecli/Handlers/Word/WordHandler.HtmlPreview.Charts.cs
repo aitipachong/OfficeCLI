@@ -43,8 +43,8 @@ public partial class WordHandler
 
             // Chart dimensions from drawing extent
             var extent = drawing.Descendants<DW.Extent>().FirstOrDefault();
-            int svgW = extent?.Cx?.Value > 0 ? (int)(extent.Cx.Value / 9525) : 500;
-            int svgH = extent?.Cy?.Value > 0 ? (int)(extent.Cy.Value / 9525) : 300;
+            int svgW = extent?.Cx?.Value > 0 ? (int)(extent.Cx.Value / EmuConverter.EmuPerPx) : 500;
+            int svgH = extent?.Cy?.Value > 0 ? (int)(extent.Cy.Value / EmuConverter.EmuPerPx) : 300;
 
             // Renderer — use chart XML colors if available, else reasonable defaults
             var renderer = new ChartSvgRenderer
@@ -129,8 +129,8 @@ public partial class WordHandler
 
             // Chart dimensions from the drawing extent, same as regular charts.
             var extent = drawing.Descendants<DW.Extent>().FirstOrDefault();
-            int svgW = extent?.Cx?.Value > 0 ? (int)(extent.Cx.Value / 9525) : 500;
-            int svgH = extent?.Cy?.Value > 0 ? (int)(extent.Cy.Value / 9525) : 300;
+            int svgW = extent?.Cx?.Value > 0 ? (int)(extent.Cx.Value / EmuConverter.EmuPerPx) : 500;
+            int svgH = extent?.Cy?.Value > 0 ? (int)(extent.Cy.Value / EmuConverter.EmuPerPx) : 300;
 
             var renderer = new ChartSvgRenderer
             {
