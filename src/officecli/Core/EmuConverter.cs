@@ -191,13 +191,17 @@ internal static class EmuConverter
         // the documented length-string readback contract.
         if (cmStr == "0" || cmStr == "-0")
             return emu.ToString(CultureInfo.InvariantCulture) + "emu";
-        // Round-trip sanity for sub-0.01cm values: anything under 3600 EMU
-        // (= 0.01cm) can't be expressed faithfully in "0.##" cm form (e.g.
-        // 1800 EMU → "0.01cm" → re-parses as 3600 EMU, doubling the source).
-        // Switch to raw emu only in that narrow band; values ≥ 3600 EMU keep
-        // the cm output (existing baselines unchanged), accepting the
-        // documented 0.01cm grid quantization for larger sizes.
-        if (Math.Abs(emu) < 3600)
+        // CONSISTENCY(emu-roundtrip): EMU values that don't survive the
+        // "0.##" cm → ParseEmu(cm) round trip must emit as raw EMU. The
+        // earlier guard caught only the narrow sub-3600-EMU band; values
+        // like y=274320 (= 0.762 cm) formatted as "0.76cm" and re-parsed
+        // as 273600 EMU — losing 720 EMU per coord, accumulating into
+        // visible position drift on dump→replay of any PowerPoint-authored
+        // shape. Check the actual round-trip behaviour instead of relying
+        // on a magnitude heuristic, so every value emits in a form that
+        // parses back to itself.
+        var reparsed = (long)Math.Round(double.Parse(cmStr, CultureInfo.InvariantCulture) * EmuPerCmF);
+        if (reparsed != emu)
             return emu.ToString(CultureInfo.InvariantCulture) + "emu";
         return $"{cmStr}cm";
     }
