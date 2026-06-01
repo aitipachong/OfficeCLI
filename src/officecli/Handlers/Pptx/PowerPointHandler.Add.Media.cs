@@ -160,8 +160,18 @@ public partial class PowerPointHandler
                         var stripped = s.Trim();
                         if (stripped.EndsWith("%", StringComparison.Ordinal)) stripped = stripped[..^1].Trim();
                         var v = ParseHelpers.SafeParseDouble(stripped, "crop");
-                        if (v < 0 || v > 100)
-                            throw new ArgumentException($"Invalid 'crop' value: '{s.Trim()}'. Crop percentage must be between 0 and 100.");
+                        // CONSISTENCY(srcRect-negative): PowerPoint stores
+                        // negative <a:srcRect l/r/t/b> values to express
+                        // "outset" — the visible image extends BEYOND the
+                        // source picture's natural box on that side
+                        // (mirrored/padded with the picture's edge color or
+                        // theme fill). NodeBuilder surfaces these as bare
+                        // negative percentages (e.g. crop="-5,0,0,0"), so
+                        // rejecting [-100, 100] on Add broke dump->replay
+                        // for any PowerPoint-authored picture that used
+                        // outset cropping. Match the Get-side range.
+                        if (v < -100 || v > 100)
+                            throw new ArgumentException($"Invalid 'crop' value: '{s.Trim()}'. Crop percentage must be between -100 and 100.");
                         return v;
                     }
                     if (parts.Length == 4)
@@ -196,9 +206,12 @@ public partial class PowerPointHandler
                     var stripped = v.Trim();
                     if (stripped.EndsWith("%", StringComparison.Ordinal)) stripped = stripped[..^1].Trim();
                     if (!double.TryParse(stripped, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d))
-                        throw new ArgumentException($"Invalid '{k}' value: '{v}'. Expected a percentage (0-100).");
-                    if (d < 0 || d > 100)
-                        throw new ArgumentException($"Invalid '{k}' value: '{v}'. Crop percentage must be between 0 and 100.");
+                        throw new ArgumentException($"Invalid '{k}' value: '{v}'. Expected a percentage (-100 to 100).");
+                    // CONSISTENCY(srcRect-negative): outset cropping uses
+                    // negative percentages — mirror the compound `crop=`
+                    // path above and the Get-side range.
+                    if (d < -100 || d > 100)
+                        throw new ArgumentException($"Invalid '{k}' value: '{v}'. Crop percentage must be between -100 and 100.");
                     return (int)(d * 1000);
                 }
                 cropL = SidePct("cropleft") ?? cropL;
