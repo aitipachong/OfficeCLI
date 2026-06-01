@@ -212,8 +212,21 @@ internal static class EmuConverter
     /// </summary>
     public static string FormatLineWidth(long emu)
     {
+        // CONSISTENCY(emu-roundtrip): tiny sub-0.01-pt widths (anything below
+        // ~127 EMU) collapse to "0pt" under the "0.##" pt format, then
+        // re-parse as 0 EMU on replay — silently turning legal hairline
+        // <a:ln w="1..126"> strokes into <a:ln w="0"/>. Fall back to a raw
+        // "<n>emu" form (round-trips through ParseEmu/ParseLineWidth) when
+        // the pt form would round to "0". Round-trip lossiness above the
+        // floor (e.g. 180000 EMU -> "14.17pt" -> 179959 EMU) is the
+        // pre-existing 0.01-pt readback contract callers expect — only
+        // zero-collapse is plugged here.
+        if (emu == 0) return "0pt";
         var pt = emu / EmuPerPointF;
-        return $"{pt:0.##}pt";
+        var ptStr = pt.ToString("0.##", CultureInfo.InvariantCulture);
+        if (ptStr == "0" || ptStr == "-0")
+            return emu.ToString(CultureInfo.InvariantCulture) + "emu";
+        return $"{ptStr}pt";
     }
 
     /// <summary>
