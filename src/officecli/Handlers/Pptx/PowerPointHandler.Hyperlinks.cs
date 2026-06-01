@@ -101,6 +101,18 @@ public partial class PowerPointHandler
         // Mirrored in ExcelHandler.Set.cs cell link + WordHandler.Set.Element.cs
         // run/hyperlink writers; ppaction:// URIs are accepted (allowlisted).
         Core.HyperlinkUriValidator.RequireSafeScheme(url, "link");
+        // Dedupe external hyperlink rels — AddHyperlinkRelationship always
+        // mints a fresh rId without checking existing relationships, so
+        // repeated set ops for the same URL (e.g. dump → batch round-trip
+        // emitting `link=URL` on the shape add and the paragraph set bag both
+        // for the same shape) created N rels pointing at the same URI. Reuse
+        // any external hyperlink relationship whose Uri matches the requested
+        // one; mirrors the slide-jump branch above (it already reuses).
+        foreach (var hl in slidePart.HyperlinkRelationships)
+        {
+            if (hl.IsExternal && hl.Uri == uri)
+                return new HyperlinkTarget { Id = hl.Id, IsExternal = true };
+        }
         var extRel = slidePart.AddHyperlinkRelationship(uri, isExternal: true);
         return new HyperlinkTarget { Id = extRel.Id, IsExternal = true };
     }
