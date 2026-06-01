@@ -251,7 +251,7 @@ public partial class PowerPointHandler
                     if (runs.Count == 1 && textLines.Length == 1 && !textLines[0].Contains('\t'))
                     {
                         // Single run, single line, no tabs: just replace text
-                        runs[0].Text = new Drawing.Text { Text = textLines[0] };
+                        runs[0].Text = MakePreservingText(textLines[0]);
                     }
                     else
                     {
@@ -276,7 +276,7 @@ public partial class PowerPointHandler
                                     var r = new Drawing.Run();
                                     if (runProps != null)
                                         r.RunProperties = runProps.CloneNode(true) as Drawing.RunProperties;
-                                    r.Text = new Drawing.Text { Text = seg };
+                                    r.Text = MakePreservingText(seg);
                                     return r;
                                 });
                                 textBody.Append(newPara);
@@ -1674,7 +1674,7 @@ public partial class PowerPointHandler
         {
             var newRun = new Drawing.Run(
                 new Drawing.RunProperties { Language = "en-US" },
-                new Drawing.Text { Text = value });
+                MakePreservingText(value));
             para.AppendChild(newRun);
         }
         if (savedEndParaRPr != null)
@@ -1703,7 +1703,7 @@ public partial class PowerPointHandler
                             var para = new Drawing.Paragraph();
                             AppendLineWithTabs(para, line, seg => new Drawing.Run(
                                 new Drawing.RunProperties { Language = "en-US" },
-                                new Drawing.Text { Text = seg }));
+                                MakePreservingText(seg)));
                             textBody.AppendChild(para);
                         }
                         cell.PrependChild(textBody);
@@ -1735,7 +1735,7 @@ public partial class PowerPointHandler
                                 r.RunProperties = runProps != null
                                     ? runProps.CloneNode(true) as Drawing.RunProperties
                                     : new Drawing.RunProperties { Language = "en-US" };
-                                r.Text = new Drawing.Text { Text = seg };
+                                r.Text = MakePreservingText(seg);
                                 return r;
                             });
                             textBody.Append(para);

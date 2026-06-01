@@ -349,13 +349,13 @@ public partial class PowerPointHandler
                     AppendLineWithTabs(newPara, paraText, seg => new Drawing.Run
                     {
                         RunProperties = (Drawing.RunProperties)rProps.CloneNode(true),
-                        Text = new Drawing.Text { Text = seg }
+                        Text = MakePreservingText(seg)
                     });
                 }
                 else
                 {
                     newRun.RunProperties = rProps;
-                    newRun.Text = new Drawing.Text { Text = paraText };
+                    newRun.Text = MakePreservingText(paraText);
                     newPara.Append(newRun);
                 }
 
@@ -721,7 +721,7 @@ public partial class PowerPointHandler
                 // tabs land as raw chars inside <a:t> rather than <a:tab/>;
                 // higher-level shape-text Add/Set splits on \t into separate
                 // runs with <a:tab/> siblings.
-                newRun.Text = new Drawing.Text { Text = runText };
+                newRun.Text = MakePreservingText(runText);
 
                 // Insert run at specified index, or append
                 if (index.HasValue)

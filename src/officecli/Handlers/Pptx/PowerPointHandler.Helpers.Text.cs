@@ -15,6 +15,29 @@ public partial class PowerPointHandler
 {
 
     /// <summary>
+    /// Build an &lt;a:t&gt; element whose serialized form preserves leading,
+    /// trailing or all-whitespace content. Without xml:space="preserve" the
+    /// XML serializer treats the text node as collapsible whitespace and
+    /// emits the self-closing &lt;a:t/&gt; form — a run that displayed a
+    /// single space in the source comes back empty on round-trip. Apply the
+    /// attribute only when the content actually needs it, so byte-equal
+    /// round-trips for the common case (non-whitespace runs) are unaffected.
+    /// </summary>
+    internal static Drawing.Text MakePreservingText(string text)
+    {
+        var t = new Drawing.Text { Text = text ?? string.Empty };
+        if (!string.IsNullOrEmpty(text)
+            && (char.IsWhiteSpace(text[0]) || char.IsWhiteSpace(text[^1])))
+        {
+            // <a:t> is OOXML's drawingml run text element; the SDK exposes
+            // xml:space only via SetAttribute (no typed property).
+            t.SetAttribute(new OpenXmlAttribute(
+                "xml", "space", "http://www.w3.org/XML/1998/namespace", "preserve"));
+        }
+        return t;
+    }
+
+    /// <summary>
     /// Read a table cell's text content, joining multi-paragraph text with "\n".
     /// CONSISTENCY(cell-text-readback): cell.TextBody?.InnerText concatenates
     /// paragraphs without separators, which silently loses line-break structure
