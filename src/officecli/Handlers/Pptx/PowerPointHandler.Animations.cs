@@ -752,6 +752,13 @@ public partial class PowerPointHandler
         // chartBuild rides outside the cTn — emitted as <p:bldGraphic>/<a:bldChart>
         // alongside the click group. Only meaningful when target is a chart.
         string? chartBuildRaw = null;
+        // R14-bug6: buildType rides on the <p:bldP @build="..."> sibling
+        // (iterate-by-paragraph). Only meaningful when target is a plain
+        // shape (chart targets get <p:bldGraphic>, not <p:bldP>). Captured
+        // here and applied near the bldLst.AppendChild(new BuildParagraph)
+        // arm below so a dump→batch round-trip preserves per-paragraph
+        // animation triggers.
+        string? buildTypeRaw = null;
         var unrecognized = new List<string>();
 
         // bt-1 / fuzz-1 fix: top-level animation= prop bypasses the
@@ -812,7 +819,7 @@ public partial class PowerPointHandler
                 // value string — `seg` was lowered but we want canonical
                 // enum spelling for restart and the literal "indefinite"
                 // for repeat). Re-extract from the un-lowered `parts`.
-                if (kKey is "repeat" or "restart" or "autoreverse" or "chartbuild")
+                if (kKey is "repeat" or "restart" or "autoreverse" or "chartbuild" or "buildtype")
                 {
                     var origSeg = parts[i];
                     var origEq = origSeg.IndexOf('=');
@@ -823,6 +830,7 @@ public partial class PowerPointHandler
                         case "restart": restartRaw = origRaw; break;
                         case "autoreverse": autoReverse = ParseHelpers.IsTruthy(origRaw); break;
                         case "chartbuild": chartBuildRaw = origRaw; break;
+                        case "buildtype": buildTypeRaw = origRaw; break;
                     }
                 }
                 else if (int.TryParse(kRaw, out var kVal))
@@ -1038,11 +1046,23 @@ public partial class PowerPointHandler
         else if (!bldLst.Elements<BuildParagraph>()
                 .Any(b => b.ShapeId?.Value == shapeIdStr))
         {
-            bldLst.AppendChild(new BuildParagraph
+            var bldP = new BuildParagraph
             {
                 ShapeId = shapeIdStr,
                 GroupId = new UInt32Value((uint)grpId)
-            });
+            };
+            // R14-bug6: when buildType is set (typically "p" — iterate by
+            // paragraph), persist it on the bldP element. SDK exposes
+            // Build as the typed enum BuildValues; assign via InnerText
+            // so authoring code can pass arbitrary spec-listed tokens
+            // (whole / p / cust / allAtOnce / asWhole) without us pinning
+            // the enum table here.
+            if (!string.IsNullOrEmpty(buildTypeRaw))
+            {
+                bldP.Build = new EnumValue<ParagraphBuildValues>();
+                bldP.Build.InnerText = buildTypeRaw.Trim();
+            }
+            bldLst.AppendChild(bldP);
         }
     }
 

@@ -2306,6 +2306,24 @@ public partial class PowerPointHandler
         if (midDelayVal != null && midDelayVal != "0"
             && int.TryParse(midDelayVal, out var dMs) && dMs > 0)
             animNode.Format["delay"] = dMs;
+
+        // R14-bug6: surface <p:bldP @build="p"> (iterate-by-paragraph) so
+        // dump→batch round-trips a deck that animates each text paragraph
+        // separately. The attribute lives on the BuildParagraph sibling of
+        // the effect cTn (under p:bldLst at the timing root), keyed by
+        // ShapeId. Default is "whole" — only surface non-default values.
+        var stForBuild = effectCTn.Descendants<ShapeTarget>().FirstOrDefault();
+        var sidForBuild = stForBuild?.ShapeId?.Value;
+        if (!string.IsNullOrEmpty(sidForBuild))
+        {
+            var timingForBuild = effectCTn.Ancestors<Timing>().FirstOrDefault();
+            var bldP = timingForBuild?.BuildList?
+                .Elements<BuildParagraph>()
+                .FirstOrDefault(b => b.ShapeId?.Value == sidForBuild);
+            var bldVal = bldP?.Build?.InnerText;
+            if (!string.IsNullOrEmpty(bldVal) && !string.Equals(bldVal, "whole", StringComparison.OrdinalIgnoreCase))
+                animNode.Format["buildType"] = bldVal;
+        }
     }
 
     // R8-8: walk a Get-produced slide tree and harvest every paragraph or run

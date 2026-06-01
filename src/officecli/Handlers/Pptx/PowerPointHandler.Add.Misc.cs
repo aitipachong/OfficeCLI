@@ -1172,6 +1172,17 @@ public partial class PowerPointHandler
                     ValidateAnimationChartBuild(rawChartBuild);
                     animValue += $"-chartBuild={rawChartBuild}";
                 }
+                // R14-bug6: thread buildType on plain-shape targets so dump→batch
+                // round-trips an animation that iterates by paragraph (build="p").
+                // ApplyShapeAnimation's parser picks it up from the composite
+                // animValue and stamps the bldP element accordingly. Reject on
+                // chart targets (chart-build vocabulary is chartBuild=*).
+                if (!isChartTarget
+                    && (properties.TryGetValue("buildType", out var rawBuildType)
+                        || properties.TryGetValue("buildtype", out rawBuildType)))
+                {
+                    animValue += $"-buildType={rawBuildType}";
+                }
 
                 ApplyShapeAnimation(animSlidePart, animTarget, animValue);
                 GetSlide(animSlidePart).Save();
