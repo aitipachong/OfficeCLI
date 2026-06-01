@@ -32,23 +32,47 @@ public partial class ExcelHandler
 
     // [ "quoted name" | 'quoted name' | bareKey ] (op) (value)
     // Quoted keys carry spaces ("Total Amount"); bare keys (Salary, 单价) do not.
+    // The bare-key group accepts a leading '@' (force row-property) and a
+    // `col.`/`column.` prefix (force column) — see ParseRowColumnPredicates.
     private static readonly Regex RowColPredicateRegex = new(
-        @"\[\s*(?:""([^""]+)""|'([^']+)'|([\w.]+))\s*(>=|<=|!=|~=|=|>|<)\s*([^\]]*)\]",
+        @"\[\s*(?:""([^""]+)""|'([^']+)'|(@?[\w.]+))\s*(>=|<=|!=|~=|=|>|<)\s*([^\]]*)\]",
         RegexOptions.Compiled);
 
-    // Parse the column predicates from a row selector, dropping row-attribute
-    // and numeric-index brackets. Empty result → caller falls back to the plain
-    // row-attribute branch.
-    private static List<AttributeFilter.Condition> ParseRowColumnPredicates(string selector)
+    // Strip a `col.` / `column.` namespace prefix from a predicate key. The
+    // prefix forces COLUMN interpretation at parse time; the resolver works on
+    // the bare name. Case-insensitive. Returns the key unchanged when absent.
+    private static string StripColPrefix(string key)
+    {
+        var m = Regex.Match(key, @"^col(?:umn)?\.(.+)$", RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value : key;
+    }
+
+    // Parse the column predicates from a row selector. Disambiguation prefixes:
+    //   @key      → force ROW PROPERTY — handled by the row-attribute branch +
+    //               AttributeFilter post-filter (both strip the '@'); not a
+    //               column predicate, so skip it here.
+    //   col.key   → force TABLE COLUMN — bypass the row-property / numeric guards
+    //               so a column literally named `height` (or `2`) stays reachable.
+    // A bare key keeps the legacy precedence (row property wins, then numeric
+    // index, else column); bare keys that hit the row-property guard are reported
+    // via `bareAttrKeys` so the caller can flag a silent column-shadow collision.
+    private static List<AttributeFilter.Condition> ParseRowColumnPredicates(
+        string selector, out List<string> bareAttrKeys)
     {
         var conds = new List<AttributeFilter.Condition>();
+        bareAttrKeys = new List<string>();
         foreach (Match m in RowColPredicateRegex.Matches(selector))
         {
             var key = m.Groups[1].Success ? m.Groups[1].Value
                     : m.Groups[2].Success ? m.Groups[2].Value
                     : m.Groups[3].Value;
-            if (RowAttributeKeys.Contains(key)) continue;   // row property, not a column
-            if (int.TryParse(key, out _)) continue;          // row[2] index, not a predicate
+            if (key.StartsWith('@')) continue;               // force row property
+            bool forcedColumn = Regex.IsMatch(key, @"^col(?:umn)?\.", RegexOptions.IgnoreCase);
+            if (!forcedColumn)
+            {
+                if (RowAttributeKeys.Contains(key)) { bareAttrKeys.Add(key); continue; }
+                if (int.TryParse(key, out _)) continue;      // row[2] index, not a predicate
+            }
             conds.Add(new AttributeFilter.Condition(key, MapRowPredicateOp(m.Groups[4].Value), m.Groups[5].Value.Trim()));
         }
         return conds;
@@ -123,7 +147,7 @@ public partial class ExcelHandler
 
         if (candidates.Count == 0)
         {
-            var cols = string.Join(", ", colConds.Select(c => $"'{c.Key}'"));
+            var cols = string.Join(", ", colConds.Select(c => $"'{StripColPrefix(c.Key)}'"));
             var scope = sheetFilter == null ? "any sheet" : $"sheet '{sheetFilter}'";
             throw new ArgumentException(
                 $"row[col op val] found no table on {scope} with column(s) {cols}. " +
@@ -201,12 +225,48 @@ public partial class ExcelHandler
     private static bool TryResolveTableColumn(string key, List<string> colNames, int c1, int c2, out int absCol)
     {
         absCol = 0;
+        key = StripColPrefix(key);   // `col.Salary` → resolve against `Salary`
         var nameIdx = colNames.FindIndex(n => n.Equals(key, StringComparison.OrdinalIgnoreCase));
         if (nameIdx >= 0) { absCol = c1 + nameIdx; return true; }
         if (Regex.IsMatch(key, @"^[A-Za-z]{1,3}$"))
         {
             var letterIdx = ColumnNameToIndex(key.ToUpperInvariant());
             if (letterIdx >= c1 && letterIdx <= c2) { absCol = letterIdx; return true; }
+        }
+        return false;
+    }
+
+    // True when an in-scope table (ListObject or detected) has a column whose
+    // name equals `key`. Used to flag a bare `row[key op val]` whose key also
+    // names a row PROPERTY (height/hidden/...): rather than silently choosing the
+    // property and shadowing the column, the caller errors and points to the
+    // `col.key` / `@key` escapes. Only ever called for the ≤5 attribute names, so
+    // the table scan is negligible.
+    private bool RowKeyCollidesWithColumn(string key, string? sheetFilter)
+    {
+        foreach (var (sheetName, worksheetPart) in GetWorksheets())
+        {
+            if (sheetFilter != null && !sheetName.Equals(sheetFilter, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var realRanges = new List<(int c1, int r1, int c2, int r2)>();
+            foreach (var tdp in worksheetPart.TableDefinitionParts)
+            {
+                var tbl = tdp.Table;
+                if (tbl?.Reference?.Value == null) continue;
+                if (TryParseRange(tbl.Reference.Value, out var rng)) realRanges.Add(rng);
+                var colNames = tbl.GetFirstChild<TableColumns>()?.Elements<TableColumn>()
+                    .Select(c => c.Name?.Value ?? "") ?? Enumerable.Empty<string>();
+                if (colNames.Any(n => n.Equals(key, StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
+            foreach (var det in DetectTables(sheetName, worksheetPart, realRanges))
+            {
+                var colNames = (det.Format.TryGetValue("columns", out var cv) ? cv?.ToString() ?? "" : "")
+                    .Split(',');
+                if (colNames.Any(n => n.Trim().Equals(key, StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
         }
         return false;
     }

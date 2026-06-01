@@ -1626,7 +1626,19 @@ public partial class ExcelHandler
             // row[hidden=true] which filters row attributes. Column predicates
             // resolve header names against a ListObject — see
             // ExcelHandler.Query.RowWhere.cs.
-            var rowColPreds = ParseRowColumnPredicates(selector);
+            var rowColPreds = ParseRowColumnPredicates(selector, out var bareAttrKeys);
+            // A bare key that names a row PROPERTY (height/hidden/...) is taken as
+            // that property. But if a bound table also has a column of that exact
+            // name, the bare form is genuinely ambiguous — error rather than
+            // silently shadow the column. The escape hatches: `col.<name>` forces
+            // the column, `@<name>` forces the row property.
+            foreach (var ak in bareAttrKeys)
+            {
+                if (RowKeyCollidesWithColumn(ak, parsed.Sheet))
+                    throw new ArgumentException(
+                        $"row[{ak} …] is ambiguous: '{ak}' names both a row property and a table column. " +
+                        $"Use 'col.{ak}' to match the column, or '@{ak}' to match the row property.");
+            }
             if (rowColPreds.Count > 0)
                 return QueryRowsByColumnPredicate(parsed.Sheet, rowColPreds);
 
