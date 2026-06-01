@@ -19,8 +19,16 @@ public partial class ExcelHandler
     public List<string> Set(string path, Dictionary<string, string> properties)
     {
         Modified = true;
-        // Batch Set: if path looks like a selector (not starting with /), Query → Set each
-        if (!string.IsNullOrEmpty(path) && !path.StartsWith("/"))
+        // Batch Set: route to the shared filter engine when the path is a bare
+        // selector (no `/`) OR a `/`-scoped path that carries a content filter
+        // (e.g. `/Sheet1/cell[value>5000 or value<300]`). The latter would
+        // otherwise fall to the positional-index navigator and reject the
+        // predicate — query already resolves it, so set must too (parity).
+        // Structural `/`-paths (`/Sheet1/A1`, `/Sheet1/row[2]`,
+        // `/Sheet1/chart[1]/axis[@role=…]`) stay false in IsContentFilterPath
+        // and take the direct dispatch below.
+        if (!string.IsNullOrEmpty(path)
+            && (!path.StartsWith("/") || AttributeFilter.IsContentFilterPath(path)))
         {
             var unsupported = new List<string>();
             // FilterSelector narrows the mutation set with the same engine `query`

@@ -1426,6 +1426,17 @@ public partial class WordHandler
     public List<DocumentNode> Query(string selector)
     {
         var results = QueryDispatch(selector);
+        // docx slash-filter bridge: a `/`-path whose LAST segment is a collection
+        // (bare type, or type + content filter — e.g. `/body/p[1]/r[bold=true or
+        // size=20pt]`, or the bracket-stripped `/body/p[1]/r` that Set's
+        // FilterSelector queries) has no native Query support — slash paths are a
+        // separate Get/Set addressing world. Resolve it here so query and
+        // selector-set reach parity on the `/`-scoped form. Fallback only (when
+        // dispatch found nothing) so existing scoped handling (`/body/ole`,
+        // `/header[1]/...`) is untouched.
+        if (results.Count == 0 && !string.IsNullOrEmpty(selector) && selector.StartsWith("/")
+            && TryResolveSlashCollection(selector) is { } bridged)
+            return bridged;
         // A trailing positional [N] in selector form (`p[2]`, `table[2]`,
         // `run[2]`) selects the Nth result, matching the Get path `/body/p[N]`.
         // Without this the bracket was dropped and every element matched — a
@@ -1434,6 +1445,53 @@ public partial class WordHandler
         // the dispatch/Get machinery; Word has no comma-union so no comma guard.
         if (string.IsNullOrEmpty(selector) || selector.StartsWith("/")) return results;
         return Core.SelectorPositionalIndex.TakeNth(selector, results);
+    }
+
+    // Resolve a `/`-scoped collection path whose last segment is a bare element
+    // type or a type + content filter, e.g. `/body/p[1]/r[bold=true or size=20pt]`
+    // and `/body/p[1]/r`. Returns null when the path is not such a collection
+    // (a positional `[N]` / `last()` / `[@attr]` last segment pins a single
+    // element — left to Get/NavigateToElement) or the container is unresolvable.
+    //
+    // Children are enumerated by PROBING the same NavigateToElement resolver that
+    // Set uses (`{container}/{type}[k]` for k=1,2,…), so each emitted path round-
+    // trips through Set unchanged — no GetAllRuns-vs-Navigation index drift. The
+    // content filter (if any) is applied with the shared AttributeFilter engine.
+    private List<DocumentNode>? TryResolveSlashCollection(string selector)
+    {
+        var lastSlash = selector.LastIndexOf('/');
+        if (lastSlash <= 0) return null;                    // need a container segment
+        var containerPath = selector[..lastSlash];
+        var lastSeg = selector[(lastSlash + 1)..];
+
+        var bracketIdx = lastSeg.IndexOf('[');
+        var elementName = bracketIdx < 0 ? lastSeg : lastSeg[..bracketIdx];
+        if (!System.Text.RegularExpressions.Regex.IsMatch(elementName, @"^[A-Za-z][\w]*$"))
+            return null;
+        // A bracketed last segment is a collection only when it is a content
+        // filter; positional/`@`-structural brackets address a single element.
+        if (bracketIdx >= 0 && !Core.AttributeFilter.IsContentFilterPath(lastSeg))
+            return null;
+
+        OpenXmlElement? container;
+        try { container = NavigateToElement(ParsePath(containerPath)); }
+        catch { return null; }                              // non-structural container → out of scope
+        if (container == null) return null;
+
+        var nodes = new List<DocumentNode>();
+        for (int k = 1; k <= 100000; k++)
+        {
+            var childPath = $"{containerPath}/{elementName}[{k}]";
+            OpenXmlElement? child;
+            try { child = NavigateToElement(ParsePath(childPath)); }
+            catch { break; }
+            if (child == null) break;
+            nodes.Add(ElementToNode(child, childPath, 0));
+        }
+        if (nodes.Count == 0) return null;                  // not a real collection here
+
+        var expr = Core.AttributeFilter.ParseExpr(lastSeg); // null when no filter bracket
+        return Core.AttributeFilter.ApplyExpr(nodes, expr);
     }
 
     private List<DocumentNode> QueryDispatch(string selector)

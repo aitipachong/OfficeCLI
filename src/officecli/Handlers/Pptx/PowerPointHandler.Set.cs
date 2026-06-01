@@ -20,8 +20,15 @@ public partial class PowerPointHandler
         path = ResolveIdPath(path);
         path = ResolveLastPredicates(path);
 
-        // Batch Set: if path looks like a selector (not starting with /), Query → Set each
-        if (!string.IsNullOrEmpty(path) && !path.StartsWith("/"))
+        // Batch Set: route to the shared filter engine when the path is a bare
+        // selector (no `/`) OR a `/`-scoped path that carries a content filter
+        // (e.g. `/slide[1]/shape[width>5cm or text~=AA]`). The latter would
+        // otherwise fall to the positional-index navigator and reject the
+        // predicate — query already resolves it, so set must too (parity).
+        // Structural `/`-paths (`/slide[1]/shape[@id=…]`, `/slide[1]/shape[2]`)
+        // stay false in IsContentFilterPath and take the direct dispatch below.
+        if (!string.IsNullOrEmpty(path)
+            && (!path.StartsWith("/") || OfficeCli.Core.AttributeFilter.IsContentFilterPath(path)))
         {
             var unsupported = new List<string>();
             // FilterSelector narrows with the shared engine: a pure-AND selector

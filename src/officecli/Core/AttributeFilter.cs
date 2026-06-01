@@ -701,6 +701,60 @@ internal static class AttributeFilter
         return ApplyExprWithWarnings(query(queryStr), expr);
     }
 
+    /// <summary>
+    /// True when a selector PATH carries a content-filter predicate (attribute
+    /// comparison / equality on a bare key / contains / exists, or an and·or
+    /// expression) rather than pure structural addressing. Set dispatchers use
+    /// this to route a `/`-prefixed path that filters by content (e.g.
+    /// `/Sheet1/cell[value>5000 or value<300]`, `/body/p[1]/r[bold=true]`)
+    /// through FilterSelector — the same engine query uses — instead of the
+    /// positional-index path navigator that rejects non-index predicates.
+    ///
+    /// Structural addressing stays false: positional `[N]` / `[last()]`, and a
+    /// single `[@attr=value]` equality (the locator form — `@paraId`, `@role`,
+    /// `@id`, `@name`, `@author`, `@type`, …). Per-bracket rule:
+    ///   `[N]` / `[last()]`                       → structural
+    ///   and·or expression inside one bracket     → content
+    ///   bare-token exists `[A]` / `[key]` (no op)→ structural (protects the
+    ///                                              Excel `col[A]` column letter)
+    ///   bare (non-`@`) key with an operator      → content
+    ///   `@key` with a comparison op (&gt; &lt; &gt;= &lt;= ~= !=) → content
+    ///   `@key=value` equality                    → structural (locator)
+    /// CONSISTENCY(filter-path): `@key=value` equality is structural, so a
+    /// forced-attr equality like `/Sheet1/row[@height=5]` is not hijacked — use
+    /// the bare `row[@height=5]` form to equality-filter. Mirrors the project's
+    /// "consistency &gt; robustness" precedent.
+    /// </summary>
+    public static bool IsContentFilterPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        foreach (Match block in BracketBlockRegex.Matches(path))
+        {
+            var content = block.Groups[1].Value.Trim();
+            if (content.Length == 0) continue;
+            if (int.TryParse(content, out _)) continue;                      // [N]
+            if (content.Equals("last()", StringComparison.OrdinalIgnoreCase)) continue;
+
+            FilterExpr expr;
+            try { expr = new ExprParser(content).ParseTop(); }
+            catch { continue; }   // malformed → let the structural navigator report it
+
+            switch (expr)
+            {
+                case AndExpr:
+                case OrExpr:
+                    return true;                                             // boolean expression
+                case PredicateExpr p:
+                    if (p.Cond.Op == FilterOp.Exists) break;                // `[A]` / `[key]` bare token → structural (Excel col[A])
+                    var atPrefixed = content.StartsWith("@", StringComparison.Ordinal);
+                    if (!atPrefixed) return true;                            // bare-key operator filter
+                    if (p.Cond.Op != FilterOp.Equal) return true;           // @key with comparison op
+                    break;                                                   // @key=value equality → structural
+            }
+        }
+        return false;
+    }
+
     // True when the selector's element resolves its own virtual attributes that a
     // bare query would not carry (Excel row/col table-column predicates). Such a
     // selector must reach the handler with its brackets intact.

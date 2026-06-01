@@ -52,8 +52,14 @@ public partial class WordHandler
         if (IsRevisionActionRequest(properties))
             return SetRevisionByNativePath(path, properties);
 
-        // Batch Set: if path looks like a selector (not starting with /), Query → Set each
-        if (!string.IsNullOrEmpty(path) && !path.StartsWith("/"))
+        // Batch Set: route to the shared filter engine when the path is a bare
+        // selector (no `/`) OR a `/`-scoped path that carries a content filter
+        // (e.g. `/body/p[1]/r[bold=true or size=20pt]`). docx Query resolves the
+        // slash-filter path via its bridge, so the same FilterSelector → Set-each
+        // branch works; structural `/`-paths (`/body/p[@paraId=…]/r[2]`) stay
+        // false in IsContentFilterPath and take NavigateToElement below.
+        if (!string.IsNullOrEmpty(path)
+            && (!path.StartsWith("/") || OfficeCli.Core.AttributeFilter.IsContentFilterPath(path)))
         {
             // FilterSelector narrows with the shared engine: a pure-AND selector
             // takes the flat path with applyAll:false (comparison ops only — the
