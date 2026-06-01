@@ -228,5 +228,71 @@ public static partial class PptxBatchEmitter
                 SlidePath: "/presentation",
                 Reason: "Presentation extensions (sectionLst / modifyVerifier / …) may reference slides by rId; replay mints fresh rIds, so references can go stale. Section names survive; section → slide membership may need manual rewiring."));
         }
+
+        // CONSISTENCY(emit-presentation-extras): the typed Add/Set/EmitPresentationProps
+        // surface still doesn't model these presentation-level children, but
+        // dropping them silently broke deck-defaults round-trip. Same
+        // best-effort raw-set append + UnsupportedWarning strategy as
+        // custShowLst / extLst above. Order in spec: kinsoku, defaultTextStyle,
+        // photoAlbum (CT_Presentation §19.2.1.26).
+        // kinsoku — East-Asian line-break rules (`<p:kinsoku invalChars=… hangChars=…/>`).
+        var kins = doc.Root.Element(pNs + "kinsoku");
+        if (kins != null)
+        {
+            var xml = CanonicalizeRawXml(kins.ToString(System.Xml.Linq.SaveOptions.DisableFormatting));
+            items.Add(new BatchItem
+            {
+                Command = "raw-set",
+                Part = "/presentation",
+                Xpath = "/p:presentation",
+                Action = "append",
+                Xml = xml,
+            });
+            ctx.Unsupported.Add(new UnsupportedWarning(
+                Element: "presentation.kinsoku",
+                SlidePath: "/presentation",
+                Reason: "kinsoku (East-Asian line-break rules: invalid / hanging chars) is preserved verbatim via raw-set; no typed Set vocabulary exists yet to edit individual rule entries."));
+        }
+
+        // defaultTextStyle — body-text level defaults inherited by every
+        // slide layout / master that doesn't override them (`<p:defaultTextStyle>
+        // <a:defPPr/> <a:lvl1pPr/> …</p:defaultTextStyle>`).
+        var dts = doc.Root.Element(pNs + "defaultTextStyle");
+        if (dts != null)
+        {
+            var xml = CanonicalizeRawXml(dts.ToString(System.Xml.Linq.SaveOptions.DisableFormatting));
+            items.Add(new BatchItem
+            {
+                Command = "raw-set",
+                Part = "/presentation",
+                Xpath = "/p:presentation",
+                Action = "append",
+                Xml = xml,
+            });
+            ctx.Unsupported.Add(new UnsupportedWarning(
+                Element: "presentation.defaultTextStyle",
+                SlidePath: "/presentation",
+                Reason: "defaultTextStyle (deck-level paragraph defaults inherited by layouts/masters) is preserved verbatim via raw-set; no typed Set surface for individual level paragraph properties at this level yet."));
+        }
+
+        // photoAlbum — flags marking the deck as a photo album
+        // (`<p:photoAlbum bw="…" showCaptions="…" layout="…" frame="…"/>`).
+        var photo = doc.Root.Element(pNs + "photoAlbum");
+        if (photo != null)
+        {
+            var xml = CanonicalizeRawXml(photo.ToString(System.Xml.Linq.SaveOptions.DisableFormatting));
+            items.Add(new BatchItem
+            {
+                Command = "raw-set",
+                Part = "/presentation",
+                Xpath = "/p:presentation",
+                Action = "append",
+                Xml = xml,
+            });
+            ctx.Unsupported.Add(new UnsupportedWarning(
+                Element: "presentation.photoAlbum",
+                SlidePath: "/presentation",
+                Reason: "photoAlbum (PowerPoint Photo Album metadata: bw / captions / layout / frame attributes) is preserved verbatim via raw-set; no typed Set vocabulary exists for these attributes."));
+        }
     }
 }
