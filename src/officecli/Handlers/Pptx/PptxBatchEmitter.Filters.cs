@@ -16,13 +16,16 @@ public static partial class PptxBatchEmitter
     {
         // Internal relationship id — unstable across packages, see WordBatchEmitter.
         "relId",
-        // OOXML cNvPr id — auto-accumulated by GenerateUniqueShapeId on Add.
-        // Emitting the source id would force Add to honor it, which works for
-        // free-form shapes but collides on slides where the layout already
-        // contributes a placeholder at the same id slot (animations/video deck).
-        // Mirrors docx WordBatchEmitter.Filters.cs treating paraId as derived:
-        // emit uses positional /slide[N]/shape[K] for downstream addressing.
-        "id",
+        // CONSISTENCY(animation-spid-roundtrip): cNvPr id used to be a skip
+        // key on the assumption that ids auto-renumber. But PowerPoint
+        // animations reference target shapes by raw id (<p:spTgt spid="N"/>),
+        // and the animation emitter forwards those ids verbatim — so renaming
+        // every shape to a fresh 10000+ id at replay time leaves every
+        // animation pointing at a dead shape. AcquireShapeId already honors
+        // a caller-supplied id and throws on collision (instead of silently
+        // renumbering), which is the right contract for dump→replay. Emit
+        // the source id; collisions surface as batch errors that point at
+        // the actual problem instead of silently breaking animations.
         // Cached display content for unevaluated fields. The `evaluated`
         // protocol surfaces this for diagnostic Get only; replay would
         // re-emit an a:fld with stale text.

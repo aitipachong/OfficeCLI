@@ -77,10 +77,24 @@ public partial class PowerPointHandler
             && uint.TryParse(idStr, out var requestedId)
             && requestedId > 0)
         {
-            if (ShapeIdInUse(shapeTree, requestedId))
-                throw new ArgumentException(
-                    $"id {requestedId} already in use in this shapeTree. " +
-                    "Use a different id or omit to auto-assign.");
+            // CONSISTENCY(per-slide-id-scope): OOXML cNvPr ids only need to
+            // be unique within a slide — PowerPoint authors ids 1/2/3/...
+            // starting fresh on every slide. The global _usedShapeIds set
+            // tracks ids across slides for the auto-assign path (to keep
+            // animation spid references stable across mutations), but for
+            // a caller-supplied id (dump→replay round-trip) the relevant
+            // scope is the parent shapeTree. Without this, dump emitted
+            // id=2 on every slide would error from slide 2 onward.
+            if (shapeTree != null)
+            {
+                foreach (var nvPr in shapeTree.Descendants<NonVisualDrawingProperties>())
+                {
+                    if (nvPr.Id?.HasValue == true && nvPr.Id.Value == requestedId)
+                        throw new ArgumentException(
+                            $"id {requestedId} already in use in this shapeTree. " +
+                            "Use a different id or omit to auto-assign.");
+                }
+            }
             _usedShapeIds?.Add(requestedId);
             if (requestedId >= _nextShapeId)
                 _nextShapeId = requestedId + 1;
