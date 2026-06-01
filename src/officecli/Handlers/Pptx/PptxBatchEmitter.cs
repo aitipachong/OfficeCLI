@@ -806,10 +806,25 @@ public static partial class PptxBatchEmitter
                 // <p:audio>/<p:video> out of the timing tree and stitching
                 // around BuildSlideAnimationIndex output) is materially more
                 // work than the warning-vs-correctness tradeoff justifies.
+                // <p:animClr>-bearing timing trees: the semantic emit recreates
+                // the effect body from canned EffectTemplates (emph_colorpulse,
+                // emph_objectcolor, emph_lighten, …) with placeholder
+                // substitution. When the source animClr's durations, attribute
+                // names, color targets, or override flags diverge from the
+                // template (which is the typical case for hand-authored or
+                // tool-generated decks — PowerPoint itself rarely emits the
+                // canned form verbatim), dump→replay produces a structurally
+                // different body that PowerPoint silently renders as a different
+                // effect. Route the entire <p:timing> slice through raw-set so
+                // the source bytes survive intact. Tradeoff: a deck with ONLY
+                // template-matched animClr emphasis effects round-trips via
+                // raw-set instead of the semantic add-animation row — slightly
+                // bigger batch, but byte-faithful.
                 if (slice.Contains("presetClass=\"path\"", StringComparison.Ordinal)
                     || slice.Contains("<p:animMotion", StringComparison.Ordinal)
                     || slice.Contains("<p:audio", StringComparison.Ordinal)
-                    || slice.Contains("<p:video", StringComparison.Ordinal))
+                    || slice.Contains("<p:video", StringComparison.Ordinal)
+                    || slice.Contains("<p:animClr", StringComparison.Ordinal))
                 {
                     timingExotic = true;
                     timingXml = slice;
