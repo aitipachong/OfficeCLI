@@ -2286,11 +2286,54 @@ public partial class PowerPointHandler
         ParseTransitionFromXml(slide.OuterXml, node);
     }
 
+    /// <summary>
+    /// Locate the <p:transition> element within the slide XML and return a
+    /// substring covering it (and any enclosing &lt;mc:AlternateContent&gt;
+    /// wrapper that hosts morph / p14 / p15 variants). Returns null when the
+    /// slide has no transition. Mirrors the slicing in
+    /// <c>PptxBatchEmitter.ScanSlideExoticContent</c>.
+    /// </summary>
+    private static string? SliceTransitionScope(string xml)
+    {
+        var tIdx = xml.IndexOf("<p:transition", StringComparison.Ordinal);
+        if (tIdx < 0) return null;
+
+        var mcWrapStart = xml.LastIndexOf("<mc:AlternateContent", tIdx, StringComparison.Ordinal);
+        if (mcWrapStart >= 0)
+        {
+            var mcWrapEnd = xml.IndexOf("</mc:AlternateContent>", mcWrapStart, StringComparison.Ordinal);
+            if (mcWrapEnd > tIdx)
+                return xml.Substring(mcWrapStart, mcWrapEnd + "</mc:AlternateContent>".Length - mcWrapStart);
+        }
+
+        // Bare <p:transition>...</p:transition> (possibly self-closing).
+        // Locate the matching end: either /> at end of open tag or </p:transition>.
+        var openEnd = xml.IndexOf('>', tIdx);
+        if (openEnd < 0) return null;
+        if (xml[openEnd - 1] == '/')
+            return xml.Substring(tIdx, openEnd - tIdx + 1);
+        var closeTag = "</p:transition>";
+        var closeIdx = xml.IndexOf(closeTag, openEnd, StringComparison.Ordinal);
+        if (closeIdx < 0) return null;
+        return xml.Substring(tIdx, closeIdx + closeTag.Length - tIdx);
+    }
+
     private static void ParseTransitionFromXml(string xml, OfficeCli.Core.DocumentNode node)
     {
-        // Also check for morph/p14 transitions inside mc:AlternateContent
+        // R65 bt-2: confine the parse window to the <p:transition> slice (or its
+        // enclosing <mc:AlternateContent> wrapper). Without this scope guard, a
+        // whole-slide regex search for <mc:AlternateContent> picks up unrelated
+        // mc wrappers — e.g. <p:contentPart> ink content carrying p14: extension
+        // elements like <p14:nvContentPartPr> — and the p14 fallback below then
+        // surfaces "nvcontentpartpr" as the transition type. The transition
+        // grammar permits its modern variants (morph/p15:prstTrans/p14:*) only
+        // INSIDE <p:transition> directly or wrapped around it via mc, so
+        // everything outside that slice is irrelevant.
+        var scope = SliceTransitionScope(xml);
+        if (scope == null) return;
+
         var mcMatch = System.Text.RegularExpressions.Regex.Match(
-            xml, @"<mc:AlternateContent[^>]*>(.*?)</mc:AlternateContent>",
+            scope, @"<mc:AlternateContent[^>]*>(.*?)</mc:AlternateContent>",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (mcMatch.Success)
         {
@@ -2413,7 +2456,7 @@ public partial class PowerPointHandler
         }
 
         var typeMatch = System.Text.RegularExpressions.Regex.Match(
-            xml, @"<p:transition([^>]*?)(?:/>|>(.*?)</p:transition>)",
+            scope, @"<p:transition([^>]*?)(?:/>|>(.*?)</p:transition>)",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (!typeMatch.Success) return;
 
