@@ -197,13 +197,21 @@ public static partial class PptxBatchEmitter
     }
 
     // R8-5: emit a single `set /` carrying slideWidth/slideHeight when the
-    // source deck deviates from the blank-baseline 33.87cm × 19.05cm
-    // widescreen. The blank-doc default is hard-coded inside BlankDocCreator,
-    // not surfaced by Get, so we string-compare the canonical FormatEmu
-    // output. EmitPresentationProps is a no-op for the default case to keep
-    // unchanged decks from gaining a spurious item on round-trip.
-    private const string DefaultSlideWidth = "33.87cm";
-    private const string DefaultSlideHeight = "19.05cm";
+    // source deck deviates from the blank-baseline widescreen size. The
+    // blank-doc default is hard-coded inside BlankDocCreator (SlideSizeDefaults)
+    // and not surfaced by Get, so we string-compare the canonical FormatEmu
+    // output. These baseline strings are DERIVED from FormatEmu of the same
+    // SlideSizeDefaults constants BlankDocCreator writes — never hard-coded —
+    // so they track FormatEmu's chosen unit automatically (e.g. width
+    // 12192000 EMU emits as "960pt", height 6858000 EMU as "19.05cm"). A
+    // literal would silently rot whenever FormatEmu's canonical form changes,
+    // re-introducing a spurious slideWidth row on every round-trip.
+    // EmitPresentationProps is a no-op for the default case to keep unchanged
+    // decks from gaining a spurious item on round-trip.
+    private static readonly string DefaultSlideWidth =
+        Core.EmuConverter.FormatEmu(Core.SlideSizeDefaults.Widescreen16x9Cx);
+    private static readonly string DefaultSlideHeight =
+        Core.EmuConverter.FormatEmu(Core.SlideSizeDefaults.Widescreen16x9Cy);
 
     // Presentation-level Format keys that TrySetPresentationSetting accepts
     // on `set /`. The Get side surfaces these via PopulatePresentationSettings
