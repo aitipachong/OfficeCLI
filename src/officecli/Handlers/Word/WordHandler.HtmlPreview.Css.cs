@@ -1609,9 +1609,20 @@ public partial class WordHandler
         var runShd = rProps.Shading;
         if (runShd != null && highlight == null) // don't override highlight
         {
-            var fill = runShd.Fill?.Value;
-            if (fill != null && fill != "auto" && IsHexColor(fill))
-                parts.Add($"background-color:#{fill}");
+            // val=solid → 100% foreground (w:color, black if absent); fill is hidden.
+            if (runShd.Val != null && runShd.Val.Value == ShadingPatternValues.Solid)
+            {
+                var color = runShd.Color?.Value;
+                parts.Add(color != null && color != "auto" && IsHexColor(color)
+                    ? $"background-color:#{color}"
+                    : "background-color:#000000");
+            }
+            else
+            {
+                var fill = runShd.Fill?.Value;
+                if (fill != null && fill != "auto" && IsHexColor(fill))
+                    parts.Add($"background-color:#{fill}");
+            }
         }
 
         // Run border (w:bdr) — border around text (e.g. "box" text)

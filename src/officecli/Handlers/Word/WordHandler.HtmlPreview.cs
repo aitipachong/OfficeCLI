@@ -1500,6 +1500,15 @@ public partial class WordHandler
     private string? ResolveShadingFill(Shading? shading)
     {
         if (shading == null) return null;
+        // val="solid": pattern is 100% of the FOREGROUND (w:color), so the
+        // background is the color (black when color is absent/auto), NOT the fill.
+        // val="clear" (and pct/named patterns approximated elsewhere): background is the fill.
+        if (shading.Val != null && shading.Val.Value == ShadingPatternValues.Solid)
+        {
+            var color = shading.Color?.Value;
+            if (color != null && color != "auto" && IsHexColor(color)) return $"#{color}";
+            return "#000000";
+        }
         var fill = shading.Fill?.Value;
         if (fill != null && fill != "auto" && IsHexColor(fill)) return $"#{fill}";
         // Check themeFill
