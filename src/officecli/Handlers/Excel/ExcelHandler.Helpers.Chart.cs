@@ -413,27 +413,63 @@ public partial class ExcelHandler
         // treat row 1 as headers; otherwise treat all rows as data and synthesize
         // series names. Picking globally keeps a single header convention
         // across columns (mixed string/number headers would be ambiguous).
+        // NOTE: the authoritative header/dataStartRow decision is (re)computed
+        // below once firstSeriesCol is known (it depends on whether an explicit
+        // categories arg shifts the series window). These two locals are seeded
+        // here only so the legacy variable names exist for the explicit-cat block.
         bool hasHeaderRow = false;
-        for (int c = startColIdx + 1; c <= endColIdx; c++)
+        int dataStartRow = startRow;
+
+        // CONSISTENCY(chart-explicit-categories): when the caller supplies an
+        // explicit `categories=` arg alongside dataRange, the dataRange's first
+        // column is NO LONGER hijacked as category labels — it becomes a data
+        // series like every other column. Categories come solely from the
+        // explicit arg (a cell range read from the sheet, or an inline literal
+        // list). Without an explicit arg, the legacy first-column-as-categories
+        // behavior is preserved verbatim.
+        bool hasExplicitCategories =
+            (properties.TryGetValue("categories", out var explicitCatVal)
+             && !string.IsNullOrWhiteSpace(explicitCatVal));
+
+        // Series start one column later only when the first column is being
+        // consumed as categories (i.e. no explicit categories arg).
+        int firstSeriesCol = hasExplicitCategories ? startColIdx : startColIdx + 1;
+
+        // Header detection must scan the same column window the series-building
+        // loop uses, otherwise a 2-column dataRange with explicit categories
+        // (firstSeriesCol == startColIdx) would never see its first header.
+        hasHeaderRow = false;
+        for (int c = firstSeriesCol; c <= endColIdx; c++)
         {
             var headerRef = $"{IndexToColumnName(c)}{startRow}";
             if (IsStringTypedHeader(headerRef)) { hasHeaderRow = true; break; }
         }
+        dataStartRow = hasHeaderRow ? startRow + 1 : startRow;
 
-        int dataStartRow = hasHeaderRow ? startRow + 1 : startRow;
-
-        // First column (excluding header row if present) = category labels
+        // Resolve category labels + (optional) categoriesRef.
         var categories = new List<string>();
-        for (int r = dataStartRow; r <= endRow; r++)
+        string? explicitCategoriesRef = null;   // non-null only for explicit RANGE form
+        if (hasExplicitCategories)
         {
-            var cellRef = $"{startCol}{r}";
-            cellLookup.TryGetValue(cellRef, out var catVal);
-            categories.Add(catVal ?? "");
+            var (explicitCats, explicitRef) =
+                ResolveExplicitCategories(explicitCatVal!, rangeSheetName, properties);
+            categories.AddRange(explicitCats);
+            explicitCategoriesRef = explicitRef;
+        }
+        else
+        {
+            // Legacy path: first column (excluding header row if present) = category labels.
+            for (int r = dataStartRow; r <= endRow; r++)
+            {
+                var cellRef = $"{startCol}{r}";
+                cellLookup.TryGetValue(cellRef, out var catVal);
+                categories.Add(catVal ?? "");
+            }
         }
 
         var seriesData = new List<(string name, double[] values)>();
         int seriesIdx = 1;
-        for (int c = startColIdx + 1; c <= endColIdx; c++)
+        for (int c = firstSeriesCol; c <= endColIdx; c++)
         {
             var colName = IndexToColumnName(c);
             string seriesName;
@@ -471,10 +507,23 @@ public partial class ExcelHandler
 
             // Set up cell references in properties for ApplySeriesReferences
             var valuesRef = $"{rangeSheetName}!${colName}${dataStartRow}:${colName}${endRow}";
-            var categoriesRef = $"{rangeSheetName}!${startCol}${dataStartRow}:${startCol}${endRow}";
             properties[$"series{seriesIdx}.name"] = seriesName;
             properties[$"series{seriesIdx}.values"] = valuesRef;
-            properties[$"series{seriesIdx}.categories"] = categoriesRef;
+            // categoriesRef:
+            //  - legacy (no explicit arg): first dataRange column.
+            //  - explicit RANGE arg: the resolved explicit ref.
+            //  - explicit INLINE literal: no ref (mirror the no-dataRange inline
+            //    path which never sets series{i}.categories).
+            if (hasExplicitCategories)
+            {
+                if (explicitCategoriesRef != null)
+                    properties[$"series{seriesIdx}.categories"] = explicitCategoriesRef;
+            }
+            else
+            {
+                var categoriesRef = $"{rangeSheetName}!${startCol}${dataStartRow}:${startCol}${endRow}";
+                properties[$"series{seriesIdx}.categories"] = categoriesRef;
+            }
             if (blankIndexes.Count > 0)
                 properties[$"series{seriesIdx}._blankIndexes"] = string.Join(",", blankIndexes);
 
@@ -483,5 +532,82 @@ public partial class ExcelHandler
         }
 
         return (seriesData, categories.ToArray());
+    }
+
+    /// <summary>
+    /// Resolve an explicit `categories=` value supplied alongside a dataRange.
+    /// Two forms:
+    ///   - cell RANGE ("Sheet1!A2:A3" / "A2:A3", contains ':'): read the cells
+    ///     directly from the target worksheet to produce label strings, and
+    ///     compute a categoriesRef in the same `Sheet!$A$2:$A$3` form the
+    ///     dataRange path emits for valuesRef/categoriesRef.
+    ///   - inline literal list ("North,EMEA,APAC"): parse via
+    ///     ChartHelper.ParseCategories; no ref (returns null) so the caller
+    ///     does not set a bogus series{i}.categories — mirroring the
+    ///     no-dataRange inline path.
+    /// The range cells may span rows outside the dataRange's loaded window, so
+    /// read them straight from the worksheet rather than the dataRange cellLookup.
+    /// </summary>
+    private (string[] categories, string? categoriesRef) ResolveExplicitCategories(
+        string explicitValue, string defaultSheetName, Dictionary<string, string> properties)
+    {
+        var trimmed = explicitValue.Trim();
+
+        // Inline literal list (no ':') → no ref.
+        if (!trimmed.Contains(':'))
+        {
+            var inline = ChartHelper.ParseCategories(properties) ?? Array.Empty<string>();
+            return (inline, null);
+        }
+
+        // Cell range form. Strip a leading 'Sheet'! prefix (same approach as dataRange).
+        string catSheetName = defaultSheetName;
+        string rangePart = trimmed;
+        var bangIdx = rangePart.IndexOf('!');
+        if (bangIdx >= 0)
+        {
+            catSheetName = rangePart[..bangIdx].Trim('\'');
+            rangePart = rangePart[(bangIdx + 1)..];
+        }
+
+        var cleanRange = rangePart.Replace("$", "");
+        var rangeParts = cleanRange.Split(':');
+        if (rangeParts.Length != 2)
+            throw new ArgumentException(
+                $"Invalid categories range: '{explicitValue}'. Expected format: 'Sheet1!A2:A3' or 'A2:A3'.");
+
+        var (startCol, startRow) = ParseCellReference(rangeParts[0]);
+        var (endCol, endRow) = ParseCellReference(rangeParts[1]);
+        var startColIdx = ColumnNameToIndex(startCol);
+        var endColIdx = ColumnNameToIndex(endCol);
+
+        var ws = FindWorksheet(catSheetName)
+            ?? throw new ArgumentException($"Sheet not found: {catSheetName}");
+        var sheetData = GetSheet(ws).GetFirstChild<SheetData>()
+            ?? throw new ArgumentException($"Sheet '{catSheetName}' has no data");
+
+        // Read the explicit-range cells directly (rows may differ from dataRange).
+        var lookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in sheetData.Elements<Row>())
+        {
+            var rowIdx = (int)(row.RowIndex?.Value ?? 0);
+            if (rowIdx < startRow || rowIdx > endRow) continue;
+            foreach (var cell in row.Elements<Cell>())
+                if (cell.CellReference?.Value != null)
+                    lookup[cell.CellReference.Value] = GetCellDisplayValue(cell);
+        }
+
+        var labels = new List<string>();
+        for (int r = startRow; r <= endRow; r++)
+            for (int c = startColIdx; c <= endColIdx; c++)
+            {
+                var cellRef = $"{IndexToColumnName(c)}{r}";
+                lookup.TryGetValue(cellRef, out var v);
+                labels.Add(v ?? "");
+            }
+
+        var categoriesRef =
+            $"{catSheetName}!${IndexToColumnName(startColIdx)}${startRow}:${IndexToColumnName(endColIdx)}${endRow}";
+        return (labels.ToArray(), categoriesRef);
     }
 }
