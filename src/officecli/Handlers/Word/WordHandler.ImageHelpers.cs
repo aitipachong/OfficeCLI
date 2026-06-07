@@ -82,20 +82,23 @@ public partial class WordHandler
         OpenXmlElement wrapElement = wrap.ToLowerInvariant() switch
         {
             "square" => new DW.WrapSquare { WrapText = DW.WrapTextValues.BothSides },
+            // WrapText is REQUIRED on wrapTight/wrapThrough (same as wrapSquare);
+            // omitting it produces schema-invalid XML that real Word refuses to
+            // open. Default to bothSides (matches Word's default wrap side).
             "tight" => new DW.WrapTight(new DW.WrapPolygon(
                 new DW.StartPoint { X = 0, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 0 }
-            ) { Edited = false }),
+            ) { Edited = false }) { WrapText = DW.WrapTextValues.BothSides },
             "through" => new DW.WrapThrough(new DW.WrapPolygon(
                 new DW.StartPoint { X = 0, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 0 }
-            ) { Edited = false }),
+            ) { Edited = false }) { WrapText = DW.WrapTextValues.BothSides },
             "topandbottom" or "topbottom" => new DW.WrapTopBottom(),
             "none" => new DW.WrapNone() as OpenXmlElement,
             _ => throw new ArgumentException($"Invalid wrap value: '{wrap}'. Valid values: none, square, tight, through, topandbottom.")
@@ -302,20 +305,23 @@ public partial class WordHandler
         OpenXmlElement newWrap = wrapType.ToLowerInvariant() switch
         {
             "square" => new DW.WrapSquare { WrapText = DW.WrapTextValues.BothSides },
+            // WrapText is REQUIRED on wrapTight/wrapThrough (same as wrapSquare);
+            // omitting it produces schema-invalid XML that real Word refuses to
+            // open. Default to bothSides (matches Word's default wrap side).
             "tight" => new DW.WrapTight(new DW.WrapPolygon(
                 new DW.StartPoint { X = 0, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 0 }
-            ) { Edited = false }),
+            ) { Edited = false }) { WrapText = DW.WrapTextValues.BothSides },
             "through" => new DW.WrapThrough(new DW.WrapPolygon(
                 new DW.StartPoint { X = 0, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 0 },
                 new DW.LineTo { X = 21600, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 21600 },
                 new DW.LineTo { X = 0, Y = 0 }
-            ) { Edited = false }),
+            ) { Edited = false }) { WrapText = DW.WrapTextValues.BothSides },
             "topandbottom" or "topbottom" => new DW.WrapTopBottom(),
             "none" => new DW.WrapNone(),
             _ => throw new ArgumentException(
