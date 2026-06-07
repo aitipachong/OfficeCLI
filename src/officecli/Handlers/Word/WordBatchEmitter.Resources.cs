@@ -145,16 +145,29 @@ public static partial class WordBatchEmitter
     // /MainDocumentPart/FootnotesPart"). Word auto-manages separators, so
     // dropping these refs is lossless; strip them while keeping footnotePr/
     // endnotePr and any real config children (pos, numFmt, numStart, …).
+    //
+    // ALSO strips any settings element carrying a relationship reference
+    // (an attribute in the `r:` namespace — r:id / r:embed / r:link). The dump
+    // never recreates settings.xml.rels, so e.g. <w:attachedTemplate r:id="…"/>
+    // (the pointer to Normal.dotm that nearly every real Word document carries)
+    // dangles on replay — the OOXML validator NRE'd "before producing results"
+    // and real Word refused to open the file. Dropping the pointer is lossless
+    // (Word falls back to the Normal template). Same family as <w:mailMerge>'s
+    // data-source r:id etc.; remove the whole referencing element.
     private static string StripDanglingNoteSeparatorRefs(string settingsXml)
     {
         if (string.IsNullOrEmpty(settingsXml) || !settingsXml.StartsWith("<")) return settingsXml;
-        // Fast path: nothing to strip unless a note-properties block is present.
-        if (!settingsXml.Contains("notePr")) return settingsXml;
+        // Fast path: nothing to strip unless a note-properties block or a
+        // relationship-bearing element (r: prefixed attribute) is present.
+        if (!settingsXml.Contains("notePr") && !settingsXml.Contains(":id=")
+            && !settingsXml.Contains(":embed=") && !settingsXml.Contains(":link="))
+            return settingsXml;
         try
         {
             var doc = System.Xml.Linq.XDocument.Parse(settingsXml);
             if (doc.Root == null) return settingsXml;
             var wNs = (System.Xml.Linq.XNamespace)"http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+            var rNs = (System.Xml.Linq.XNamespace)"http://schemas.openxmlformats.org/officeDocument/2006/relationships";
             var removed = false;
             foreach (var pr in doc.Descendants(wNs + "footnotePr")
                          .Concat(doc.Descendants(wNs + "endnotePr")).ToList())
@@ -163,6 +176,16 @@ public static partial class WordBatchEmitter
                              .Concat(pr.Elements(wNs + "endnote")).ToList())
                 {
                     sep.Remove();
+                    removed = true;
+                }
+            }
+            // Drop any element with a dangling relationship reference (settings
+            // .xml.rels is not round-tripped). attachedTemplate is the common one.
+            foreach (var el in doc.Descendants().ToList())
+            {
+                if (el.Attributes().Any(a => a.Name.Namespace == rNs))
+                {
+                    el.Remove();
                     removed = true;
                 }
             }
