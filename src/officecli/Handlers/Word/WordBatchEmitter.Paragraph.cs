@@ -1156,6 +1156,29 @@ public static partial class WordBatchEmitter
             var solidFill = spPr?.Element(a + "solidFill");
             var srgbClr = solidFill?.Element(a + "srgbClr")?.Attribute("val")?.Value;
             if (!string.IsNullOrEmpty(srgbClr)) props["fill"] = srgbClr;
+            // Line / border (<a:ln>): width (EMU, round-trips through ParseEmu),
+            // solidFill color, and dash style. Without this the textbox outline
+            // was dropped entirely on dump→batch — borders vanished and content
+            // reflowed. <a:noFill/> means the box explicitly has no border.
+            var ln = spPr?.Element(a + "ln");
+            if (ln != null)
+            {
+                if (ln.Element(a + "noFill") != null)
+                {
+                    props["line.style"] = "none";
+                }
+                else
+                {
+                    var lnW = ln.Attribute("w")?.Value;
+                    if (!string.IsNullOrEmpty(lnW)) props["line.width"] = lnW;
+                    var lnClr = ln.Element(a + "solidFill")?.Element(a + "srgbClr")?.Attribute("val")?.Value;
+                    if (!string.IsNullOrEmpty(lnClr)) props["line.color"] = lnClr;
+                    // a:prstDash@val is already an OOXML dash name; AddTextbox's
+                    // MapDashStyle accepts it (lower-cased) and re-emits it.
+                    var dash = ln.Element(a + "prstDash")?.Attribute("val")?.Value;
+                    if (!string.IsNullOrEmpty(dash)) props["line.style"] = dash;
+                }
+            }
             // bodyPr text insets. AddTextbox hardcodes Word defaults
             // (91440/45720); a source with zero insets (common on tight
             // letterhead title boxes) otherwise loses ~0.2in of usable width
