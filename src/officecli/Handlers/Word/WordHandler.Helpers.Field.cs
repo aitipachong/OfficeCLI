@@ -177,7 +177,9 @@ public partial class WordHandler
 
     /// <summary>
     /// Ensure all paragraphs in the document have w14:paraId and w14:textId.
-    /// Called on document open.
+    /// Called on document open AND after every successful RawSet (raw XML can
+    /// inject paragraphs with missing or colliding paraIds — see the
+    /// CONSISTENCY(paraid-global-uniqueness) note in WordHandler.RawSet).
     /// </summary>
     private void EnsureAllParaIds()
     {
@@ -322,8 +324,16 @@ public partial class WordHandler
     // ==================== DocPr IDs (pictures, charts) ====================
 
     /// <summary>
-    /// Ensure all DocProperties in the document have unique IDs.
-    /// Called on document open.
+    /// Ensure unique ids for all drawing-object non-visual properties
+    /// (<c>&lt;wp:docPr&gt;</c>, the SDK's DW.DocProperties) — the single id
+    /// space shared by pictures, charts, textboxes and shapes. NOT file
+    /// metadata (docProps/core.xml etc.) despite "DocProp" in the name, and
+    /// NOT the nested <c>pic:cNvPr</c>/<c>wps:cNvPr</c> ids (those deliberately
+    /// mirror their wrapping docPr and need only intra-group uniqueness — see
+    /// CreateImageRun, which writes docPr.id == cNvPr.id).
+    /// Scans body + headers + footers; reassigns duplicate/missing ids to the
+    /// lowest free value. Called on document open AND after every successful
+    /// RawSet — see CONSISTENCY(docpr-global-uniqueness) in WordHandler.RawSet.
     /// </summary>
     private void EnsureDocPropIds()
     {
