@@ -730,8 +730,12 @@ public static partial class WordBatchEmitter
         foreach (var c in comments)
         {
             var props = FilterEmittableProps(c.Format);
-            if (!string.IsNullOrEmpty(c.Text))
-                props["text"] = c.Text!;
+            // BUG-R6B(BUG1): always emit `text`, even when empty. An empty
+            // comment (no inline text, or only an empty table) is valid OOXML;
+            // omitting `text` produced a dump op that AddComment refused to
+            // replay ("'text' property is required"), silently dropping the
+            // comment on round-trip. AddComment now accepts text="".
+            props["text"] = c.Text ?? string.Empty;
             // Map anchoredTo (source paraId path) -> target paragraph index.
             // anchoredTo looks like "/body/p[@paraId=00100000]"; parse and
             // resolve via the paraId map we built during EmitBody.

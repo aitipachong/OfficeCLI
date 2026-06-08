@@ -15,6 +15,13 @@ public partial class WordHandler
         var body = _doc.MainDocumentPart?.Document?.Body
             ?? throw new InvalidOperationException("Document body not found");
 
+        // BUG-R6B(BUG1): accept an empty/whitespace comment text. An empty
+        // comment is valid OOXML; rejecting it broke the dump→batch round-trip
+        // for comments whose inline text is empty (or whose only content is an
+        // empty table, which flattens to empty text). When `text` is missing
+        // entirely we still require it (a typed `add comment` with no text is a
+        // user error), but a present-but-empty `text=""` is honoured and builds
+        // a comment with an empty paragraph.
         if (!properties.TryGetValue("text", out var commentText))
             throw new ArgumentException("'text' property is required for comment type");
 
@@ -52,8 +59,12 @@ public partial class WordHandler
             .Select(c => int.TryParse(c.Id?.Value, out var id) ? id : 0)
             .DefaultIfEmpty(0).Max() + 1).ToString();
 
-        var commentEl = new Comment(
-            new Paragraph(new Run(new Text(commentText) { Space = SpaceProcessingModeValues.Preserve })))
+        // BUG-R6B(BUG1): empty text -> empty paragraph (no run); non-empty ->
+        // a run carrying the text. Both are valid OOXML comment bodies.
+        var commentBody = string.IsNullOrEmpty(commentText)
+            ? new Paragraph()
+            : new Paragraph(new Run(new Text(commentText) { Space = SpaceProcessingModeValues.Preserve }));
+        var commentEl = new Comment(commentBody)
         {
             Id = commentId, Author = author, Initials = initials,
             // CONSISTENCY(date-roundtrip): RoundtripKind keeps DateTimeKind.Utc
