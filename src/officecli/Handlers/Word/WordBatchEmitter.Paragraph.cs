@@ -1026,7 +1026,14 @@ public static partial class WordBatchEmitter
             // to the plain-run path — short-circuit out so EmitPlainOrHyperlink
             // run handles it. Only drawing-bearing runs continue here.
             if (!isTextbox && !IsDrawingBearingRun(probeXml)) return false;
-            if (isTextbox && TryEmitTextbox(word, run, probeXml, parentPath, items, ctx, sharedAttachPara))
+            // BUG-R3 (dump emits `add textbox` into a table cell): see the
+            // sibling site below — a cell-hosted textbox must attach to its
+            // containing paragraph (paraTargetPath inside the cell), never as a
+            // direct <w:tc> child. LibreOffice exports textboxes wrapped in
+            // <mc:AlternateContent>, so they reach this "run"-typed branch.
+            string? attachParaAc = sharedAttachPara
+                ?? (parentPath.Contains("/tc[", StringComparison.Ordinal) ? paraTargetPath : null);
+            if (isTextbox && TryEmitTextbox(word, run, probeXml, parentPath, items, ctx, attachParaAc))
                 return true;
             // AlternateContent-wrapped non-textbox shapes — connector lines
             // (<wps:cNvCnPr>, e.g. a letterhead separator), autoshapes, groups
@@ -1113,13 +1120,40 @@ public static partial class WordBatchEmitter
         var rawXml = word.GetElementXml(run.Path);
         if (!string.IsNullOrEmpty(rawXml) && IsTextboxDrawing(rawXml))
         {
-            if (TryEmitTextbox(word, run, rawXml, parentPath, items, ctx, sharedAttachPara))
+            // BUG-R3 (dump emits `add textbox` into a table cell): a textbox is
+            // a drawing carried by a run inside a paragraph, never a direct
+            // <w:tc> child — `add textbox` with a bare cell parent is rejected
+            // ("table cells only accept paragraphs, tables, or SDTs"). When the
+            // host is a cell, attach the textbox to the run's containing
+            // paragraph (paraTargetPath, which lives inside the cell) so
+            // AddTextbox's paragraph-attach path (ResolveDrawingHostFromParagraph)
+            // anchors it correctly — mirrors the body single-drawing path. Use
+            // any already-computed sharedAttachPara (side-by-side multi-drawing
+            // host) first; otherwise fall back to paraTargetPath for cells.
+            string? attachPara = sharedAttachPara
+                ?? (parentPath.Contains("/tc[", StringComparison.Ordinal) ? paraTargetPath : null);
+            if (TryEmitTextbox(word, run, rawXml, parentPath, items, ctx, attachPara))
                 return true;
+        }
+        // BUG-R3 (linked external image): a <w:drawing> carrying an
+        // unreconstructable relationship (linked-image r:link, SmartArt
+        // r:dm/r:lo/r:qs/r:cs) must NOT be raw-set verbatim — its relationship
+        // target isn't recreated, so the replayed drawing would dangle and fail
+        // [Semantic] validation. Drop it cleanly and surface the loss (mirrors
+        // the SmartArt/non-textbox warn-and-skip on the AlternateContent path
+        // above) instead of falling through to a silent raw-set or a silent
+        // return.
+        if (!string.IsNullOrEmpty(rawXml) && DrawingHasUnreconstructableRel(rawXml))
+        {
+            string detail = rawXml.Contains("r:link")
+                ? "linked external image (<a:blip r:link>) references an external relationship that is not carried through dump→batch; the image will be missing from the replayed document"
+                : "drawing references a relationship (SmartArt/diagram) that cannot be reconstructed; it will be missing from the replayed document";
+            ctx?.Warnings.Add(new DocxUnsupportedWarning("drawing", run.Path, detail));
+            return true;
         }
         if (!string.IsNullOrEmpty(rawXml) &&
             parentPath == "/body" &&
-            !rawXml.Contains("r:embed") && !rawXml.Contains("r:id") &&
-            !DrawingHasUnreconstructableRel(rawXml))
+            !rawXml.Contains("r:embed") && !rawXml.Contains("r:id"))
         {
             items.Add(new BatchItem
             {
@@ -1146,7 +1180,16 @@ public static partial class WordBatchEmitter
     // carry no relationships and still round-trip via raw-set.)
     private static bool DrawingHasUnreconstructableRel(string xml) =>
         xml.Contains("r:dm") || xml.Contains("r:lo") ||
-        xml.Contains("r:qs") || xml.Contains("r:cs");
+        xml.Contains("r:qs") || xml.Contains("r:cs") ||
+        // BUG-R3 (linked external image): <a:blip r:link="rIdN"> references an
+        // EXTERNAL image relationship (TargetMode="External"), not an embedded
+        // image part. The dump never recreates that relationship, so raw-setting
+        // the drawing verbatim leaves a dangling r:link → [Semantic] "the
+        // relationship referenced by r:link does not exist". Full linked-image
+        // round-trip (carrying the external rel) is a separate feature; treat
+        // the drawing as unreconstructable so the raw-set sites skip it cleanly
+        // and the caller surfaces a loss warning (mirrors the SmartArt path).
+        xml.Contains("r:link");
 
     private static bool IsTextboxDrawing(string rawXml)
     {
