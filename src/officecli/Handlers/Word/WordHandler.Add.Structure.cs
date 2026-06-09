@@ -926,8 +926,43 @@ public partial class WordHandler
         }
         TrySetRFontsAttr("font.ascii",    (rf, v) => rf.Ascii = v);
         TrySetRFontsAttr("font.hAnsi",    (rf, v) => rf.HighAnsi = v);
+        // font.ea is the canonical eastAsia key (matches run/paragraph emit and
+        // the style Get readback, which BUG-R5A switched from font.eastAsia to
+        // font.ea); font.eastAsia stays as a legacy alias. Without font.ea the
+        // dumped style font.ea= row hit UNSUPPORTED and the eastAsia face was
+        // lost on round-trip.
+        TrySetRFontsAttr("font.ea",       (rf, v) => rf.EastAsia = v);
         TrySetRFontsAttr("font.eastAsia", (rf, v) => rf.EastAsia = v);
         TrySetRFontsAttr("font.cs",       (rf, v) => rf.ComplexScript = v);
+        // Theme-font slots — bind the style to the theme major/minor font
+        // (rFonts/@*Theme) instead of a literal face. Heading1..9 in real Word
+        // templates carry these (asciiTheme="majorHAnsi", …); without them the
+        // dumped style lost its <w:rFonts> and headings fell back to the body
+        // font on rebuild. Mirrors the run-level theme handling in
+        // WordHandler.Add.Text.cs (font.asciiTheme / font.hAnsiTheme /
+        // font.eaTheme / font.csTheme + lowercase aliases).
+        string? sAsciiTheme = null, sHAnsiTheme = null, sEaTheme = null, sCsTheme = null;
+        if (properties.TryGetValue("font.asciiTheme", out var sAT) || properties.TryGetValue("font.asciitheme", out sAT))
+            sAsciiTheme = sAT;
+        if (properties.TryGetValue("font.hAnsiTheme", out var sHAT) || properties.TryGetValue("font.hansitheme", out sHAT))
+            sHAnsiTheme = sHAT;
+        if (properties.TryGetValue("font.eaTheme", out var sEAT) || properties.TryGetValue("font.eatheme", out sEAT) || properties.TryGetValue("font.eastasiatheme", out sEAT))
+            sEaTheme = sEAT;
+        if (properties.TryGetValue("font.csTheme", out var sCST) || properties.TryGetValue("font.cstheme", out sCST))
+            sCsTheme = sCST;
+        if (sAsciiTheme != null || sHAnsiTheme != null || sEaTheme != null || sCsTheme != null)
+        {
+            styleRPr.RunFonts ??= new RunFonts();
+            if (!string.IsNullOrEmpty(sAsciiTheme))
+                styleRPr.RunFonts.AsciiTheme = new EnumValue<ThemeFontValues>(new ThemeFontValues(sAsciiTheme));
+            if (!string.IsNullOrEmpty(sHAnsiTheme))
+                styleRPr.RunFonts.HighAnsiTheme = new EnumValue<ThemeFontValues>(new ThemeFontValues(sHAnsiTheme));
+            if (!string.IsNullOrEmpty(sEaTheme))
+                styleRPr.RunFonts.EastAsiaTheme = new EnumValue<ThemeFontValues>(new ThemeFontValues(sEaTheme));
+            if (!string.IsNullOrEmpty(sCsTheme))
+                styleRPr.RunFonts.ComplexScriptTheme = new EnumValue<ThemeFontValues>(new ThemeFontValues(sCsTheme));
+            hasRPr = true;
+        }
         if (properties.TryGetValue("size", out var sSize))
         {
             styleRPr.FontSize = new FontSize { Val = ((int)Math.Round(ParseFontSize(sSize) * 2, MidpointRounding.AwayFromZero)).ToString() };

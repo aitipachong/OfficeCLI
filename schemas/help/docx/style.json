@@ -190,6 +190,80 @@
       "readback": "font name",
       "enforcement": "report"
     },
+    "font.ea": {
+      "type": "string",
+      "description": "East-Asian font slot (rFonts/eastAsia) for the style — Chinese / Japanese / Korean typefaces.",
+      "aliases": [
+        "font.eastAsia",
+        "font.eastasia",
+        "font.eastasian"
+      ],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop font.ea=\"メイリオ\""
+      ],
+      "enforcement": "report"
+    },
+    "font.cs": {
+      "type": "string",
+      "description": "Complex-script font slot (rFonts/cs) for the style — Arabic / Hebrew / Thai typefaces.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop font.cs=\"Arabic Typesetting\""
+      ],
+      "enforcement": "report"
+    },
+    "font.asciiTheme": {
+      "type": "string",
+      "description": "Theme font binding for the style's ascii slot (rFonts/asciiTheme). Values: minorHAnsi, majorHAnsi, minorEastAsia, majorEastAsia, minorBidi, majorBidi.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop font.asciiTheme=majorHAnsi"
+      ],
+      "enforcement": "report"
+    },
+    "font.hAnsiTheme": {
+      "type": "string",
+      "description": "Theme font binding for the style's hAnsi slot (rFonts/hAnsiTheme).",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop font.hAnsiTheme=majorHAnsi"
+      ],
+      "enforcement": "report"
+    },
+    "font.eaTheme": {
+      "type": "string",
+      "description": "Theme font binding for the style's East-Asia slot (rFonts/eastAsiaTheme). Values: minorEastAsia, majorEastAsia.",
+      "aliases": [
+        "font.eastAsiaTheme"
+      ],
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop font.eaTheme=majorEastAsia"
+      ],
+      "enforcement": "report"
+    },
+    "font.csTheme": {
+      "type": "string",
+      "description": "Theme font binding for the style's complex-script slot (rFonts/cstheme). Values: minorBidi, majorBidi.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop font.csTheme=majorBidi"
+      ],
+      "enforcement": "report"
+    },
     "size": {
       "type": "font-size",
       "description": "font size. Accepts bare number or pt-suffixed.",

@@ -678,6 +678,19 @@ public partial class WordHandler
                     if (rf.EastAsia?.Value != null) styleNode.Format["font.ea"] = rf.EastAsia.Value;
                     if (rf.HighAnsi?.Value != null) styleNode.Format["font.hAnsi"] = rf.HighAnsi.Value;
                     if (rf.ComplexScript?.Value != null) styleNode.Format["font.cs"] = rf.ComplexScript.Value;
+                    // Theme-font slots (asciiTheme / hAnsiTheme / eastAsiaTheme /
+                    // cstheme) bind the style to the theme major/minor font. Word
+                    // templates carry these on Heading1..9 (asciiTheme="majorHAnsi"
+                    // etc.); without readback, dump→batch dropped the whole
+                    // <w:rFonts> from heading styles and headings fell back to the
+                    // body font (bold-sans heading rendered bold-serif). Mirrors
+                    // the run-level theme keys (font.asciiTheme / font.hAnsiTheme /
+                    // font.eaTheme / font.csTheme) read in Navigation so AddStyle
+                    // round-trips them through the same vocabulary.
+                    if (rf.AsciiTheme?.HasValue == true) styleNode.Format["font.asciiTheme"] = rf.AsciiTheme.InnerText;
+                    if (rf.HighAnsiTheme?.HasValue == true) styleNode.Format["font.hAnsiTheme"] = rf.HighAnsiTheme.InnerText;
+                    if (rf.EastAsiaTheme?.HasValue == true) styleNode.Format["font.eaTheme"] = rf.EastAsiaTheme.InnerText;
+                    if (rf.ComplexScriptTheme?.HasValue == true) styleNode.Format["font.csTheme"] = rf.ComplexScriptTheme.InnerText;
                     // CONSISTENCY(canonical-keys): font.ascii is canonical; do not also emit flat "font" alias.
                 }
                 if (rPr.FontSize?.Val?.Value != null) styleNode.Format["size"] = $"{int.Parse(rPr.FontSize.Val.Value) / 2.0:0.##}pt";
