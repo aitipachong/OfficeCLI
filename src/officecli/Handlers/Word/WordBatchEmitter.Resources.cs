@@ -1320,6 +1320,21 @@ public static partial class WordBatchEmitter
         // fall back to the concatenated note text only when no content run
         // resolves (degenerate/empty note).
         var noteProps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // BUG-DUMP-R40-1: carry the note's first-paragraph pStyle. AddFootnote/
+        // AddEndnote hardcode pStyle="FootnoteText"/"EndnoteText" on the
+        // synthesized note paragraph, but the source note may reference a
+        // DIFFERENT style id (e.g. LibreOffice "style24" / "Endnote"). The old
+        // emit dropped the source style, so the rebuilt note carried a DANGLING
+        // pStyle="EndnoteText" (not present in the source styles.xml) and lost
+        // the note's hanging indent / size / line-number suppression. Forward the
+        // source style id so ApplyFootnoteEndnoteFormatKeys -> ApplyParagraph
+        // LevelProperty overrides the hardcoded default with the real style.
+        if (bodyParas.Count > 0
+            && bodyParas[0].Format.TryGetValue("style", out var noteStyle)
+            && noteStyle != null && !string.IsNullOrEmpty(noteStyle.ToString()))
+        {
+            noteProps["style"] = noteStyle.ToString()!;
+        }
         if (firstParaRuns.Count > 0)
         {
             var firstRun = firstParaRuns[0];
