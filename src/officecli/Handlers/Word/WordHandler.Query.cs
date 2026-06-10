@@ -860,12 +860,15 @@ public partial class WordHandler
                 }
 
                 var numProps = pPr.NumberingProperties;
+                // BUG-DUMP-R43-2: a style's numPr may carry only <w:ilvl> (no
+                // <w:numId>) — a list-level binding that says which multilevel-
+                // list level the style occupies without picking a concrete num.
+                // The old guard required numId, so an ilvl-only numPr was
+                // dropped on round-trip. Surface ilvl independently of numId.
                 if (numProps?.NumberingId?.Val?.Value != null)
-                {
                     styleNode.Format["numId"] = numProps.NumberingId.Val.Value.ToString();
-                    if (numProps.NumberingLevelReference?.Val?.Value != null)
-                        styleNode.Format["ilvl"] = numProps.NumberingLevelReference.Val.Value.ToString();
-                }
+                if (numProps?.NumberingLevelReference?.Val?.Value != null)
+                    styleNode.Format["ilvl"] = numProps.NumberingLevelReference.Val.Value.ToString();
 
                 // CONSISTENCY(tabs): tabs[] not yet exposed by paragraph Get.
                 if (pPr.Tabs != null)
