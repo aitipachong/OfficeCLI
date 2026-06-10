@@ -1879,6 +1879,32 @@ public static partial class WordBatchEmitter
                         $"{eeMatch.Groups[1].Value},{eeMatch.Groups[2].Value}," +
                         $"{eeMatch.Groups[3].Value},{eeMatch.Groups[4].Value}";
                 }
+                // BUG-DUMP-R39-1: an anchored (floating) picture positioned with
+                // an absolute offset stores it as <wp:positionH><wp:posOffset>EMU.
+                // CreateImageNode emits Format["hPosition"]/["vPosition"] as
+                // 1-decimal CENTIMETRES (EmuPerCmF, "F1"). Replaying that cm string
+                // through AddPicture's ParseEmu snaps the offset back to a
+                // 360000-EMU (0.1cm) grid — e.g. posOffset 1234567 -> 1224000,
+                // visibly shifting the floating image. Mirror the R28/R38 raw-EMU
+                // pattern: pull the EXACT posOffset straight from the source XML,
+                // scoped to its own positionH/positionV block so H->hPosition and
+                // V->vPosition map correctly, and emit "<emu>emu" so ParseEmu
+                // reconstructs the original offset byte-for-byte. Only override
+                // when a posOffset is present — anchors using <wp:align>
+                // (left/center/right) carry no posOffset, and inline pictures have
+                // no positionH/V at all, so the regex simply won't match (safe).
+                var hPosMatch = System.Text.RegularExpressions.Regex.Match(
+                    picXml,
+                    @"<wp:positionH\b[^>]*>.*?<wp:posOffset>(\d+)</wp:posOffset>.*?</wp:positionH>",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+                if (hPosMatch.Success)
+                    picProps["hPosition"] = hPosMatch.Groups[1].Value + "emu";
+                var vPosMatch = System.Text.RegularExpressions.Regex.Match(
+                    picXml,
+                    @"<wp:positionV\b[^>]*>.*?<wp:posOffset>(\d+)</wp:posOffset>.*?</wp:positionV>",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+                if (vPosMatch.Success)
+                    picProps["vPosition"] = vPosMatch.Groups[1].Value + "emu";
             }
             items.Add(new BatchItem
             {
