@@ -547,7 +547,7 @@ internal partial class ChartSvgRenderer
         string? dropLineColor = null, double dropLineWidth = 0.7, string? dropLineDash = null,
         string? highLowLineColor = null, double highLowLineWidth = 1,
         List<TrendlineInfo?>? trendlines = null, List<ErrorBarInfo?>? errorBars = null,
-        bool scatterMarkersOnly = false)
+        bool scatterMarkersOnly = false, double[]? scatterX = null)
     {
         bool isLog = logBase.HasValue && logBase.Value > 1;
 
@@ -564,6 +564,44 @@ internal partial class ChartSvgRenderer
             : allValues.Min();
         if (dataMax <= 0 && isLog) dataMax = 1;
         var catCount = Math.Max(categories.Length, series.Max(s => s.values.Length));
+
+        // #151: XY scatter charts must position points by their numeric X value
+        // on a value axis — not at evenly-spaced category slots in data order
+        // (which renders a scatter plot as a category line chart). When the
+        // caller supplies scatterX (the series' <c:xVal> data), build a nice X
+        // value-axis spanning [xMin, xMax] using the same ComputeNiceAxis logic
+        // as the Y axis, and map each point's X through it. Line/area charts
+        // pass scatterX = null and keep the index-based category spacing.
+        bool isScatter = scatterX != null && scatterX.Length > 0;
+        double xNiceMin = 0, xNiceMax = 1, xTickStep = 1;
+        int xNTicks = 1;
+        if (isScatter)
+        {
+            var xMin = scatterX!.Min();
+            var xMax = scatterX!.Max();
+            // Borrow ComputeNiceAxis only for a sensible tick STEP, then snap the
+            // bounds to that step WITHOUT the 5% headroom ComputeNiceAxis adds for
+            // the Y axis — Excel's X value axis lands its ticks on the data domain
+            // (xMax=10 → 0,2,…,10; not 0,2,…,12). Origin stays at 0 for all-positive
+            // X (matching Excel's default), and floors to a nice negative otherwise.
+            var xSpan = Math.Max(Math.Abs(xMax), Math.Abs(xMin));
+            (_, xTickStep, _) = ComputeNiceAxis(xSpan > 0 ? xSpan : 1);
+            if (xTickStep <= 0) xTickStep = 1;
+            xNiceMin = xMin < 0 ? Math.Floor(xMin / xTickStep) * xTickStep : 0;
+            xNiceMax = Math.Ceiling(xMax / xTickStep) * xTickStep;
+            if (xNiceMax <= xNiceMin) xNiceMax = xNiceMin + xTickStep;
+            xNTicks = Math.Max(1, (int)Math.Round((xNiceMax - xNiceMin) / xTickStep));
+        }
+        double MapX(int c)
+        {
+            if (isScatter && c < scatterX!.Length)
+            {
+                var r = (xNiceMax - xNiceMin) > 0 ? (scatterX[c] - xNiceMin) / (xNiceMax - xNiceMin) : 0.5;
+                r = Math.Max(0, Math.Min(1, r));
+                return ox + r * pw;
+            }
+            return ox + (catCount > 1 ? (double)pw * c / (catCount - 1) : pw / 2.0);
+        }
 
         // Compute axis scale
         double niceMax, niceMin, tickStep;
@@ -646,7 +684,7 @@ internal partial class ChartSvgRenderer
             var pts = new List<(double x, double y, double val)>();
             for (int c = 0; c < series[s].values.Length && c < catCount; c++)
             {
-                var px = ox + (catCount > 1 ? (double)pw * c / (catCount - 1) : pw / 2.0);
+                var px = MapX(c);
                 var py = MapY(series[s].values[c]);
                 pts.Add((px, py, series[s].values[c]));
             }
@@ -972,12 +1010,29 @@ internal partial class ChartSvgRenderer
             }
         }
 
-        // Category labels
-        for (int c = 0; c < catCount; c++)
+        if (isScatter)
         {
-            var label = c < categories.Length ? categories[c] : "";
-            var lx = ox + (catCount > 1 ? (double)pw * c / (catCount - 1) : pw / 2.0);
-            sb.AppendLine($"        <text x=\"{lx:0.#}\" y=\"{oy + ph + 16}\" fill=\"{CatColor}\" font-size=\"{CatFontPx}\" text-anchor=\"middle\">{HtmlEncode(label)}</text>");
+            // #151: X value-axis ticks at nice round values (0, 50, 100…) with
+            // faint vertical gridlines, instead of one label per data point.
+            for (int t = 0; t <= xNTicks; t++)
+            {
+                var tickVal = xNiceMin + xTickStep * t;
+                var tx = (xNiceMax - xNiceMin) > 0
+                    ? ox + (tickVal - xNiceMin) / (xNiceMax - xNiceMin) * pw
+                    : ox + pw / 2.0;
+                sb.AppendLine($"        <line x1=\"{tx:0.#}\" y1=\"{oy}\" x2=\"{tx:0.#}\" y2=\"{oy + ph}\" stroke=\"{GridColor}\" stroke-width=\"0.5\"/>");
+                sb.AppendLine($"        <text x=\"{tx:0.#}\" y=\"{oy + ph + 16}\" fill=\"{CatColor}\" font-size=\"{CatFontPx}\" text-anchor=\"middle\">{HtmlEncode(FormatAxisValue(tickVal, null))}</text>");
+            }
+        }
+        else
+        {
+            // Category labels
+            for (int c = 0; c < catCount; c++)
+            {
+                var label = c < categories.Length ? categories[c] : "";
+                var lx = ox + (catCount > 1 ? (double)pw * c / (catCount - 1) : pw / 2.0);
+                sb.AppendLine($"        <text x=\"{lx:0.#}\" y=\"{oy + ph + 16}\" fill=\"{CatColor}\" font-size=\"{CatFontPx}\" text-anchor=\"middle\">{HtmlEncode(label)}</text>");
+            }
         }
 
         // Value axis labels
@@ -2453,6 +2508,27 @@ internal partial class ChartSvgRenderer
             if (info.Is3D)
                 RenderLine3DSvg(sb, info.Series, info.Categories, info.Colors, marginLeft, marginTop, plotW, plotH);
             else
+            {
+                // #151: for scatter, parse the X-value categories into numerics so
+                // RenderLineChartSvg can value-position points. If any entry is
+                // non-numeric (shouldn't happen for <c:xVal>), fall back to null
+                // → index-based category spacing (old behavior), never crash.
+                double[]? scatterX = null;
+                if (chartType == "scatter" && info.Categories.Length > 0)
+                {
+                    var parsed = new double[info.Categories.Length];
+                    bool allNumeric = true;
+                    for (int i = 0; i < info.Categories.Length; i++)
+                    {
+                        if (double.TryParse(info.Categories[i], System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out parsed[i])
+                            || double.TryParse(info.Categories[i], out parsed[i]))
+                            continue;
+                        allNumeric = false;
+                        break;
+                    }
+                    if (allNumeric) scatterX = parsed;
+                }
                 RenderLineChartSvg(sb, info.Series, info.Categories, info.Colors, marginLeft, marginTop, plotW, plotH,
                     info.ShowDataLabels, info.MarkerShapes, info.MarkerSizes, info.LogBase, info.IsReversed,
                     info.HasDropLines, info.HasHighLowLines, info.HasUpDownBars,
@@ -2460,7 +2536,8 @@ internal partial class ChartSvgRenderer
                     info.ReferenceLines, info.Smooth, info.LineDashes, info.LineWidths,
                     info.DropLineColor, info.DropLineWidth, info.DropLineDash,
                     info.HighLowLineColor, info.HighLowLineWidth,
-                    info.Trendlines, info.ErrorBars, info.ScatterMarkersOnly);
+                    info.Trendlines, info.ErrorBars, info.ScatterMarkersOnly, scatterX);
+            }
         }
         else
         {
