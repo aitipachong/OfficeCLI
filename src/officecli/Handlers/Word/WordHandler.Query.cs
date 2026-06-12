@@ -3402,6 +3402,17 @@ public partial class WordHandler
             || color.ThemeTint?.Value != null;
         if (!hasTheme)
             return baseVal; // plain color (or null when neither val nor theme set)
+        // val="auto" carries no color information — Word resolves the color
+        // from the theme slot, and our own Add writes val="auto" alongside
+        // w:themeColor. Surfacing "auto;themeColor=accent1" breaks the canon
+        // rule that scheme colors pass through as the bare scheme name (root
+        // CLAUDE.md). Only the pure-theme form collapses; an explicit hex val
+        // (BUG-DUMP-R44-1) or a shade/tint modifier still needs the full tail.
+        if (string.Equals(color.Val?.Value, "auto", StringComparison.OrdinalIgnoreCase)
+            && color.ThemeColor?.HasValue == true
+            && color.ThemeShade?.Value == null
+            && color.ThemeTint?.Value == null)
+            return color.ThemeColor.InnerText;
         var tail = new System.Text.StringBuilder();
         if (baseVal != null) tail.Append(baseVal);
         if (color.ThemeColor?.HasValue == true) tail.Append(";themeColor=").Append(color.ThemeColor.InnerText);
