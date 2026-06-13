@@ -678,8 +678,23 @@ public partial class PowerPointHandler
         foreach (var p in props)
         {
             if (p.PropertyType != typeof(Drawing.ShapeTypeValues)) continue;
+            // Match on the C# property name (e.g. "RoundRectangle") first.
             if (string.Equals(p.Name, lower, StringComparison.OrdinalIgnoreCase))
                 return (Drawing.ShapeTypeValues?)p.GetValue(null);
+            // …then on the OOXML serialized token (e.g. "round2SameRect"),
+            // which is what dump emits and is what the prstGeom@prst attribute
+            // actually uses. The C# property name diverges from the token for
+            // many presets (Round2SameRectangle → round2SameRect, RoundRectangle
+            // → roundRect, …), so matching only the property name dropped every
+            // such preset to the Rectangle degrade. Read the token the same way
+            // NodeBuilder does — via the rendered Preset.InnerText.
+            var value = (Drawing.ShapeTypeValues?)p.GetValue(null);
+            if (value != null)
+            {
+                var token = new Drawing.PresetGeometry { Preset = value }.Preset?.InnerText;
+                if (string.Equals(token, lower, StringComparison.OrdinalIgnoreCase))
+                    return value;
+            }
         }
         return null;
     }
