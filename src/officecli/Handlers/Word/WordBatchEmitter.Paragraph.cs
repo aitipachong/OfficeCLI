@@ -1840,14 +1840,17 @@ public static partial class WordBatchEmitter
             // verbatim via raw-set so the full fldChar/instrText sequence (and the
             // inner field) survives, instead of collapsing to cached display text.
             // Each slice run carries a resolvable source Path; concatenate their
-            // OuterXml and append to the just-emitted host paragraph at
-            // /w:document/w:body/w:p[last()] (the same last()-relative attach the
-            // ruby/bdo raw-set fallbacks use). Only a /body host has an
-            // addressable last() paragraph — a nested field inside a header/footer/
-            // cell falls back to the legacy warning+cached-text path.
+            // OuterXml and append to the just-emitted host paragraph.
+            // BUG-DUMP-R47-6: resolve the host via ResolveRawSetHost so a nested
+            // field inside a HEADER/FOOTER/table cell round-trips too — not only
+            // /body. A running-header with a nested IF/QUOTE/STYLEREF field (the
+            // common "Chapter N — Title" header) was flattening to bare cached
+            // text on the non-/body fallback, which changed the rendered header
+            // height and cascaded body pagination across every page of the
+            // section. Mirrors the _richFieldResult host resolution just above.
             var slicePaths = run.Format.TryGetValue("_nestedFieldSlicePaths", out var nfSpObj)
                 ? nfSpObj as List<string> : null;
-            if (parentPath == "/body" && slicePaths is { Count: > 0 })
+            if (slicePaths is { Count: > 0 } && ResolveRawSetHost(parentPath, ctx) is { } nestedHost)
             {
                 var sb = new System.Text.StringBuilder();
                 bool allResolved = true;
@@ -1859,15 +1862,29 @@ public static partial class WordBatchEmitter
                 }
                 if (allResolved && sb.Length > 0)
                 {
-                    items.Add(new BatchItem
+                    var nestedXml = sb.ToString();
+                    // External rel inside the nested field (e.g. a hyperlink r:id)
+                    // would dangle in the rebuilt part — the raw-set can't recreate
+                    // the rel. Warn + fall through rather than emit a broken ref.
+                    if (HasExternalRelRef(nestedXml))
                     {
-                        Command = "raw-set",
-                        Part = "/document",
-                        Xpath = "/w:document/w:body/w:p[last()]",
-                        Action = "append",
-                        Xml = sb.ToString()
-                    });
-                    return true;
+                        ctx?.Warnings.Add(new DocxUnsupportedWarning(
+                            Element: "field.nested",
+                            Path: run.Path,
+                            Reason: "nested field carrying an external relationship (hyperlink/image) cannot round-trip verbatim; the relationship target is not carried through dump→batch, so the inner field codes are dropped on replay"));
+                    }
+                    else
+                    {
+                        items.Add(new BatchItem
+                        {
+                            Command = "raw-set",
+                            Part = nestedHost.Part,
+                            Xpath = nestedHost.XPath,
+                            Action = "append",
+                            Xml = nestedXml
+                        });
+                        return true;
+                    }
                 }
             }
             // Fallback (non-body host or unresolvable slice): preserve the cached
