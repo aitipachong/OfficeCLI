@@ -13,10 +13,16 @@ public partial class PowerPointHandler
 {
     private static void InsertFillElement(ShapeProperties spPr, OpenXmlElement fillElement)
     {
-        // Schema order: xfrm → prstGeom → fill → ln → effectLst
-        var prstGeom = spPr.GetFirstChild<Drawing.PresetGeometry>();
-        if (prstGeom != null)
-            spPr.InsertAfter(fillElement, prstGeom);
+        // Schema order: xfrm → (prstGeom | custGeom) → fill → ln → effectLst.
+        // CT_ShapeProperties' geometry is a choice group: a shape carries EITHER
+        // a:prstGeom OR a:custGeom, never both. Anchoring the fill only after
+        // prstGeom placed the fill BEFORE a custGeom (xfrm → fill → custGeom),
+        // which is out of schema order — PowerPoint refuses the file. Anchor
+        // after whichever geometry element is present.
+        var geom = (OpenXmlElement?)spPr.GetFirstChild<Drawing.PresetGeometry>()
+                   ?? spPr.GetFirstChild<Drawing.CustomGeometry>();
+        if (geom != null)
+            spPr.InsertAfter(fillElement, geom);
         else
         {
             var xfrm = spPr.Transform2D;
