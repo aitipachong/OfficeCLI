@@ -2341,6 +2341,33 @@ public static partial class WordBatchEmitter
                 // floating-picture capture above.
                 CaptureChartAnchorProps(chartXml!, chartProps);
             }
+            // A chart may carry a c:userShapes overlay drawing (a logo / photo /
+            // annotation drawn on top of the chart in Word's chart editor) on a
+            // ChartDrawingPart. AddChart rebuilds the chart from scratch, so
+            // without shipping that part the overlay vanishes. Pack it (verbatim
+            // chartshapes XML + embedded images) under a `userShapes.` prefix;
+            // AddChart re-creates the part and the <c:userShapes> reference.
+            var usData = word.GetChartUserShapesEmitData(run.Path);
+            if (usData != null)
+            {
+                chartProps["userShapesXml"] = usData.RunXml;
+                int upi = 0;
+                foreach (var part in usData.Parts)
+                {
+                    upi++;
+                    chartProps[$"userShapes.part{upi}.relId"] = part.RelId;
+                    chartProps[$"userShapes.part{upi}.data"] =
+                        $"data:{part.ContentType};base64,{System.Convert.ToBase64String(part.Bytes)}";
+                }
+                int uei = 0;
+                foreach (var ext in usData.Externals)
+                {
+                    uei++;
+                    chartProps[$"userShapes.ext{uei}.relId"] = ext.RelId;
+                    chartProps[$"userShapes.ext{uei}.type"] = ext.Type;
+                    chartProps[$"userShapes.ext{uei}.target"] = ext.Target;
+                }
+            }
             items.Add(new BatchItem
             {
                 Command = "add",

@@ -573,13 +573,79 @@ public partial class WordHandler : IDocumentHandler
         return GuardCarrierContentTypes(CollectInlinedPartsEmitData(sdt, sdt));
     }
 
+    /// <summary>
+    /// dump→batch: capture a chart's <c>c:userShapes</c> overlay drawing (the
+    /// chartshapes part — a logo/annotation/picture drawn on top of the chart in
+    /// Word's chart editor) plus the images it embeds, so AddChart can re-attach
+    /// it. Returns null when the chart at <paramref name="runPath"/> has no
+    /// userShapes part. The shipped XML is the part's raw stream (self-contained
+    /// namespaces), not OuterXml.
+    /// </summary>
+    internal ActiveXEmitData? GetChartUserShapesEmitData(string runPath)
+    {
+        var chartPart = ResolveChartPartFromRunPath(runPath);
+        if (chartPart == null) return null;
+        var cdp = chartPart.GetPartsOfType<ChartDrawingPart>().FirstOrDefault();
+        if (cdp == null) return null;
+
+        string xml;
+        try
+        {
+            using var s = cdp.GetStream(FileMode.Open, FileAccess.Read);
+            using var r = new StreamReader(s);
+            xml = r.ReadToEnd();
+        }
+        catch { return null; }
+        if (string.IsNullOrWhiteSpace(xml)) return null;
+
+        var parts = new List<ActiveXPartData>();
+        foreach (var rel in cdp.Parts)
+        {
+            byte[] bytes;
+            try { bytes = ReadPartBytes(rel.OpenXmlPart); }
+            catch { return null; }
+            parts.Add(new ActiveXPartData(
+                rel.RelationshipId, bytes, rel.OpenXmlPart.ContentType, new List<ActiveXPartData>()));
+        }
+        var externals = new List<ActiveXExternalData>();
+        foreach (var ext in cdp.ExternalRelationships)
+            externals.Add(new ActiveXExternalData(ext.Id, ext.RelationshipType, ext.Uri.OriginalString));
+
+        if (parts.Count == 0 && externals.Count == 0) return null;
+        // Only image overlays round-trip (CreateInlinedPart covers image/*).
+        return GuardCarrierContentTypes(new ActiveXEmitData(xml, parts, externals));
+    }
+
+    private ChartPart? ResolveChartPartFromRunPath(string runPath)
+    {
+        OpenXmlElement? element;
+        try { element = NavigateToElement(ParsePath(runPath)); }
+        catch { return null; }
+        if (element is not Run run) return null;
+        var drawing = run.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.Drawing>();
+        if (drawing == null) return null;
+        var chartRef = drawing
+            .Descendants<DocumentFormat.OpenXml.Drawing.Charts.ChartReference>().FirstOrDefault();
+        if (chartRef?.Id?.Value == null) return null;
+        try { return ResolveImageHostPart(run).GetPartById(chartRef.Id.Value) as ChartPart; }
+        catch { return null; }
+    }
+
     // Shared collector for the `add activex` / `add diagram` carriers: every
     // relationship-namespace attribute in the subtree (r:id, r:dm, r:lo, …)
     // names a part on the run's host part; ship each part's bytes plus its
     // direct children (activeX binary blob, diagram rendered drawing).
     private ActiveXEmitData? CollectInlinedPartsEmitData(OpenXmlElement run, OpenXmlElement subtree)
+        => CollectInlinedPartsEmitData(ResolveImageHostPart(run), run, subtree);
+
+    // Host-explicit overload: a chart's userShapes drawing lives on the
+    // ChartDrawingPart (not a header/footer/main part reachable by walking the
+    // run's ancestors), so the caller supplies the host whose relationships the
+    // r:embed/r:id references resolve against. <paramref name="runXmlElement"/>
+    // is the element whose OuterXml is shipped verbatim (the carrier body).
+    private ActiveXEmitData? CollectInlinedPartsEmitData(
+        OpenXmlPart hostPart, OpenXmlElement runXmlElement, OpenXmlElement subtree)
     {
-        var hostPart = ResolveImageHostPart(run);
         var relIds = new List<string>();
         foreach (var el in subtree.Descendants())
         {
@@ -660,7 +726,7 @@ public partial class WordHandler : IDocumentHandler
         // A run that references ONLY external rels (a VML textbox whose sole
         // refs are hyperlinks) is still a valid carrier.
         if (parts.Count == 0 && externals.Count == 0) return null;
-        return new ActiveXEmitData(run.OuterXml, parts, externals);
+        return new ActiveXEmitData(runXmlElement.OuterXml, parts, externals);
     }
 
     private static byte[] ReadPartBytes(OpenXmlPart part)

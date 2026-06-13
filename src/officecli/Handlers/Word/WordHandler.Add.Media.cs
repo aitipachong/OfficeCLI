@@ -156,6 +156,10 @@ public partial class WordHandler
         else
             chartPart.ChartSpace.Save();
 
+        // Re-attach a captured c:userShapes overlay (logo/photo/annotation drawn
+        // on top of the chart) so it round-trips through dump→batch.
+        AttachChartUserShapes(chartPart, properties);
+
         var chartRelId = chartMainPart.GetIdOfPart(chartPart);
 
         // Build Drawing frame (inline or floating anchor) with ChartReference.
@@ -190,6 +194,52 @@ public partial class WordHandler
         var allCharts = GetAllWordCharts();
         var docOrderIdx = allCharts.FindIndex(c => ReferenceEquals(c.Container, frame));
         return $"/chart[{(docOrderIdx >= 0 ? docOrderIdx + 1 : allCharts.Count)}]";
+    }
+
+    /// <summary>
+    /// Re-create a chart's <c>c:userShapes</c> overlay (chartshapes part + its
+    /// embedded images) from the dump carrier props (<c>userShapesXml</c> +
+    /// <c>userShapes.partN.*</c>), and wire the <c>&lt;c:userShapes r:id&gt;</c>
+    /// reference into the chartSpace. No-op when the chart carries no overlay.
+    /// </summary>
+    private void AttachChartUserShapes(ChartPart chartPart, Dictionary<string, string> properties)
+    {
+        if (!properties.TryGetValue("userShapesXml", out var userShapesXml)
+            || string.IsNullOrEmpty(userShapesXml))
+            return;
+
+        // Strip the `userShapes.` prefix so MaterializeInlinedParts sees the
+        // canonical part{N}.relId / part{N}.data / ext{N}.* keys.
+        var carrierProps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        const string prefix = "userShapes.";
+        foreach (var k in properties.Keys.ToList())
+        {
+            if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && properties.TryGetValue(k, out var v))
+                carrierProps[k.Substring(prefix.Length)] = v;
+        }
+
+        var cdp = chartPart.AddNewPart<ChartDrawingPart>();
+        var rewrite = MaterializeInlinedParts(cdp, carrierProps, "chartUserShapes");
+        var finalXml = rewrite(userShapesXml);
+        using (var s = cdp.GetStream(FileMode.Create, FileAccess.Write))
+        using (var w = new StreamWriter(s))
+            w.Write(finalXml);
+
+        var cdpRelId = chartPart.GetIdOfPart(cdp);
+        var chartSpace = chartPart.ChartSpace;
+        if (chartSpace == null) return;
+        // c:userShapes is CT_RelId — its sole attribute is r:id. Set it
+        // generically to stay independent of the SDK property name.
+        var userShapes = new DocumentFormat.OpenXml.Drawing.Charts.UserShapes();
+        userShapes.SetAttribute(new OpenXmlAttribute(
+            "r", "id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships", cdpRelId));
+        // c:userShapes is the last CT_ChartSpace element before c:extLst.
+        var extLst = chartSpace.ChildElements
+            .FirstOrDefault(e => e.LocalName == "extLst");
+        if (extLst != null) chartSpace.InsertBefore(userShapes, extLst);
+        else chartSpace.AppendChild(userShapes);
+        chartSpace.Save();
     }
 
     private string AddPicture(OpenXmlElement parent, string parentPath, int? index, Dictionary<string, string> properties)
