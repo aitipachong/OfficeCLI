@@ -1425,19 +1425,11 @@ public partial class WordHandler
         {
             var tcPr = newCell.GetFirstChild<TableCellProperties>()
                 ?? newCell.PrependChild(new TableCellProperties());
-            tcPr.TextDirection = new TextDirection
-            {
-                Val = textDirAddVal.ToLowerInvariant() switch
-                {
-                    "btlr" or "vertical"       => TextDirectionValues.BottomToTopLeftToRight,
-                    "tbrl" or "vertical-rl"    => TextDirectionValues.TopToBottomRightToLeft,
-                    "lrtb" or "horizontal"     => TextDirectionValues.LefToRightTopToBottom,
-                    "tbrl-r" or "tb-rl-rotated" => TextDirectionValues.TopToBottomRightToLeftRotated,
-                    "lrtb-r" or "lr-tb-rotated" => TextDirectionValues.LefttoRightTopToBottomRotated,
-                    "tblr-r" or "tb-lr-rotated" => TextDirectionValues.TopToBottomLeftToRightRotated,
-                    _ => throw new ArgumentException($"Invalid textDirection value: '{textDirAddVal}'. Valid values: lrtb, btlr, tbrl, horizontal, vertical.")
-                }
-            };
+            // Reuse the shared section parser so the cell path also accepts the
+            // canonical OOXML InnerText forms the dump emits (tbLrV / tbRlV /
+            // lrTbV — rotated vertical variants). CONSISTENCY(add-set-symmetry)
+            // with the cell Set textDirection path.
+            tcPr.TextDirection = new TextDirection { Val = ParseSectionTextDirection(textDirAddVal) };
         }
         if (properties.TryGetValue("cnfstyle", out var cnfAddVal))
         {

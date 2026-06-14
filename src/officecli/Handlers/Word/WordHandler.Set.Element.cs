@@ -1676,19 +1676,14 @@ public partial class WordHandler
                     break;
                 }
                 case "textdirection" or "textdir":
-                    tcPr.TextDirection = new TextDirection
-                    {
-                        Val = value.ToLowerInvariant() switch
-                        {
-                            "btlr" or "vertical" => TextDirectionValues.BottomToTopLeftToRight,
-                            "tbrl" or "vertical-rl" => TextDirectionValues.TopToBottomRightToLeft,
-                            "lrtb" or "horizontal" => TextDirectionValues.LefToRightTopToBottom,
-                            "tbrl-r" or "tb-rl-rotated" => TextDirectionValues.TopToBottomRightToLeftRotated,
-                            "lrtb-r" or "lr-tb-rotated" => TextDirectionValues.LefttoRightTopToBottomRotated,
-                            "tblr-r" or "tb-lr-rotated" => TextDirectionValues.TopToBottomLeftToRightRotated,
-                            _ => throw new ArgumentException($"Invalid textDirection value: '{value}'. Valid values: lrtb, btlr, tbrl, horizontal, vertical.")
-                        }
-                    };
+                    // Reuse the shared section parser so the cell path also accepts
+                    // the canonical OOXML InnerText forms the dump emits (tbLrV /
+                    // tbRlV / lrTbV — the rotated vertical variants). The previous
+                    // local switch only accepted the *-r/*-rotated aliases, so a
+                    // dump→batch replay of a vertical-text header cell hit
+                    // "Invalid textDirection value: 'tbLrV'" and dropped the
+                    // orientation, reflowing the whole table.
+                    tcPr.TextDirection = new TextDirection { Val = ParseSectionTextDirection(value) };
                     break;
                 case "nowrap":
                     tcPr.NoWrap = IsTruthy(value) ? new NoWrap() : null;
