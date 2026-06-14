@@ -1219,6 +1219,13 @@ public partial class PowerPointHandler : IDocumentHandler
                     "/" => presentationPart,
                     "/notesMaster" => (OpenXmlPart?)presentationPart.NotesMasterPart
                         ?? throw new ArgumentException("add-part image /notesMaster: no notes master in deck"),
+                    // A theme's <a:fmtScheme>/<a:fillStyleLst>/<a:blipFill> can
+                    // reference a texture image via r:embed; the raw-set'd theme
+                    // XML carries that reference but the ImagePart lives in the
+                    // theme's own .rels, enumerated separately. Without carrying
+                    // it the rId dangles and PowerPoint refuses to open the deck.
+                    "/theme" => (OpenXmlPart?)presentationPart.ThemePart
+                        ?? throw new ArgumentException("add-part image /theme: presentation has no theme part"),
                     _ => null!,
                 };
                 if (imageHost == null)
@@ -1364,6 +1371,7 @@ public partial class PowerPointHandler : IDocumentHandler
                     SlideLayoutPart sllp   => !string.IsNullOrEmpty(pinnedImgRid) ? sllp.AddImagePart(imgPartType, pinnedImgRid) : sllp.AddImagePart(imgPartType),
                     NotesMasterPart nmp    => !string.IsNullOrEmpty(pinnedImgRid) ? nmp.AddImagePart(imgPartType, pinnedImgRid) : nmp.AddImagePart(imgPartType),
                     NotesSlidePart nsp     => !string.IsNullOrEmpty(pinnedImgRid) ? nsp.AddImagePart(imgPartType, pinnedImgRid) : nsp.AddImagePart(imgPartType),
+                    ThemePart tp           => !string.IsNullOrEmpty(pinnedImgRid) ? tp.AddImagePart(imgPartType, pinnedImgRid) : tp.AddImagePart(imgPartType),
                     _ => throw new ArgumentException($"add-part image: unsupported host part type {imageHost.GetType().Name}"),
                 };
                 using (var imgStream = new MemoryStream(imgBytes))
@@ -1662,6 +1670,30 @@ public partial class PowerPointHandler : IDocumentHandler
         var allLayouts = pp.SlideMasterParts.SelectMany(m => m.SlideLayoutParts).ToList();
         var idx = allLayouts.IndexOf(layoutPart);
         return idx >= 0 ? idx + 1 : null;
+    }
+
+    /// <summary>
+    /// Images attached to the presentation's main ThemePart — referenced by an
+    /// <c>&lt;a:fmtScheme&gt;&lt;a:fillStyleLst&gt;&lt;a:blipFill&gt;</c> texture
+    /// fill via r:embed. The theme XML is raw-set verbatim but its ImageParts are
+    /// enumerated separately; without re-emitting them the embed rId dangles and
+    /// PowerPoint refuses to open the deck. Same shape as
+    /// <see cref="GetMasterImageParts"/>.
+    /// </summary>
+    internal IReadOnlyList<MasterImageInfo> GetThemeImageParts()
+    {
+        var result = new List<MasterImageInfo>();
+        var theme = _doc.PresentationPart?.ThemePart;
+        if (theme == null) return result;
+        foreach (var img in theme.ImageParts)
+        {
+            var rid = theme.GetIdOfPart(img);
+            using var s = img.GetStream();
+            using var ms = new MemoryStream();
+            s.CopyTo(ms);
+            result.Add(new MasterImageInfo(rid, img.ContentType, Convert.ToBase64String(ms.ToArray())));
+        }
+        return result;
     }
 
     /// <summary>Same as <see cref="GetMasterImageParts"/> for slideLayouts.</summary>

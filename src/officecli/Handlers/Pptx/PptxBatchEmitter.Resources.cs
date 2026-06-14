@@ -69,6 +69,31 @@ public static partial class PptxBatchEmitter
             return;
         xml = CanonicalizeRawXml(xml);
 
+        // Carry texture images referenced by the theme's fmtScheme fillStyleLst
+        // blipFill BEFORE the raw-set, so the embed rId resolves on replay. The
+        // blank scaffold's theme has no such images, so a pinned source rId is
+        // free; without this the raw-set'd theme XML keeps a dangling r:embed and
+        // PowerPoint refuses to open the deck (mirrors the master/layout carrier).
+        try
+        {
+            foreach (var imageInfo in ppt.GetThemeImageParts())
+            {
+                items.Add(new BatchItem
+                {
+                    Command = "add-part",
+                    Parent = "/theme",
+                    Type = "image",
+                    Props = new Dictionary<string, string>
+                    {
+                        ["rid"] = imageInfo.RelId,
+                        ["content-type"] = imageInfo.ContentType,
+                        ["data"] = imageInfo.Base64Data,
+                    },
+                });
+            }
+        }
+        catch { /* best-effort — theme raw replace still runs */ }
+
         items.Add(new BatchItem
         {
             Command = "raw-set",
