@@ -895,7 +895,14 @@ public partial class PowerPointHandler
 
         node.Format["name"] = name;
         if (phTypeStr != null) node.Format["phType"] = phTypeStr;
-        if (phElemForNode?.Index?.Value is uint phIdx) node.Format["phIndex"] = (int)phIdx;
+        // Store the placeholder idx as its raw uint, NOT (int). Decks (often
+        // WPS/Kingsoft-authored) use high idx values up to uint.MaxValue
+        // (4294967295); an (int) cast overflows that to -1, which AddPlaceholder's
+        // uint.TryParse then rejects → the placeholder auto-assigns a fresh idx,
+        // binds to the WRONG layout slot, and loses all inherited font/size/color
+        // (whole-deck text re-styling). Mirrors the Query.cs placeholder builders,
+        // which already store ph.Index.Value (uint) directly.
+        if (phElemForNode?.Index?.Value is uint phIdx) node.Format["phIndex"] = phIdx;
 
         // CONSISTENCY(splocks-round-trip): <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
         // is the on-disk marker that the shape cannot be ungrouped (PowerPoint
