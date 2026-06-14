@@ -670,8 +670,18 @@ public partial class WordHandler
                 $"Malformed path '{path}'. Trailing '/' is not allowed.");
         var parts = path.Trim('/').Split('/');
 
+        // BUG-DUMP-R33-STYLEID: the segment immediately after "/styles" is a
+        // style ID, not an OOXML element type, so it must NOT go through the
+        // element-type alias map. A style whose id is "paragraph" / "run" /
+        // "table" (real-world docs author these) otherwise had its path segment
+        // rewritten ("paragraph" -> "p"), and "/styles/paragraph" then resolved
+        // as "find a <w:p> under /styles" — failing every Add/Set/Get on that
+        // style (e.g. adding a tab stop to it dropped on dump->batch replay).
+        string prevSegName = "";
+
         foreach (var part in parts)
         {
+            bool afterStyles = prevSegName == "styles";
             // Reject degenerate empty segments from trailing/duplicate slashes
             // (e.g. "/body/p[1]/" or "/body//p[1]"). Without this, ParsePath
             // would silently swallow the empty part and return a garbled
@@ -696,7 +706,8 @@ public partial class WordHandler
                     throw new ArgumentException(
                         $"Malformed path segment '{part}'. Multiple predicates are not supported — use a single 'name[...]' form.");
 
-                var name = Core.PathAliases.Resolve(part[..bracketIdx]);
+                var rawName = part[..bracketIdx];
+                var name = afterStyles ? rawName : Core.PathAliases.Resolve(rawName);
                 var indexStr = part[(bracketIdx + 1)..^1];
                 // Reject empty predicate "p[]" which Int32.TryParse silently
                 // rejects but which then falls through as a StringIndex of "".
@@ -726,10 +737,13 @@ public partial class WordHandler
                     var normalizedPredicate = ValidateAndNormalizePredicate(part, indexStr);
                     segments.Add(new PathSegment(name, null, normalizedPredicate));
                 }
+                prevSegName = name;
             }
             else
             {
-                segments.Add(new PathSegment(Core.PathAliases.Resolve(part), null));
+                var name = afterStyles ? part : Core.PathAliases.Resolve(part);
+                segments.Add(new PathSegment(name, null));
+                prevSegName = name;
             }
         }
 
