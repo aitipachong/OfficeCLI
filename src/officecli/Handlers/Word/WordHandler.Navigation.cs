@@ -4553,6 +4553,13 @@ public partial class WordHandler
             int dpi = 0;
             foreach (var d in para.Descendants())
                 descendantPos[d] = dpi++;
+            // BUG-DUMP-R29-SMARTTAG: document-position of each child appended to
+            // node.Children, parallel to the list. The smartTag/customXml wrapper
+            // runs are synthesized in a separate pass below and were appended at
+            // the tail — so a mid-paragraph <w:smartTag> run ("PRICE <AND> TERMS")
+            // replayed at the END of the paragraph. Tracking positions lets that
+            // pass INSERT each wrapper run at its true document order instead.
+            var childPositions = new List<int>();
 
             var runs = GetAllRuns(para);
             // BUG-DUMP9-04: m:oMath nested inside w:hyperlink is a
@@ -4655,6 +4662,7 @@ public partial class WordHandler
             int bareFieldIdx = 0;
             foreach (var entry in ordered)
             {
+                int _childCountBefore = node.Children.Count;
                 if (entry.kind == "run")
                 {
                     var runNode = ElementToNode(entry.el, $"{path}/r[{runIdx + 1}]", depth - 1);
@@ -4847,6 +4855,11 @@ public partial class WordHandler
                     node.Children.Add(bn);
                     bareFieldIdx++;
                 }
+                // BUG-DUMP-R29-SMARTTAG: record this entry's doc-position for
+                // every child it appended, keeping childPositions parallel to
+                // node.Children (ascending, since `ordered` is pos-sorted).
+                for (int _z = node.Children.Count - _childCountBefore; _z > 0; _z--)
+                    childPositions.Add(entry.pos);
             }
             // BUG-DUMP5-06/07: <w:ruby> and <w:smartTag> aren't registered
             // as typed paragraph children in the OpenXml SDK schema set we
@@ -4966,7 +4979,18 @@ public partial class WordHandler
                             synthNode.Format["revision.date"] = delAncDate.ToString("o");
                     }
                 }
-                node.Children.Add(synthNode);
+                // BUG-DUMP-R29-SMARTTAG: insert at the wrapper run's true document
+                // position instead of appending at the tail, so a mid-paragraph
+                // smartTag/customXml run ("PRICE <AND> TERMS") replays in order.
+                // The /r[runIdx] path index keeps its tail numbering (typed runs
+                // already claimed /r[1..M]; these synth runs are emitted as plain
+                // `add r text=…` and never path-resolved, so the index is inert) —
+                // only the node.Children ORDER drives the emit sequence.
+                var wrapPos = descendantPos.TryGetValue(unkRun, out var wp) ? wp : int.MaxValue;
+                int insertIdx = childPositions.FindIndex(cp => cp > wrapPos);
+                if (insertIdx < 0) insertIdx = node.Children.Count;
+                node.Children.Insert(insertIdx, synthNode);
+                childPositions.Insert(insertIdx, wrapPos);
                 runIdx++;
             }
             // BUG-DUMP25-01: BookmarkStart children are now surfaced
