@@ -184,6 +184,30 @@ public static partial class PptxBatchEmitter
         }
         catch { /* best-effort */ }
 
+        // External hyperlink relationships on the layout — the raw-set XML below
+        // carries <a:hlinkClick r:id="rIdN">, but the relationship is external (a
+        // URL) so the ImagePart carrier above doesn't re-create it. Pin each id
+        // BEFORE the raw-set replace so the renumbered rebuilt layout's .rels
+        // resolves the reference. (mirrors the add-part image pattern)
+        try
+        {
+            foreach (var (relId, target) in ppt.GetLayoutExternalHyperlinks(idx))
+            {
+                items.Add(new BatchItem
+                {
+                    Command = "add-part",
+                    Parent = $"/slideLayout[{idx}]",
+                    Type = "hyperlink",
+                    Props = new Dictionary<string, string>
+                    {
+                        ["rid"] = relId,
+                        ["target"] = target,
+                    },
+                });
+            }
+        }
+        catch { /* best-effort */ }
+
         items.Add(new BatchItem
         {
             Command = "raw-set",

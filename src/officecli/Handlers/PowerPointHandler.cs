@@ -1243,9 +1243,68 @@ public partial class PowerPointHandler : IDocumentHandler
                 var imgActualRid = imageHost.GetIdOfPart(imgPart);
                 return (imgActualRid, parentPartPath);
 
+            case "hyperlink":
+            {
+                // Re-create an EXTERNAL hyperlink relationship on a host part with
+                // a pinned relationship id. Layouts/masters are emitted via raw-set
+                // (wholesale XML carrying <a:hlinkClick r:id="rIdN">), but the
+                // referenced external relationship is not an embedded part, so the
+                // ImagePart carrier path never re-created it — the renumbered
+                // rebuilt layout's .rels lost rIdN and PowerPoint rejected the file
+                // ("rIdN referenced by hlinkClick does not exist"). Pinning the id
+                // here makes the raw-set'd r:id="rIdN" resolve again. The host path
+                // is the SOURCE-index /slideLayout[N] (or master/slide); on replay
+                // GrowSlideLayoutParts maps it to the renumbered part, so the rel
+                // lands on the same part the raw-set replaces.
+                if (properties == null
+                    || !properties.TryGetValue("target", out var hlTarget) || string.IsNullOrEmpty(hlTarget))
+                    throw new ArgumentException("add-part hyperlink requires property 'target' (the external URI)");
+                if (!properties.TryGetValue("rid", out var hlRid) || string.IsNullOrEmpty(hlRid))
+                    throw new ArgumentException("add-part hyperlink requires property 'rid' (the relationship id to pin)");
+
+                OpenXmlPartContainer hlHost;
+                var hlSmMatch = Regex.Match(parentPartPath, @"^/slideMaster\[(\d+)\]$");
+                var hlSlMatch = hlSmMatch.Success ? null : Regex.Match(parentPartPath, @"^/slideLayout\[(\d+)\]$");
+                var hlSldMatch = (hlSmMatch.Success || (hlSlMatch?.Success ?? false))
+                    ? null : Regex.Match(parentPartPath, @"^/slide\[(\d+)\]$");
+                if (hlSmMatch.Success)
+                {
+                    var i = int.Parse(hlSmMatch.Groups[1].Value);
+                    var parts = presentationPart.SlideMasterParts.ToList();
+                    if (i > parts.Count) { GrowSlideMasterParts(i); parts = presentationPart.SlideMasterParts.ToList(); }
+                    if (i < 1 || i > parts.Count) throw new ArgumentException($"slideMaster index {i} out of range");
+                    hlHost = parts[i - 1];
+                }
+                else if (hlSlMatch != null && hlSlMatch.Success)
+                {
+                    var i = int.Parse(hlSlMatch.Groups[1].Value);
+                    var parts = presentationPart.SlideMasterParts.SelectMany(m => m.SlideLayoutParts).ToList();
+                    if (i > parts.Count) { GrowSlideLayoutParts(i); parts = presentationPart.SlideMasterParts.SelectMany(m => m.SlideLayoutParts).ToList(); }
+                    if (i < 1 || i > parts.Count) throw new ArgumentException($"slideLayout index {i} out of range");
+                    hlHost = parts[i - 1];
+                }
+                else if (hlSldMatch != null && hlSldMatch.Success)
+                {
+                    var i = int.Parse(hlSldMatch.Groups[1].Value);
+                    var parts = GetSlideParts().ToList();
+                    if (i < 1 || i > parts.Count) throw new ArgumentException($"slide index {i} out of range");
+                    hlHost = parts[i - 1];
+                }
+                else
+                    throw new ArgumentException(
+                        "add-part hyperlink: parent must be /slideLayout[N], /slideMaster[N], or /slide[N]");
+
+                // Idempotent: if a relationship with this id already exists, don't
+                // re-add (AddHyperlinkRelationship throws on a duplicate id).
+                if (hlHost.HyperlinkRelationships.Any(r => r.Id == hlRid))
+                    return (hlRid, parentPartPath);
+                hlHost.AddHyperlinkRelationship(new Uri(hlTarget, UriKind.RelativeOrAbsolute), isExternal: true, hlRid);
+                return (hlRid, parentPartPath);
+            }
+
             default:
                 throw new ArgumentException(
-                    $"Unknown part type: {partType}. Supported: chart, smartart, video, audio, model3d, ole, image");
+                    $"Unknown part type: {partType}. Supported: chart, smartart, video, audio, model3d, ole, image, hyperlink");
         }
     }
 
@@ -1335,6 +1394,31 @@ public partial class PowerPointHandler : IDocumentHandler
             using var ms = new MemoryStream();
             s.CopyTo(ms);
             result.Add(new MasterImageInfo(rid, img.ContentType, Convert.ToBase64String(ms.ToArray())));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// External (TargetMode="External") hyperlink relationships on a slideLayout.
+    /// The layout XML is replayed via raw-set carrying <c>&lt;a:hlinkClick r:id="rIdN"/&gt;</c>,
+    /// but the referenced relationship is external (a URL, not an embedded part),
+    /// so the ImagePart carrier never re-creates it — the renumbered rebuilt
+    /// layout's .rels lost rIdN and PowerPoint refused the file. Surfaced as
+    /// (rId, target) pairs so PptxBatchEmitter can emit an `add-part hyperlink`
+    /// row that pins each id before the layout raw-set replace.
+    /// </summary>
+    internal IReadOnlyList<(string RelId, string Target)> GetLayoutExternalHyperlinks(int layoutIdx)
+    {
+        var result = new List<(string, string)>();
+        var pp = _doc.PresentationPart;
+        if (pp == null) return result;
+        var layouts = pp.SlideMasterParts.SelectMany(m => m.SlideLayoutParts).ToList();
+        if (layoutIdx < 1 || layoutIdx > layouts.Count) return result;
+        var layout = layouts[layoutIdx - 1];
+        foreach (var rel in layout.HyperlinkRelationships)
+        {
+            if (rel.IsExternal)
+                result.Add((rel.Id, rel.Uri.OriginalString));
         }
         return result;
     }
