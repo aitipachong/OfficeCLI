@@ -1660,6 +1660,11 @@ public partial class PowerPointHandler : IDocumentHandler
                 };
                 using (var ts = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(themeXml)))
                     newTheme.FeedData(ts);
+                // Re-attach texture images the theme's fmtScheme references via
+                // <a:blipFill r:embed="rIdN">; without them the verbatim theme XML
+                // dangles. Pinned rIds match the fed theme XML. (Same carrier as
+                // diagram/picture images — flat numbered themeImage{k} props.)
+                AttachDiagramImages(newTheme, properties, "themeImage");
                 var themeActualRid = themeHost.GetIdOfPart(newTheme);
                 return (themeActualRid, parentPartPath);
             }
@@ -1826,6 +1831,47 @@ public partial class PowerPointHandler : IDocumentHandler
         var themePart = nmp?.ThemePart;
         if (nmp == null || themePart?.Theme == null) return null;
         return (nmp.GetIdOfPart(themePart), themePart.Theme.OuterXml);
+    }
+
+    /// <summary>
+    /// Images attached to a slideMaster's own ThemePart — referenced by an
+    /// <c>&lt;a:fmtScheme&gt;&lt;a:fillStyleLst&gt;&lt;a:blipFill&gt;</c> texture
+    /// fill via r:embed. The theme XML is re-fed verbatim by the add-part theme
+    /// carrier, but its ImageParts live in the theme's own .rels and were never
+    /// re-emitted — the rebuilt theme kept a dangling r:embed. Same shape as
+    /// <see cref="GetThemeImageParts"/> (which covers the presentation's primary
+    /// theme); this covers each master's distinct theme. Empty when none.
+    /// </summary>
+    internal IReadOnlyList<MasterImageInfo> GetMasterThemeImages(int masterIdx)
+    {
+        var pp = _doc.PresentationPart;
+        if (pp == null) return Array.Empty<MasterImageInfo>();
+        var masters = pp.SlideMasterParts.ToList();
+        if (masterIdx < 1 || masterIdx > masters.Count) return Array.Empty<MasterImageInfo>();
+        var themePart = masters[masterIdx - 1].ThemePart;
+        return themePart == null ? Array.Empty<MasterImageInfo>() : ReadImagePartInfos(themePart);
+    }
+
+    /// <summary>Same as <see cref="GetMasterThemeImages"/> for the notes master's theme.</summary>
+    internal IReadOnlyList<MasterImageInfo> GetNotesMasterThemeImages()
+    {
+        var themePart = _doc.PresentationPart?.NotesMasterPart?.ThemePart;
+        return themePart == null ? Array.Empty<MasterImageInfo>() : ReadImagePartInfos(themePart);
+    }
+
+    // Shared: enumerate a part's child ImageParts as (rId, content-type, base64).
+    private static IReadOnlyList<MasterImageInfo> ReadImagePartInfos(OpenXmlPart host)
+    {
+        var result = new List<MasterImageInfo>();
+        foreach (var idp in host.Parts)
+        {
+            if (idp.OpenXmlPart is not ImagePart img) continue;
+            using var s = img.GetStream(FileMode.Open, FileAccess.Read);
+            using var ms = new MemoryStream();
+            s.CopyTo(ms);
+            result.Add(new MasterImageInfo(idp.RelationshipId, img.ContentType, Convert.ToBase64String(ms.ToArray())));
+        }
+        return result;
     }
 
     /// <summary>

@@ -134,16 +134,19 @@ public static partial class PptxBatchEmitter
             var nmt = ppt.GetNotesMasterTheme();
             if (nmt is { } nmtv)
             {
+                var nmtProps = new Dictionary<string, string>
+                {
+                    ["rid"] = nmtv.RelId,
+                    ["data"] = nmtv.ThemeXml,
+                };
+                // Carry texture images the notes theme references (else r:embed dangles).
+                EmitDiagramImageProps(nmtProps, "themeImage", ppt.GetNotesMasterThemeImages());
                 items.Add(new BatchItem
                 {
                     Command = "add-part",
                     Parent = "/notesMaster",
                     Type = "theme",
-                    Props = new Dictionary<string, string>
-                    {
-                        ["rid"] = nmtv.RelId,
-                        ["data"] = nmtv.ThemeXml,
-                    },
+                    Props = nmtProps,
                 });
             }
         }
@@ -205,16 +208,19 @@ public static partial class PptxBatchEmitter
                 var mt = ppt.GetMasterTheme(idx);
                 if (mt is { } mtv)
                 {
+                    var mtProps = new Dictionary<string, string>
+                    {
+                        ["rid"] = mtv.RelId,
+                        ["data"] = mtv.ThemeXml,
+                    };
+                    // Carry texture images this master's theme references.
+                    EmitDiagramImageProps(mtProps, "themeImage", ppt.GetMasterThemeImages(idx));
                     items.Add(new BatchItem
                     {
                         Command = "add-part",
                         Parent = $"/slideMaster[{idx}]",
                         Type = "theme",
-                        Props = new Dictionary<string, string>
-                        {
-                            ["rid"] = mtv.RelId,
-                            ["data"] = mtv.ThemeXml,
-                        },
+                        Props = mtProps,
                     });
                 }
             }
