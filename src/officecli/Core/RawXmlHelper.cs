@@ -558,6 +558,21 @@ internal static class RawXmlHelper
         // reference needs an IPackageFactoryFeature that isn't registered for
         // packages opened via SpreadsheetDocument/Word.../Presentation.Open, but
         // the typed Clone(Stream, bool) works (same call HtmlPreview uses).
+        //
+        // BUT Clone(stream) is itself a stream read of every LIVE part — so it
+        // re-introduces the exact desync the clone was meant to avoid: cloning a
+        // package with a dirty-but-unflushed StylesPart desyncs that live part,
+        // which then serializes EMPTY on the caller's next Save (a `set` that
+        // creates styles + an in-session `validate` over the resident pipe = a
+        // 0-byte styles.xml on close). Flush each ALREADY-LOADED part's DOM back
+        // to its stream first, so both Clone and PreflightXmlParts read in-sync
+        // bytes and never desync. Only loaded parts are flushed: an unloaded part
+        // cannot be dirty, and force-loading it would make the caller's Save
+        // re-serialize an untouched part (byte churn) — validate must stay
+        // read-only. There is no public IsRootElementLoaded in OpenXml 3.4, so
+        // FlushLoadedPartRoots peeks the private loaded-root field reflectively
+        // rather than touching part.RootElement (which would trigger a load).
+        FlushLoadedPartRoots(package);
         using var cloneStream = new MemoryStream();
         using OpenXmlPackage clone = package switch
         {
@@ -788,6 +803,53 @@ internal static class RawXmlHelper
                 null, "/[Content_Types].xml"));
         }
         return result;
+    }
+
+    // Cache the reflective lookup of OpenXmlPart's private loaded-root field.
+    // null once resolution has been attempted-and-failed (older/newer SDK with a
+    // renamed field) so we degrade to a no-op instead of throwing per call.
+    private static System.Reflection.FieldInfo? _rootElementField;
+    private static bool _rootElementFieldResolved;
+
+    /// <summary>
+    /// Flush each ALREADY-LOADED part's in-memory DOM back to its part stream so
+    /// a subsequent Clone/GetStream of the LIVE package reads in-sync bytes and
+    /// cannot desync the SDK's dirty-tracking (which would serialize the part
+    /// EMPTY on the caller's next Save). Only loaded parts are touched: an
+    /// unloaded part cannot be dirty, and force-loading one would make the
+    /// caller's Save re-serialize an untouched part. Best-effort: any failure to
+    /// peek/flush a part is swallowed — validate must never throw on a quirk here.
+    /// </summary>
+    private static void FlushLoadedPartRoots(OpenXmlPackage package)
+    {
+        if (!_rootElementFieldResolved)
+        {
+            _rootElementFieldResolved = true;
+            // OpenXmlPart stores its loaded root in a private "_rootElement"
+            // field (no public IsRootElementLoaded in DocumentFormat.OpenXml
+            // 3.x). Walk the type hierarchy to find it.
+            for (var t = typeof(OpenXmlPart); t != null; t = t.BaseType)
+            {
+                var f = t.GetField("_rootElement",
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.NonPublic);
+                if (f != null) { _rootElementField = f; break; }
+            }
+        }
+        if (_rootElementField == null) return;   // SDK shape changed — no-op
+
+        foreach (var part in package.GetAllParts())
+        {
+            try
+            {
+                if (_rootElementField.GetValue(part) is OpenXmlPartRootElement root)
+                    root.Save();   // DOM -> part stream; idempotent on clean parts
+            }
+            catch
+            {
+                // Reflection/serialize hiccup on one part must not fail validate.
+            }
+        }
     }
 
     /// <summary>
