@@ -540,7 +540,7 @@ public partial class PowerPointHandler
                     {
                         switch (afVal.ToLowerInvariant())
                         {
-                            case "true" or "normal": bodyPr.AppendChild(new Drawing.NormalAutoFit()); break;
+                            case "true" or "normal": bodyPr.AppendChild(ApplyNormalAutoFitScale(new Drawing.NormalAutoFit(), properties)); break;
                             case "shape": bodyPr.AppendChild(new Drawing.ShapeAutoFit()); break;
                             case "false" or "none": bodyPr.AppendChild(new Drawing.NoAutoFit()); break;
                         }
@@ -864,6 +864,8 @@ public partial class PowerPointHandler
                       "textfill", "textgradient", "geometry",
                       "baseline", "superscript", "subscript",
                       "textwarp", "wordart", "autofit",
+                      // shrink-on-overflow scale — consumed alongside autofit=normal
+                      "fontScale", "fontscale", "lnSpcReduction", "lnspcreduction",
                       "wrap", "wordwrap",
                       "lineopacity", "line.opacity",
                       "linegradient", "line.gradient",

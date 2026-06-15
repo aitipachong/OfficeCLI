@@ -125,6 +125,36 @@ public partial class PowerPointHandler
     // RunProperties (attribute or child) instead of the shape element.
     // Curated cases keep their existing per-key targeting (some still write
     // to shape regardless of context — fill, geometry, etc.).
+    // Stamp a <a:normAutofit>'s fontScale / lnSpcReduction from sibling props.
+    // PowerPoint authors these on "shrink text on overflow" boxes (e.g.
+    // fontScale="92500" = render at 92.5%); without round-tripping them the box
+    // rebuilt at 100%, so text overflowed/re-flowed across the whole deck.
+    // Values are OOXML thousandths-of-percent (92500); a trailing "%" form
+    // ("92.5%") is also accepted.
+    private static Drawing.NormalAutoFit ApplyNormalAutoFitScale(Drawing.NormalAutoFit naf, Dictionary<string, string> properties)
+    {
+        if ((properties.TryGetValue("fontScale", out var fs) || properties.TryGetValue("fontscale", out fs))
+            && TryParseScalePerMille(fs, out var fsv))
+            naf.FontScale = fsv;
+        if ((properties.TryGetValue("lnSpcReduction", out var lr) || properties.TryGetValue("lnspcreduction", out lr))
+            && TryParseScalePerMille(lr, out var lrv))
+            naf.LineSpaceReduction = lrv;
+        return naf;
+    }
+
+    private static bool TryParseScalePerMille(string? s, out int val)
+    {
+        val = 0;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        s = s.Trim();
+        if (s.EndsWith("%"))
+            return double.TryParse(s.TrimEnd('%').Trim(), System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture, out var d)
+                   && (val = (int)Math.Round(d * 1000)) >= 0;
+        return int.TryParse(s, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out val);
+    }
+
     private static List<string> SetRunOrShapeProperties(
         Dictionary<string, string> properties, List<Drawing.Run> runs, Shape shape, OpenXmlPart? part = null,
         bool runContext = false,
@@ -1468,6 +1498,15 @@ public partial class PowerPointHandler
                     break;
                 }
 
+                case "fontscale" or "fontScale" or "lnspcreduction" or "lnSpcReduction":
+                {
+                    // Consumed as siblings of autofit= (ApplyNormalAutoFitScale).
+                    // Handle standalone too: patch an existing <a:normAutofit>.
+                    var bodyPr = shape.TextBody?.Elements<Drawing.BodyProperties>().FirstOrDefault();
+                    var naf = bodyPr?.GetFirstChild<Drawing.NormalAutoFit>();
+                    if (naf != null) ApplyNormalAutoFitScale(naf, properties);
+                    break;
+                }
                 case "autofit":
                 {
                     var bodyPr = shape.TextBody?.Elements<Drawing.BodyProperties>().FirstOrDefault();
@@ -1477,7 +1516,7 @@ public partial class PowerPointHandler
                     bodyPr.RemoveAllChildren<Drawing.NoAutoFit>();
                     switch (value.ToLowerInvariant())
                     {
-                        case "true" or "normal" or "normautofit" or "auto": bodyPr.AppendChild(new Drawing.NormalAutoFit()); break;
+                        case "true" or "normal" or "normautofit" or "auto": bodyPr.AppendChild(ApplyNormalAutoFitScale(new Drawing.NormalAutoFit(), properties)); break;
                         case "shape" or "spautofit" or "resize": bodyPr.AppendChild(new Drawing.ShapeAutoFit()); break;
                         case "false" or "none": bodyPr.AppendChild(new Drawing.NoAutoFit()); break;
                         // 'shrink' previously aliased to 'normal' (same plain

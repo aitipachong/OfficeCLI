@@ -1877,7 +1877,19 @@ public partial class PowerPointHandler
             // <a:noAutoFit/> on replay (Add/Set autoFit=none injects the
             // child), breaking shrink-to-fit on every placeholder dump→
             // replay cycle. CONSISTENCY(empty-bodyPr-inherits).
-            if (bodyPr.GetFirstChild<Drawing.NormalAutoFit>() != null) node.Format["autoFit"] = "normal";
+            var normAutoFit = bodyPr.GetFirstChild<Drawing.NormalAutoFit>();
+            if (normAutoFit != null)
+            {
+                node.Format["autoFit"] = "normal";
+                // Preserve the shrink-on-overflow scale PowerPoint computed and
+                // stored (fontScale="92500" = 92.5%, lnSpcReduction similar).
+                // Without this the box rebuilt at 100% and text re-flowed across
+                // the whole deck. OOXML thousandths-of-percent, emitted raw.
+                if (normAutoFit.FontScale?.Value is int afFs && afFs != 100000)
+                    node.Format["fontScale"] = afFs;
+                if (normAutoFit.LineSpaceReduction?.Value is int afLr && afLr != 0)
+                    node.Format["lnSpcReduction"] = afLr;
+            }
             else if (bodyPr.GetFirstChild<Drawing.ShapeAutoFit>() != null) node.Format["autoFit"] = "shape";
             else if (bodyPr.GetFirstChild<Drawing.NoAutoFit>() != null) node.Format["autoFit"] = "none";
         }
