@@ -595,6 +595,15 @@ public static partial class WordBatchEmitter
                 // `set p[last()]` targets a paragraph that no longer exists, the
                 // step fails, and the trailing cell paragraph is silently dropped.
                 bool cellSdtConsumedSeed = false;
+                // BUG-DUMP-CELLSDT-2ND: EmitCellSdt's `cellHasContent` decides
+                // insert-before-the-auto-seed (false) vs append (true). It was fed
+                // `firstParaSeen`, which only tracks PARAGRAPHS — so a second SDT
+                // after a first SDT (or after a nested table) still tried to insert
+                // before the cell's seed <w:p>, but that seed was already consumed
+                // (typed `add sdt`) or displaced, so the raw-set targeted a missing
+                // paragraph and the SDT was dropped. Track ANY emitted cell content
+                // (paragraph / table / SDT) so a non-leading SDT appends instead.
+                bool cellHasAnyContent = false;
 
                 // BUG-DUMP-R27-6: a block-level <w:customXml> wrapper that is a
                 // DIRECT cell child is omitted from cellNode.Children (Navigation
@@ -717,6 +726,7 @@ public static partial class WordBatchEmitter
                                 : $"{cellTargetPath}/p[{cellParaIdx}]";
                             EmitCellDisplayEquation(cellEq, eqTargetPath, items);
                             firstParaSeen = true;
+                            cellHasAnyContent = true;
                             continue;
                         }
                         // The FIRST paragraph after ANY nested table is also
@@ -736,12 +746,14 @@ public static partial class WordBatchEmitter
                         EmitParagraph(word, cc.Path, cellTargetPath, cellParaIdx, items,
                                       autoPresent: (!firstParaSeen && !cellSdtConsumedSeed) || isTrailingAutoP, ctx);
                         firstParaSeen = true;
+                        cellHasAnyContent = true;
                     }
                     else if (cc.Type == "table")
                     {
                         nestedTblIdx++;
                         EmitTable(word, cc.Path, nestedTblIdx, items, ctx,
                                   parentTablePath: cellTargetPath, depth: depth + 1);
+                        cellHasAnyContent = true;
                     }
                     else if (cc.Type == "sdt" && ctx != null)
                     {
@@ -756,13 +768,14 @@ public static partial class WordBatchEmitter
                         var rawPart = containerPath == "/body" ? "/document" : containerPath;
                         var cellXPath = $"(//w:tbl)[{tableOrdinal}]/w:tr[{r + 1}]/w:tc[{c + 1}]";
                         bool sdtLeftSeed = EmitCellSdt(word, cc.Path, cellTargetPath, cellXPath, rawPart,
-                                    cellHasContent: firstParaSeen, items, ctx);
+                                    cellHasContent: cellHasAnyContent, items, ctx);
                         cellSdtLeftSeed |= sdtLeftSeed;
                         // Typed `add sdt` (returns false here with no prior cell
-                        // paragraph) consumed the auto-seed; the raw-set seed-left
+                        // content) consumed the auto-seed; the raw-set seed-left
                         // path returns true and keeps it. Flag the consumed case so
                         // a following sibling paragraph emits a fresh `add p`.
-                        if (!sdtLeftSeed && !firstParaSeen) cellSdtConsumedSeed = true;
+                        if (!sdtLeftSeed && !cellHasAnyContent) cellSdtConsumedSeed = true;
+                        cellHasAnyContent = true;
                     }
                 }
 
