@@ -1527,6 +1527,38 @@ public partial class PowerPointHandler : IDocumentHandler
                 return (tagHost.GetIdOfPart(newTagPart), parentPartPath);
             }
 
+            case "sliderel":
+            {
+                // Pin an internal slide-jump relationship (type .../slide) so a
+                // raw-carried <a:hlinkClick r:id="rIdN" action="…hlinksldjump">
+                // (e.g. inside a table cell's txBodyRaw) resolves to the rebuilt
+                // target slide. Must replay AFTER every slide exists — the
+                // emitter defers it. Props: rid (pinned), target (1-based ordinal
+                // of the target slide).
+                if (properties == null
+                    || !properties.TryGetValue("rid", out var srRid) || string.IsNullOrEmpty(srRid))
+                    throw new ArgumentException("add-part sliderel requires property 'rid'");
+                if (!properties.TryGetValue("target", out var srTgt)
+                    || !int.TryParse(srTgt, out var srTgtOrd))
+                    throw new ArgumentException("add-part sliderel requires property 'target' (1-based slide ordinal)");
+                var srMatch = Regex.Match(parentPartPath, @"^/slide\[(\d+)\]$");
+                if (!srMatch.Success)
+                    throw new ArgumentException("add-part sliderel: parent must be /slide[N]");
+                var srParts = GetSlideParts().ToList();
+                var srHostIdx = int.Parse(srMatch.Groups[1].Value);
+                if (srHostIdx < 1 || srHostIdx > srParts.Count)
+                    throw new ArgumentException($"slide index {srHostIdx} out of range");
+                if (srTgtOrd < 1 || srTgtOrd > srParts.Count)
+                    throw new ArgumentException($"sliderel target ordinal {srTgtOrd} out of range (total {srParts.Count})");
+                var srHost = srParts[srHostIdx - 1];
+                // Idempotent: skip if the rId is already wired.
+                if (srHost.Parts.Any(p => p.RelationshipId == srRid)
+                    || srHost.ExternalRelationships.Any(r => r.Id == srRid))
+                    return (srRid, parentPartPath);
+                srHost.AddPart(srParts[srTgtOrd - 1], srRid);
+                return (srRid, parentPartPath);
+            }
+
             case "extpart":
             {
                 // Re-create an arbitrary binary part with a CUSTOM relationship
@@ -2178,6 +2210,39 @@ public partial class PowerPointHandler : IDocumentHandler
         {
             if (rel.IsExternal && wanted.Contains(rel.Id))
                 result.Add((rel.Id, rel.Uri.OriginalString));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Internal slide-jump relationships on a slide whose id is one of
+    /// <paramref name="relIds"/>: a run's <c>&lt;a:hlinkClick r:id="rIdN"
+    /// action="ppaction://hlinksldjump"&gt;</c> targets ANOTHER slide via a
+    /// relationship of type .../slide. When such a link lives in a table cell's
+    /// verbatim txBodyRaw, the typed slide-jump path (DeferSlideJumpLink →
+    /// link=slide[N]) never fires, so the relationship is not re-created and the
+    /// rebuilt slide's r:id="rIdN" dangles — PowerPoint then refuses the deck
+    /// (0x80070570). Surfaced as (rId, targetSlideOrdinal) — the 1-based ordinal
+    /// of the target slide within <see cref="GetSlideParts"/> — so the emitter can
+    /// pin the rId to the rebuilt target slide AFTER every slide exists.
+    /// </summary>
+    internal IReadOnlyList<(string RelId, int TargetOrdinal)> GetSlideInternalSlideJumpRels(
+        int slideIdx, IReadOnlyCollection<string> relIds)
+    {
+        var result = new List<(string, int)>();
+        if (relIds.Count == 0) return result;
+        var slideParts = GetSlideParts().ToList();
+        if (slideIdx < 1 || slideIdx > slideParts.Count) return result;
+        var slide = slideParts[slideIdx - 1];
+        var wanted = new HashSet<string>(relIds, StringComparer.Ordinal);
+        foreach (var idp in slide.Parts)
+        {
+            if (!wanted.Contains(idp.RelationshipId)) continue;
+            if (idp.OpenXmlPart is SlidePart tgt)
+            {
+                var ord = slideParts.IndexOf(tgt);
+                if (ord >= 0) result.Add((idp.RelationshipId, ord + 1));
+            }
         }
         return result;
     }

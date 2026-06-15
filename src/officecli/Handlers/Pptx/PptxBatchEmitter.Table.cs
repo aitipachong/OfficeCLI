@@ -147,10 +147,11 @@ public static partial class PptxBatchEmitter
             if (slideM.Success)
             {
                 var slideHostPath = $"/slide[{slideM.Groups[1].Value}]";
+                var slideNumForCell = int.Parse(slideM.Groups[1].Value);
                 try
                 {
                     foreach (var (relId, target) in
-                             ppt.GetSlideExternalHyperlinksByRelId(int.Parse(slideM.Groups[1].Value), cellHlinkRids))
+                             ppt.GetSlideExternalHyperlinksByRelId(slideNumForCell, cellHlinkRids))
                     {
                         items.Add(new BatchItem
                         {
@@ -161,6 +162,33 @@ public static partial class PptxBatchEmitter
                             {
                                 ["rid"] = relId,
                                 ["target"] = target,
+                            },
+                        });
+                    }
+                }
+                catch { /* best-effort */ }
+
+                // Internal slide-jump links (<a:hlinkClick action="…hlinksldjump"
+                // r:id> → another slide) in a cell's txBodyRaw. The target slide
+                // is re-added later, so DEFER the pinned slide relationship to the
+                // end of the emit (ctx.DeferredLinks replays after every slide
+                // exists), mapping the source rId to the rebuilt target ordinal.
+                // Without this the rebuilt cell's r:id dangles → PowerPoint refuses
+                // the deck (0x80070570).
+                try
+                {
+                    foreach (var (relId, targetOrd) in
+                             ppt.GetSlideInternalSlideJumpRels(slideNumForCell, cellHlinkRids))
+                    {
+                        ctx.DeferredLinks.Add(new BatchItem
+                        {
+                            Command = "add-part",
+                            Parent = slideHostPath,
+                            Type = "sliderel",
+                            Props = new Dictionary<string, string>
+                            {
+                                ["rid"] = relId,
+                                ["target"] = targetOrd.ToString(System.Globalization.CultureInfo.InvariantCulture),
                             },
                         });
                     }
