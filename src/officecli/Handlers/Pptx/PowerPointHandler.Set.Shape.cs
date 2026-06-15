@@ -1227,27 +1227,35 @@ public partial class PowerPointHandler
     }
 
     /// <summary>
-    /// /slide[N]/group[M]/picture[K] — resolve a Picture nested directly in a
-    /// group and apply picture-set props via the shared core. Mirrors
-    /// ResolveGroupInnerShape but for Picture children.
+    /// /slide[N]/group[M](/group[L])*/picture[K] — resolve a Picture nested in a
+    /// group at ANY depth and apply picture-set props via the shared core.
+    /// Match group 2 is the full /group[..] chain. Mirrors
+    /// ResolveGroupInnerShapeBySegments but for Picture children.
     /// </summary>
     private List<string> SetGroupInnerPictureByPath(Match m, Dictionary<string, string> properties)
     {
         var slideIdx = int.Parse(m.Groups[1].Value);
-        var grpIdx = int.Parse(m.Groups[2].Value);
+        var groupSegs = m.Groups[2].Value;
         var picIdx = int.Parse(m.Groups[3].Value);
         var slideParts = GetSlideParts().ToList();
         if (slideIdx < 1 || slideIdx > slideParts.Count)
             throw new ArgumentException($"Slide {slideIdx} not found (total: {slideParts.Count})");
         var slidePart = slideParts[slideIdx - 1];
-        var shapeTree = GetSlide(slidePart).CommonSlideData?.ShapeTree
+        OpenXmlCompositeElement current = GetSlide(slidePart).CommonSlideData?.ShapeTree
             ?? throw new ArgumentException("Slide has no shape tree");
-        var groups = shapeTree.Elements<GroupShape>().ToList();
-        if (grpIdx < 1 || grpIdx > groups.Count)
-            throw new ArgumentException($"Group {grpIdx} not found (total: {groups.Count})");
-        var pics = groups[grpIdx - 1].Elements<Picture>().ToList();
+        int depth = 0;
+        foreach (Match seg in Regex.Matches(groupSegs, @"/group\[(\d+)\]"))
+        {
+            depth++;
+            var gi = int.Parse(seg.Groups[1].Value);
+            var groups = current.Elements<GroupShape>().ToList();
+            if (gi < 1 || gi > groups.Count)
+                throw new ArgumentException($"Group {gi} not found at depth {depth} (total: {groups.Count})");
+            current = groups[gi - 1];
+        }
+        var pics = current.Elements<Picture>().ToList();
         if (picIdx < 1 || picIdx > pics.Count)
-            throw new ArgumentException($"Picture {picIdx} not found in group {grpIdx} (total: {pics.Count})");
+            throw new ArgumentException($"Picture {picIdx} not found in group (total: {pics.Count})");
         return ApplyPicturePropertiesCore(slidePart, pics[picIdx - 1], properties);
     }
 

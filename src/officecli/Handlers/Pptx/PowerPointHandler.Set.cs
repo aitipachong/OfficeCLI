@@ -434,7 +434,9 @@ public partial class PowerPointHandler
         // effects (shadow/glow/brightness/contrast — schema add:false set:true)
         // as `set /slide[N]/group[K]/picture[M]`, so a grouped picture with any
         // such effect failed on replay. Route to the same picture-prop core.
-        var grpInnerPicMatch = Regex.Match(path, @"^/slide\[(\d+)\]/group\[(\d+)\]/(?:picture|pic)\[(\d+)\]$");
+        // Match any group depth — group 2 captures the full /group[..] chain so a
+        // picture in a nested group (group[3]/group[1]/picture[1]) also routes.
+        var grpInnerPicMatch = Regex.Match(path, @"^/slide\[(\d+)\]((?:/group\[\d+\])+)/(?:picture|pic)\[(\d+)\]$");
         if (grpInnerPicMatch.Success) return SetGroupInnerPictureByPath(grpInnerPicMatch, properties);
 
         // Try group path: /slide[N]/group[M]
