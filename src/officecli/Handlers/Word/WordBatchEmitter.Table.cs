@@ -685,7 +685,15 @@ public static partial class WordBatchEmitter
                         var cellEq = word.TryGetDisplayEquationAtParagraph(cc.Path);
                         if (cellEq != null)
                         {
-                            bool eqIsTrailingAutoP = k == trailingAutoP;
+                            // BUG-DUMP-CELLEQ-NESTEDTBL: match the plain-paragraph
+                            // trailing-auto-p test — an equation paragraph directly
+                            // after a nested table reuses the empty paragraph the
+                            // SDK seeds AFTER that table, exactly like a plain
+                            // paragraph does. The old test (k == trailingAutoP only)
+                            // missed the equation when it wasn't the cell's LAST
+                            // paragraph.
+                            bool eqIsTrailingAutoP = k == trailingAutoP
+                                || (k > 0 && cellChildren[k - 1].Type == "table");
                             // First cell paragraph (or the SDK auto-trailing one)
                             // reuses an auto-present seeded paragraph; otherwise
                             // create a fresh host paragraph for the equation.
@@ -696,8 +704,18 @@ public static partial class WordBatchEmitter
                                     Parent = cellTargetPath,
                                     Type = "paragraph",
                                 });
-                            EmitCellDisplayEquation(cellEq,
-                                $"{cellTargetPath}/p[{cellParaIdx}]", items);
+                            // When reusing the post-table trailing paragraph, target
+                            // p[last()] — NOT p[cellParaIdx]. For a [nested-table,
+                            // equation] cell, p[cellParaIdx] resolves to the cell's
+                            // leading outer-seed paragraph, which the nested-lead
+                            // `remove p[1]` then deletes, silently dropping the
+                            // equation. p[last()] is the seeded trailing paragraph
+                            // that survives (mirrors how a plain paragraph after a
+                            // nested table reuses it via set p[last()]).
+                            var eqTargetPath = eqIsTrailingAutoP
+                                ? $"{cellTargetPath}/p[last()]"
+                                : $"{cellTargetPath}/p[{cellParaIdx}]";
+                            EmitCellDisplayEquation(cellEq, eqTargetPath, items);
                             firstParaSeen = true;
                             continue;
                         }
