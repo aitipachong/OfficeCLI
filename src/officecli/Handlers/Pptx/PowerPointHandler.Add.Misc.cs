@@ -220,14 +220,23 @@ public partial class PowerPointHandler
                             // Short canonical names + OOXML full names. "line" is the
                             // bare primitive (preserves prst="line" verbatim) — distinct
                             // from "straight"/"straightConnector1" which carries the
-                            // canonical connector adjust list. bent/curved accept either
-                            // the 2-segment or 3-segment OOXML variant (PowerPoint maps
-                            // both to the same drawing primitive set).
+                            // canonical connector adjust list. The bent/curved families
+                            // each have FOUR segment-count variants (2..5); map every
+                            // OOXML name to its EXACT ShapeTypeValues so dump→replay keeps
+                            // the source variant (collapsing e.g. curvedConnector4→3 would
+                            // change the rendered bend). The friendly "elbow"/"curve"
+                            // aliases default to the most common 3-segment form.
                             "straight" or "straightconnector1" => Drawing.ShapeTypeValues.StraightConnector1,
                             "line" => Drawing.ShapeTypeValues.Line,
-                            "elbow" or "bentconnector3" or "bentconnector2" => Drawing.ShapeTypeValues.BentConnector3,
-                            "curve" or "curvedconnector3" or "curvedconnector2" => Drawing.ShapeTypeValues.CurvedConnector3,
-                            _ => throw new ArgumentException($"Invalid connector shape: '{properties.GetValueOrDefault("shape") ?? properties.GetValueOrDefault("preset", "straightConnector1")}'. Valid values: straight, elbow, curve, line (or OOXML full names: straightConnector1, bentConnector3, curvedConnector3).")
+                            "elbow" or "bentconnector3" => Drawing.ShapeTypeValues.BentConnector3,
+                            "bentconnector2" => Drawing.ShapeTypeValues.BentConnector2,
+                            "bentconnector4" => Drawing.ShapeTypeValues.BentConnector4,
+                            "bentconnector5" => Drawing.ShapeTypeValues.BentConnector5,
+                            "curve" or "curvedconnector3" => Drawing.ShapeTypeValues.CurvedConnector3,
+                            "curvedconnector2" => Drawing.ShapeTypeValues.CurvedConnector2,
+                            "curvedconnector4" => Drawing.ShapeTypeValues.CurvedConnector4,
+                            "curvedconnector5" => Drawing.ShapeTypeValues.CurvedConnector5,
+                            _ => throw new ArgumentException($"Invalid connector shape: '{properties.GetValueOrDefault("shape") ?? properties.GetValueOrDefault("preset", "straightConnector1")}'. Valid values: straight, elbow, curve, line (or OOXML full names: straightConnector1, bentConnector2-5, curvedConnector2-5).")
                         }
                     }
                 );
