@@ -1639,6 +1639,16 @@ public static partial class PptxBatchEmitter
             // refuses the file (0x80070570).
             if (sa.DrawingXml != null) saProps["drawingXml"] = CanonDiagramXml(sa.DrawingXml);
             if (sa.DrawingRelId != null) saProps["drawingRelId"] = sa.DrawingRelId;
+            // Pictures embedded in the diagram: the data part and the DSP drawing
+            // part each reference them via their own .rels with <a:blip r:embed>.
+            // Carry the bytes + pinned rIds so replay re-attaches them to the
+            // freshly-created diagram parts — otherwise the r:embed dangles and
+            // PowerPoint refuses the whole deck (0x80070570). Flat numbered keys
+            // (dataImage{k}.rid/.ct/.data) — the batch props dictionary is
+            // string→string and the app's JSON layer is source-gen only (no
+            // reflection serialization for a nested image list).
+            EmitDiagramImageProps(saProps, "dataImage", sa.DataImages);
+            EmitDiagramImageProps(saProps, "drawingImage", sa.DrawingImages);
             items.Add(new BatchItem
             {
                 Command = "add-part",
@@ -1676,6 +1686,21 @@ public static partial class PptxBatchEmitter
     // Round-trip byte-stability holds because the rebuilt part is read back
     // via the same OuterXml path, yielding identical bytes on the next pass.
     private static string CanonDiagramXml(string partXml) => partXml;
+
+    // Flatten a diagram part's referenced images into numbered string props the
+    // add-part smartart handler reads back (see AttachDiagramImages). Keys:
+    // {prefix}{k}.rid / .ct / .data.
+    private static void EmitDiagramImageProps(
+        Dictionary<string, string> props, string prefix,
+        IReadOnlyList<PowerPointHandler.MasterImageInfo> images)
+    {
+        for (int k = 0; k < images.Count; k++)
+        {
+            props[$"{prefix}{k}.rid"] = images[k].RelId;
+            props[$"{prefix}{k}.ct"] = images[k].ContentType;
+            props[$"{prefix}{k}.data"] = images[k].Base64Data;
+        }
+    }
 
     // R48: slide-level <p:bg> raw passthrough. The bg slot sits inside
     // <p:cSld> BEFORE <p:spTree>, so the standard append-on-/p:sld helper

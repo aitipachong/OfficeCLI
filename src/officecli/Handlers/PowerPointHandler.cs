@@ -714,6 +714,9 @@ public partial class PowerPointHandler : IDocumentHandler
                     new DocumentFormat.OpenXml.Drawing.Diagrams.DataModelRoot(
                         new DocumentFormat.OpenXml.Drawing.Diagrams.PointList(),
                         new DocumentFormat.OpenXml.Drawing.Diagrams.ConnectionList()));
+                // Pictures embedded in the diagram are referenced from the data
+                // part's own .rels; re-attach them with pinned rIds.
+                AttachDiagramImages(dataPart, properties, "dataImage");
                 WriteDiagramPartXml(layoutPart, layoutXml,
                     () => new DocumentFormat.OpenXml.Drawing.Diagrams.LayoutDefinition());
                 WriteDiagramPartXml(colorsPart, colorsXml,
@@ -738,6 +741,9 @@ public partial class PowerPointHandler : IDocumentHandler
                     // signature.
                     WriteDiagramPartXml(drawingPart, drawingXml,
                         () => new DocumentFormat.OpenXml.Drawing.Diagrams.DataModelRoot());
+                    // The DSP cached drawing re-references the same pictures for
+                    // rendering via its own .rels; re-attach with pinned rIds.
+                    AttachDiagramImages(drawingPart, properties, "drawingImage");
                 }
 
                 // Encode all four rIds in the RelId field — callers (batch
@@ -1623,6 +1629,33 @@ public partial class PowerPointHandler : IDocumentHandler
         seed.WriteTo(xw);
     }
 
+    // Re-attach the pictures a diagram data / drawing part references via its own
+    // .rels. The emitter flattens GetSmartArtsOnSlide's DataImages/DrawingImages
+    // into numbered props ({prefix}{k}.rid/.ct/.data); replay recreates each
+    // ImagePart on the host with the SOURCE rId pinned, so the part XML's
+    // <a:blip r:embed="rIdN"> resolves instead of dangling (which otherwise makes
+    // PowerPoint refuse the deck). No-op when no props with the prefix are present.
+    private static void AttachDiagramImages(OpenXmlPart host, Dictionary<string, string>? properties, string prefix)
+    {
+        if (properties == null) return;
+        for (int k = 0; ; k++)
+        {
+            if (!properties.TryGetValue($"{prefix}{k}.rid", out var rid) || string.IsNullOrEmpty(rid))
+                break;
+            properties.TryGetValue($"{prefix}{k}.ct", out var ct);
+            properties.TryGetValue($"{prefix}{k}.data", out var b64);
+            if (string.IsNullOrEmpty(b64)) continue;
+            if (host.Parts.Any(p => p.RelationshipId == rid)) continue; // idempotent
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(b64); }
+            catch { continue; }
+            var imgPart = host.AddNewPart<ImagePart>(
+                string.IsNullOrEmpty(ct) ? "image/png" : ct, rid);
+            using var ms = new MemoryStream(bytes);
+            imgPart.FeedData(ms);
+        }
+    }
+
     public List<ValidationError> Validate() => RawXmlHelper.ValidateDocument(_doc, _filePath);
 
     public void Save()
@@ -2026,7 +2059,31 @@ public partial class PowerPointHandler : IDocumentHandler
         string ColorsXml,
         string QuickStyleXml,
         string? DrawingXml,
-        string? DrawingRelId);
+        string? DrawingRelId,
+        // Images referenced by the data part and the DSP drawing part via their
+        // OWN .rels (picture-in-diagram blipFills). Both parts are recreated
+        // empty by add-part smartart, so without re-attaching these ImageParts
+        // with pinned rIds their r:embed references dangle and PowerPoint refuses
+        // the deck (0x80070570). Empty when the SmartArt carries no pictures.
+        IReadOnlyList<MasterImageInfo> DataImages,
+        IReadOnlyList<MasterImageInfo> DrawingImages);
+
+    // Enumerate the ImageParts directly attached to a part (its own .rels),
+    // surfaced as (rId, content-type, base64). Mirrors GetMasterImageParts but
+    // for any OpenXmlPartContainer host (diagram data / drawing parts).
+    private static IReadOnlyList<MasterImageInfo> ReadImagePartsOf(OpenXmlPart host)
+    {
+        var result = new List<MasterImageInfo>();
+        foreach (var idp in host.Parts)
+        {
+            if (idp.OpenXmlPart is not ImagePart img) continue;
+            using var s = img.GetStream(FileMode.Open, FileAccess.Read);
+            using var ms = new MemoryStream();
+            s.CopyTo(ms);
+            result.Add(new MasterImageInfo(idp.RelationshipId, img.ContentType, Convert.ToBase64String(ms.ToArray())));
+        }
+        return result;
+    }
 
     internal IReadOnlyList<SmartArtInfo> GetSmartArtsOnSlide(int slideIdx)
     {
@@ -2087,10 +2144,15 @@ public partial class PowerPointHandler : IDocumentHandler
             // drawing XML + the relId. Leave both null when absent (older /
             // simpler SmartArt without a cached drawing) → keep behavior.
             string? drawingXml = null, drawingRelId = null;
+            IReadOnlyList<MasterImageInfo> dataImages = Array.Empty<MasterImageInfo>();
+            IReadOnlyList<MasterImageInfo> drawingImages = Array.Empty<MasterImageInfo>();
             try
             {
                 if (slidePart.GetPartById(dRid) is DiagramDataPart ddp)
                 {
+                    // Pictures embedded in the diagram (point-level blipFills)
+                    // live as ImageParts on the data part's own .rels.
+                    try { dataImages = ReadImagePartsOf(ddp); } catch { }
                     const string dspNs = "http://schemas.microsoft.com/office/drawing/2008/diagram";
                     var ext = ddp.DataModelRoot?.Descendants().FirstOrDefault(e =>
                         e.LocalName == "dataModelExt" && e.NamespaceUri == dspNs);
@@ -2105,6 +2167,9 @@ public partial class PowerPointHandler : IDocumentHandler
                         {
                             if (slidePart.GetPartById(drawingRelId) is DiagramPersistLayoutPart drawingPart)
                             {
+                                // The DSP cached drawing re-references the same
+                                // pictures for rendering via its own .rels.
+                                try { drawingImages = ReadImagePartsOf(drawingPart); } catch { }
                                 using var s = drawingPart.GetStream(FileMode.Open, FileAccess.Read);
                                 using var r = new StreamReader(s);
                                 drawingXml = r.ReadToEnd();
@@ -2131,7 +2196,8 @@ public partial class PowerPointHandler : IDocumentHandler
                 GraphicFrameXml: gf.OuterXml,
                 DataRelId: dRid, LayoutRelId: lRid, ColorsRelId: cRid, QuickStyleRelId: qRid,
                 DataXml: dXml, LayoutXml: lXml, ColorsXml: cXml, QuickStyleXml: qXml,
-                DrawingXml: drawingXml, DrawingRelId: drawingRelId));
+                DrawingXml: drawingXml, DrawingRelId: drawingRelId,
+                DataImages: dataImages, DrawingImages: drawingImages));
         }
         return result;
     }
