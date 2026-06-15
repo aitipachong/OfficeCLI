@@ -154,7 +154,8 @@ public static partial class WordBatchEmitter
     // and real Word refused to open the file. Dropping the pointer is lossless
     // (Word falls back to the Normal template). Same family as <w:mailMerge>'s
     // data-source r:id etc.; remove the whole referencing element.
-    private static string StripDanglingNoteSeparatorRefs(string settingsXml)
+    private static string StripDanglingNoteSeparatorRefs(
+        string settingsXml, bool keepFootnoteSeps, bool keepEndnoteSeps)
     {
         if (string.IsNullOrEmpty(settingsXml) || !settingsXml.StartsWith("<")) return settingsXml;
         // Fast path: nothing to strip unless a note-properties block or a
@@ -169,11 +170,31 @@ public static partial class WordBatchEmitter
             var wNs = (System.Xml.Linq.XNamespace)"http://schemas.openxmlformats.org/wordprocessingml/2006/main";
             var rNs = (System.Xml.Linq.XNamespace)"http://schemas.openxmlformats.org/officeDocument/2006/relationships";
             var removed = false;
-            foreach (var pr in doc.Descendants(wNs + "footnotePr")
-                         .Concat(doc.Descendants(wNs + "endnotePr")).ToList())
+            // BUG-DUMP-R57-NOTESEP: keep the separator / continuationSeparator
+            // refs (<w:footnote w:id="-1"/>, <w:footnote w:id="0"/>) when the
+            // document has body-referenced notes — then `add footnote`/`add
+            // endnote` recreates the notes part WITH those separators (ids -1/0),
+            // so the refs resolve. Dropping them made Word fall back to the
+            // DEFAULT separator, whose height differs from the source's custom
+            // one; on a footnote-dense page that shifted the body text area
+            // enough to flip a page break and cascade a multi-page reflow. Strip
+            // only when the part won't be recreated (no body notes of that kind),
+            // matching the original dangling-ref protection. footnotePr children
+            // only ever reference the -1/0 separators (never body notes), so a
+            // kept ref is always valid once the part exists.
+            foreach (var pr in doc.Descendants(wNs + "footnotePr").ToList())
             {
-                foreach (var sep in pr.Elements(wNs + "footnote")
-                             .Concat(pr.Elements(wNs + "endnote")).ToList())
+                if (keepFootnoteSeps) continue;
+                foreach (var sep in pr.Elements(wNs + "footnote").ToList())
+                {
+                    sep.Remove();
+                    removed = true;
+                }
+            }
+            foreach (var pr in doc.Descendants(wNs + "endnotePr").ToList())
+            {
+                if (keepEndnoteSeps) continue;
+                foreach (var sep in pr.Elements(wNs + "endnote").ToList())
                 {
                     sep.Remove();
                     removed = true;
@@ -519,7 +540,16 @@ public static partial class WordBatchEmitter
         xml = CanonicalizeRawXml(xml);
         if (string.IsNullOrEmpty(xml) || !xml.StartsWith("<"))
             xml = "<w:settings xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" />";
-        xml = StripDanglingNoteSeparatorRefs(xml);
+        // BUG-DUMP-R57-NOTESEP: body-referenced notes mean the corresponding
+        // notes part (with its -1/0 separators) is recreated on replay, so the
+        // settings separator refs resolve and must be preserved (dropping them
+        // changed the rendered separator height and reflowed footnote-dense
+        // pages). Query filters out the reserved -1/0 separators, so a non-empty
+        // result means real body notes exist.
+        bool hasBodyFootnotes = false, hasBodyEndnotes = false;
+        try { hasBodyFootnotes = word.Query("footnote").Count > 0; } catch { }
+        try { hasBodyEndnotes = word.Query("endnote").Count > 0; } catch { }
+        xml = StripDanglingNoteSeparatorRefs(xml, hasBodyFootnotes, hasBodyEndnotes);
 
         items.Add(new BatchItem
         {
