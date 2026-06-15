@@ -1585,10 +1585,15 @@ public partial class PowerPointHandler : IDocumentHandler
                     throw new ArgumentException(
                         "add-part extpart: parent must be /slide[N], /slideLayout[N], or /slideMaster[N]");
 
-                // Idempotent — if the rId is already taken on the host, skip.
-                if (epHost.Parts.Any(p => p.RelationshipId == epRid)
-                    || epHost.ExternalRelationships.Any(r => r.Id == epRid))
+                // External/hyperlink-rel collision: keep the idempotent skip (can't
+                // re-home a non-part relationship). Part collision (scaffold layout
+                // rel occupying rId3..rId5 on the master): re-home it so the pinned
+                // id is free — otherwise the extpart silently skips and the hdphoto
+                // r:embed dangles. Mirrors the add-part image collision path.
+                if (epHost.ExternalRelationships.Any(r => r.Id == epRid)
+                    || epHost.HyperlinkRelationships.Any(r => r.Id == epRid))
                     return (epRid, parentPartPath);
+                ReHomeCollidingRel(epHost, epRid);
                 var epPart = epHost.AddExtendedPart(epRelType, epContentType, epExt, epRid);
                 using (var epStream = new MemoryStream(epBytes))
                     epPart.FeedData(epStream);
@@ -1682,6 +1687,35 @@ public partial class PowerPointHandler : IDocumentHandler
     // canonicalised, and — crucially — lands the content regardless of the
     // SDK's part-naming base (the parts land under /ppt/graphics/, not the
     // source's /ppt/diagrams/, so a URI-targeted raw-set could not reach them).
+    // Free a pinned relationship id on a host by re-homing whatever part
+    // currently occupies it onto a fresh id. The blank scaffold ships a master
+    // with rId1..rId5 = slideLayouts, so pinning a source image / extended-part
+    // rId that lands in that range collides; without re-homing, an add-part that
+    // idempotent-skips on collision silently fails to create the part and its
+    // r:embed dangles. For a scaffold SlideLayoutPart occupant we also repoint
+    // the master's sldLayoutIdLst entry so the re-homed layout stays declared.
+    // Mirrors the inline re-home in the add-part image case.
+    private static void ReHomeCollidingRel(OpenXmlPartContainer host, string pinnedRid)
+    {
+        if (string.IsNullOrEmpty(pinnedRid)) return;
+        var occupant = host.Parts.FirstOrDefault(p => p.RelationshipId == pinnedRid);
+        if (occupant.OpenXmlPart == null) return;
+        var newRid = "Rreh" + Guid.NewGuid().ToString("N").Substring(0, 12);
+        host.ChangeIdOfPart(occupant.OpenXmlPart, newRid);
+        if (host is SlideMasterPart smHost && smHost.SlideMaster?.SlideLayoutIdList != null)
+        {
+            foreach (var lid in smHost.SlideMaster.SlideLayoutIdList.Elements<SlideLayoutId>())
+            {
+                if (lid.RelationshipId?.Value == pinnedRid)
+                {
+                    lid.RelationshipId = newRid;
+                    smHost.SlideMaster.Save();
+                    break;
+                }
+            }
+        }
+    }
+
     private static void WriteDiagramPartXml(
         OpenXmlPart part, string? xml, Func<OpenXmlElement> seedFactory)
     {
