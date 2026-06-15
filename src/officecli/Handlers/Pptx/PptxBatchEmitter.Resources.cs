@@ -227,6 +227,31 @@ public static partial class PptxBatchEmitter
             catch { /* best-effort */ }
         }
 
+        // Non-image binary parts (HD Photo .wdp backup layer referenced by a
+        // master-level picture's <a14:imgLayer r:embed>). GetMasterImageParts
+        // above only carries typed ImageParts; the ExtendedPart would dangle.
+        try
+        {
+            foreach (var comp in ppt.GetMasterExtendedParts(idx))
+            {
+                items.Add(new BatchItem
+                {
+                    Command = "add-part",
+                    Parent = $"/slideMaster[{idx}]",
+                    Type = "extpart",
+                    Props = new Dictionary<string, string>
+                    {
+                        ["rid"] = comp.RelId,
+                        ["rel-type"] = comp.RelType,
+                        ["content-type"] = comp.ContentType,
+                        ["ext"] = comp.TargetExt,
+                        ["data"] = comp.Base64Data,
+                    },
+                });
+            }
+        }
+        catch { /* best-effort */ }
+
         // UserDefinedTags parts referenced by the master XML's
         // <p:custDataLst><p:tags r:id="rIdN"/> — same dangling-rel hazard as the
         // layout carrier above. Pin each id + verbatim tag XML before the raw-set.
@@ -314,6 +339,31 @@ public static partial class PptxBatchEmitter
                     {
                         ["rid"] = relId,
                         ["target"] = target,
+                    },
+                });
+            }
+        }
+        catch { /* best-effort */ }
+
+        // Non-image binary parts (HD Photo .wdp layer referenced by a
+        // layout-level picture's <a14:imgLayer r:embed>) — same as the master
+        // ExtendedPart carrier; GetLayoutImageParts covers only typed ImageParts.
+        try
+        {
+            foreach (var comp in ppt.GetLayoutExtendedParts(idx))
+            {
+                items.Add(new BatchItem
+                {
+                    Command = "add-part",
+                    Parent = $"/slideLayout[{idx}]",
+                    Type = "extpart",
+                    Props = new Dictionary<string, string>
+                    {
+                        ["rid"] = comp.RelId,
+                        ["rel-type"] = comp.RelType,
+                        ["content-type"] = comp.ContentType,
+                        ["ext"] = comp.TargetExt,
+                        ["data"] = comp.Base64Data,
                     },
                 });
             }

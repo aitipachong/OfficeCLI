@@ -1947,6 +1947,53 @@ public partial class PowerPointHandler : IDocumentHandler
     }
 
     /// <summary>
+    /// Non-image binary parts (ExtendedParts) directly attached to a slideMaster
+    /// — chiefly the HD Photo (.wdp) backup layer a master-level decorative
+    /// picture references via <c>&lt;a14:imgLayer r:embed&gt;</c>. The master XML
+    /// is raw-set verbatim (keeping the source rId), and GetMasterImageParts only
+    /// re-creates typed ImageParts, so an hdphoto ExtendedPart was dropped and its
+    /// r:embed dangled. Surfaced as companion infos (rId + rel-type + content-type
+    /// + ext + bytes) so the emitter pins each via add-part extpart, preserving
+    /// the original relationship type. Empty when the master has no such parts.
+    /// </summary>
+    internal IReadOnlyList<BlipCompanionInfo> GetMasterExtendedParts(int masterIdx)
+    {
+        var pp = _doc.PresentationPart;
+        if (pp == null) return Array.Empty<BlipCompanionInfo>();
+        var masters = pp.SlideMasterParts.ToList();
+        if (masterIdx < 1 || masterIdx > masters.Count) return Array.Empty<BlipCompanionInfo>();
+        return ReadExtendedPartInfos(masters[masterIdx - 1]);
+    }
+
+    /// <summary>Same as <see cref="GetMasterExtendedParts"/> for slideLayouts.</summary>
+    internal IReadOnlyList<BlipCompanionInfo> GetLayoutExtendedParts(int layoutIdx)
+    {
+        var pp = _doc.PresentationPart;
+        if (pp == null) return Array.Empty<BlipCompanionInfo>();
+        var layouts = pp.SlideMasterParts.SelectMany(m => m.SlideLayoutParts).ToList();
+        if (layoutIdx < 1 || layoutIdx > layouts.Count) return Array.Empty<BlipCompanionInfo>();
+        return ReadExtendedPartInfos(layouts[layoutIdx - 1]);
+    }
+
+    private static IReadOnlyList<BlipCompanionInfo> ReadExtendedPartInfos(OpenXmlPart host)
+    {
+        var result = new List<BlipCompanionInfo>();
+        foreach (var idp in host.Parts)
+        {
+            if (idp.OpenXmlPart is not ExtendedPart ep) continue;
+            using var s = ep.GetStream(FileMode.Open, FileAccess.Read);
+            using var ms = new MemoryStream();
+            s.CopyTo(ms);
+            var ext = System.IO.Path.GetExtension(ep.Uri.OriginalString);
+            if (string.IsNullOrEmpty(ext)) ext = ".bin";
+            result.Add(new BlipCompanionInfo(
+                idp.RelationshipId, ep.RelationshipType, ep.ContentType, ext,
+                Convert.ToBase64String(ms.ToArray())));
+        }
+        return result;
+    }
+
+    /// <summary>
     /// External (TargetMode="External") hyperlink relationships on a slideLayout.
     /// The layout XML is replayed via raw-set carrying <c>&lt;a:hlinkClick r:id="rIdN"/&gt;</c>,
     /// but the referenced relationship is external (a URL, not an embedded part),
