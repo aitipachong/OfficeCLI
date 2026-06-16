@@ -17,6 +17,12 @@ public static partial class WordBatchEmitter
     private static readonly HashSet<string> FieldResultFormatKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "bold", "italic", "color", "size", "font", "font.latin", "font.ascii", "font.hAnsi",
+        // BUG-DUMP-FIELDHINT: rFonts w:hint (eastAsia / cs) on the cached result
+        // run. Numbered-list fields ( = N \* GB3 → ①②③) carry a hint-only
+        // <w:rFonts w:hint="eastAsia"/> with no face. Dropping it renders the
+        // circled numerals in the Latin face → narrower glyphs → cell text
+        // rewraps → atLeast rows grow → long tables flip pages and reflow.
+        "font.hint",
         // Theme-bound slots: a header/footer PAGE field whose runs bind the
         // theme face (minorHAnsi) must keep the binding, or the page number
         // falls back to the docDefaults font and the footer line height
@@ -41,6 +47,9 @@ public static partial class WordBatchEmitter
     {
         "bold", "color", "size", "font", "font.latin", "font.ascii", "font.hAnsi",
         "font.asciiTheme", "font.hAnsiTheme", "font.eaTheme", "font.csTheme",
+        // BUG-DUMP-FIELDHINT: AddField applies font.hint via the per-slot loop,
+        // so a hint-only result run round-trips through the typed `add field`.
+        "font.hint",
         // BUG-DUMP-FIELDVALIGN: AddField applies vertAlign (superscript /
         // subscript) uniformly to every rebuilt field run, so these are
         // losslessly expressible through the typed `add field` path.

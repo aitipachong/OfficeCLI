@@ -2109,8 +2109,16 @@ public static partial class WordBatchEmitter
                     unsupportedFmt.Add(bare);
                     continue;
                 }
-                // Map font.latin/font.ascii/font.hAnsi onto AddField's `font`.
-                var target = bare.StartsWith("font.", StringComparison.OrdinalIgnoreCase) ? "font" : bare;
+                // Map the literal face slots (font.latin/font.ascii/font.hAnsi)
+                // onto AddField's uniform `font`. BUG-DUMP-FIELDHINT: font.hint is
+                // NOT a face — it's the rFonts hint attribute; collapsing it wrote
+                // a bogus font="eastAsia" face and dropped the hint, so the cached
+                // result glyph (a GB3 ①②③) re-rendered in the Latin face and the
+                // cell reflowed. Pass it through so AddField's per-slot loop applies
+                // it via ApplyRunFormatting (RunFonts.Hint).
+                var target = bare.Equals("font.hint", StringComparison.OrdinalIgnoreCase)
+                    ? "font.hint"
+                    : (bare.StartsWith("font.", StringComparison.OrdinalIgnoreCase) ? "font" : bare);
                 if (!fieldProps.ContainsKey(target))
                 {
                     var s = v switch { bool b => b ? "true" : "false", _ => v.ToString() ?? "" };

@@ -1399,6 +1399,9 @@ public partial class WordHandler
         {
             "font.latin", "font.ascii", "font.hAnsi",
             "font.asciiTheme", "font.hAnsiTheme", "font.eaTheme", "font.csTheme",
+            // BUG-DUMP-FIELDHINT: rFonts w:hint on a cached result run. Applied
+            // via ApplyRunFormatting (writes RunFonts.Hint in CT_RPr order).
+            "font.hint",
         };
         bool hasFieldFontSlot = fieldFontSlotKeys.Any(k => properties.ContainsKey(k));
         RunProperties? fieldRProps = null;
