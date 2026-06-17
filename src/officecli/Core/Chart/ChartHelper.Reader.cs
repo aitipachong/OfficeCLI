@@ -243,15 +243,15 @@ internal static partial class ChartHelper
         // (c:barChart, c:lineChart, ...). Using Descendants pulled the first
         // series-level <c:dLbls> instead when it appeared earlier in XML order,
         // causing chart-level labelFont readback to mirror series 1's font.
-        var dataLabels = plotArea.ChildElements
+        var labelGroup = plotArea.ChildElements
             .OfType<OpenXmlCompositeElement>()
             .Where(e => e is C.BarChart || e is C.LineChart || e is C.PieChart
                 || e is C.AreaChart || e is C.Area3DChart || e is C.ScatterChart
                 || e is C.DoughnutChart || e is C.Bar3DChart || e is C.Line3DChart
                 || e is C.Pie3DChart || e is C.OfPieChart || e is C.BubbleChart
                 || e is C.RadarChart || e is C.StockChart)
-            .Select(g => g.GetFirstChild<C.DataLabels>())
-            .FirstOrDefault(d => d != null);
+            .FirstOrDefault(g => g.GetFirstChild<C.DataLabels>() != null);
+        var dataLabels = labelGroup?.GetFirstChild<C.DataLabels>();
         if (dataLabels != null)
         {
             var parts = new List<string>();
@@ -270,7 +270,19 @@ internal static partial class ChartHelper
                 // up with our canonical-value rule (Get returns truth, Set
                 // accepts friendly aliases). Friendly forms like "insideEnd"
                 // remain accepted on the Set side via the alias map.
-                node.Format["labelPos"] = dlPos.InnerText;
+                //
+                // ST_DLblPosPie restricts pie/pie3D to {bestFit, ctr, inEnd,
+                // inBase}. A pie chart can still carry a stored outEnd/t/b/l/r
+                // (Word silently treats it as bestFit), but emitting that value
+                // would make a dump→batch replay reject the whole `add chart`
+                // op and drop the chart. Suppress the invalid-for-pie value on
+                // dump so the chart round-trips; the position is non-semantic
+                // for pie anyway.
+                var posText = dlPos.InnerText;
+                var isPieGroup = labelGroup is C.PieChart or C.Pie3DChart;
+                var pieValid = posText is "bestFit" or "ctr" or "inEnd" or "inBase";
+                if (!isPieGroup || pieValid)
+                    node.Format["labelPos"] = posText;
             }
         }
 
