@@ -70,10 +70,32 @@ public partial class PowerPointHandler
             // of a text body (the line sits flush at the body's top inset), so we
             // suppress the margin-top contribution for that paragraph only;
             // subsequent paragraphs keep their spaceBefore.
-            var sbPts = pProps?.GetFirstChild<Drawing.SpaceBefore>()?.GetFirstChild<Drawing.SpacingPoints>()?.Val?.Value;
+            // Effective font size (hundredths of a point) for percent-based
+            // spacing: spcPct expresses the gap as a percentage of the line's
+            // font size (300000 = 300%). Mirror the bullet-size resolution
+            // chain (first run size > placeholder/default > 18pt body default).
+            var spcFontHundredths = para.Elements<Drawing.Run>().FirstOrDefault()?.RunProperties?.FontSize?.Value
+                ?? defaultFontSizeHundredths ?? 1800;
+            var sbElem = pProps?.GetFirstChild<Drawing.SpaceBefore>();
+            var sbPts = sbElem?.GetFirstChild<Drawing.SpacingPoints>()?.Val?.Value;
             if (sbPts.HasValue && !isFirstPara) paraStyles.Add($"margin-top:{sbPts.Value / 100.0:0.##}pt");
-            var saPts = pProps?.GetFirstChild<Drawing.SpaceAfter>()?.GetFirstChild<Drawing.SpacingPoints>()?.Val?.Value;
+            else
+            {
+                // SpacingPercent fallback (parity with lineSpacing below). pct
+                // is /100000; multiply by the effective font pt to get the gap.
+                var sbPct = sbElem?.GetFirstChild<Drawing.SpacingPercent>()?.Val?.Value;
+                if (sbPct.HasValue && !isFirstPara)
+                    paraStyles.Add($"margin-top:{sbPct.Value / 100000.0 * (spcFontHundredths / 100.0):0.##}pt");
+            }
+            var saElem = pProps?.GetFirstChild<Drawing.SpaceAfter>();
+            var saPts = saElem?.GetFirstChild<Drawing.SpacingPoints>()?.Val?.Value;
             if (saPts.HasValue) paraStyles.Add($"margin-bottom:{saPts.Value / 100.0:0.##}pt");
+            else
+            {
+                var saPct = saElem?.GetFirstChild<Drawing.SpacingPercent>()?.Val?.Value;
+                if (saPct.HasValue)
+                    paraStyles.Add($"margin-bottom:{saPct.Value / 100000.0 * (spcFontHundredths / 100.0):0.##}pt");
+            }
 
             // Line spacing
             var lsPct = pProps?.GetFirstChild<Drawing.LineSpacing>()?.GetFirstChild<Drawing.SpacingPercent>()?.Val?.Value;
