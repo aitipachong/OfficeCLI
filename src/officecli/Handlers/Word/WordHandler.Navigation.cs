@@ -3927,6 +3927,15 @@ public partial class WordHandler
                     node.Format["sectionBreak.type"] = sectMark;
                 if (!inlineSectPr.HasChildren)
                     node.Format["sectionBreak.empty"] = true;
+                // BUG-DUMP-SECT-TYPEINJECT: a sectPr WITH children (pgSz/docGrid/
+                // …) but NO <w:type> deferred the break kind to the OOXML default
+                // (nextPage). The `empty` flag above only covers a fully childless
+                // sectPr, so this non-empty/no-type case fell through and AddSection
+                // default-stamped <w:type w:val="nextPage"/> — an explicit section
+                // page break the source never had (+1 page). Signal it so the
+                // emitter forwards `notype=true` and AddSection skips the stamp.
+                else if (sectMark == null)
+                    node.Format["sectionBreak.notype"] = true;
 
                 // Per-section page layout when overridden on this break.
                 // Emit native OOXML twips (bare integers) rather than the

@@ -90,6 +90,19 @@ public partial class WordHandler
         // geometry forwards those keys and takes the normal path below.
         bool bareSection = properties.TryGetValue("empty", out var emptyFlag) && IsTruthy(emptyFlag);
 
+        // BUG-DUMP-SECT-TYPEINJECT: a source sectPr that OMITTED <w:type>
+        // (deferring to the OOXML default, nextPage) must round-trip WITHOUT
+        // one — fabricating <w:type w:val="nextPage"/> turns an implicit break
+        // into an EXPLICIT section page break that Word honors as a hard page
+        // boundary → +1 page (NAR1 27→28). The `empty` flag only covered a
+        // fully childless sectPr; a sectPr with geometry (pgSz/docGrid) but no
+        // <w:type> fell through to the default-stamp. The dump signals this with
+        // an explicit `notype=true` (emitted ONLY when the source sectPr had
+        // children but no <w:type>); on that signal we skip the stamp. An
+        // INTERACTIVE `add section` (no notype flag) keeps the default-stamp so
+        // the break renders — that path relies on the explicit <w:type>.
+        bool noType = properties.TryGetValue("notype", out var noTypeFlag) && IsTruthy(noTypeFlag);
+
         // Section break: adds SectionProperties to the last paragraph before the break point
         var breakType = properties.GetValueOrDefault("type", "nextPage").ToLowerInvariant();
         var sectType = breakType switch
@@ -118,7 +131,7 @@ public partial class WordHandler
         // section — the source had no <w:type> and fabricating one (the OOXML
         // default is nextPage, so omitting it is equivalent) breaks faithful
         // round-trip. A non-bare section always stamps the type.
-        if (!bareSection)
+        if (!bareSection && !noType)
             InsertSectPrChildInOrder(sectPr, new SectionType { Val = sectType });
 
         // Ensure body-level sectPr has pgSz/pgMar (fix for docs created by older versions)
