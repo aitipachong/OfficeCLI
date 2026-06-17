@@ -336,6 +336,17 @@ public partial class WordHandler
                 $"Form field name '{name}' contains whitespace or quote/@ chars " +
                 "that prevent later addressing via bare attribute selectors. " +
                 "Use only letters, digits, '.', '_', '-' in form field names.");
+        // BUG-DUMP-FFCHECKBOX-BOOKMARK: a form field's wrapping bookmark is
+        // OPTIONAL — Word wraps a field in a same-name bookmark so REF fields can
+        // target it, but a plain FORMCHECKBOX/FORMTEXT authored without that wrap
+        // has none. The dump→batch round-trip pins noBookmark=true when the
+        // SOURCE field had no surrounding bookmark; honour it so we don't
+        // fabricate one (a 54-checkbox grid was gaining 54 Check1/Check1_N
+        // bookmarks, altering the cell content and nudging table row heights →
+        // page reflow). A typed `add formfield` with no noBookmark pin still gets
+        // the wrapper (the historical default, needed for fillability/REF).
+        var emitBookmark = !(properties.TryGetValue("nobookmark", out var nbVal)
+            && ParseHelpers.IsTruthy(nbVal));
         // Word permits multiple form fields to share an ffData NAME (a form with
         // five "Check1" checkboxes is legal and common), so a hard reject broke
         // dump→batch round-trip of any such document. BUT the BOOKMARK that wraps
@@ -348,7 +359,7 @@ public partial class WordHandler
         // the wrapping bookmark a unique name on collision (Word does the same —
         // only the first such field keeps the bare name).
         var bookmarkName = name;
-        if (body.Descendants<BookmarkStart>()
+        if (emitBookmark && body.Descendants<BookmarkStart>()
                 .Any(b => string.Equals(b.Name?.Value, bookmarkName, StringComparison.Ordinal)))
         {
             int bmSuffix = 1;
@@ -369,9 +380,19 @@ public partial class WordHandler
             .Select(b => int.TryParse(b.Id?.Value, out var id) ? id : 0);
         var bkId = (existingIds.Any() ? existingIds.Max() + 1 : 1).ToString();
 
-        // BookmarkStart
-        var bookmarkStart = new BookmarkStart { Id = bkId, Name = bookmarkName };
-        para.AppendChild(bookmarkStart);
+        // Child-element count BEFORE this field's elements are appended. The
+        // appended count varies (bookmark wrapper optional, result run optional),
+        // so the --index re-thread below snapshots from here instead of assuming
+        // a fixed 7. BUG-DUMP-FFCHECKBOX-BOOKMARK made the count drop by 2.
+        var preAppendChildCount = para.ChildElements.Count;
+
+        // BookmarkStart — only when the field is wrapped in a bookmark (see
+        // emitBookmark / BUG-DUMP-FFCHECKBOX-BOOKMARK above).
+        if (emitBookmark)
+        {
+            var bookmarkStart = new BookmarkStart { Id = bkId, Name = bookmarkName };
+            para.AppendChild(bookmarkStart);
+        }
 
         // Begin run with FieldChar(Begin) + FormFieldData
         var beginRun = new Run();
@@ -624,23 +645,28 @@ public partial class WordHandler
             }
         }
 
-        // BookmarkEnd
-        var bookmarkEnd = new BookmarkEnd { Id = bkId };
-        para.AppendChild(bookmarkEnd);
+        // BookmarkEnd — paired with the BookmarkStart above; skipped together
+        // when the source field had no wrapping bookmark.
+        if (emitBookmark)
+        {
+            var bookmarkEnd = new BookmarkEnd { Id = bkId };
+            para.AppendChild(bookmarkEnd);
+        }
 
         // CONSISTENCY(add-index): honor --index / --after / --before (#76).
-        // When an anchor/index was supplied, re-thread the 7 appended elements
+        // When an anchor/index was supplied, re-thread the appended elements
         // into the requested child-element position. Simpler than restructuring
         // the construction path above.
         if (index.HasValue)
         {
-            // Snapshot: the 7 elements we just appended, in order.
+            // Snapshot: every element appended after preAppendChildCount, in
+            // order (count varies — optional bookmark wrapper / result run).
+            var appendedCount = para.ChildElements.Count - preAppendChildCount;
             var ffElements = para.ChildElements
-                .Reverse().Take(7).Reverse().ToList();
+                .Reverse().Take(appendedCount).Reverse().ToList();
             // The anchor position was computed against the children BEFORE we
-            // appended the 7 elements. Subtract those 7 from the current count
-            // to get the original anchor child.
-            var origChildCount = para.ChildElements.Count - ffElements.Count;
+            // appended these elements.
+            var origChildCount = preAppendChildCount;
             if (index.Value < origChildCount)
             {
                 var anchor = para.ChildElements[index.Value];

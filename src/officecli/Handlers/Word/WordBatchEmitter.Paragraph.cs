@@ -125,8 +125,10 @@ public static partial class WordBatchEmitter
         // value as static text — PAGE/REF/SEQ/HYPERLINK/NUMPAGES degrade to
         // their evaluated string and stop auto-updating (BUG-X2-05 / X2-1).
         var fieldEntries = CollapseFieldChains(pNode.Children ?? new List<DocumentNode>());
-        // R14-bug1+2: each legacy form field embeds a BookmarkStart/End of its
-        // own name. AddFormField recreates that bookmark internally — if the
+        // R14-bug1+2: a legacy form field MAY embed a BookmarkStart/End of its
+        // own name (Word wraps form fields in a bookmark so REF fields can target
+        // them, but a plain FORMCHECKBOX/FORMTEXT authored without that wrap has
+        // NONE). AddFormField recreates the wrapping bookmark internally — if the
         // emit pipeline also drops an `add bookmark name=X` row before the
         // `add formfield name=X`, AddFormField throws on the duplicate. Filter
         // bookmarks whose name matches a sibling formfield synth's ffName.
@@ -137,6 +139,30 @@ public static partial class WordBatchEmitter
             .ToHashSet(StringComparer.Ordinal);
         if (formFieldNames.Count > 0)
         {
+            // BUG-DUMP-FFCHECKBOX-BOOKMARK: a form field whose SOURCE had no
+            // wrapping bookmark must NOT gain a fabricated one on rebuild.
+            // AddFormField wraps every field in a <w:bookmarkStart name=ffName>
+            // unconditionally; a 54-checkbox grid with no source bookmarks then
+            // gained 54 fabricated Check1/Check1_N bookmarks (and a uniquify
+            // pass), which alters the checkbox cells' content and nudges row
+            // heights → table reflow → page drift. Mark each formfield synth
+            // with whether a matching bookmark actually sits among its siblings;
+            // TryEmitFormFieldRun forwards a `noBookmark` pin to AddFormField so
+            // a bookmark-less source stays bookmark-less. (A field whose source
+            // HAS the bookmark keeps the existing behaviour — the bookmark sibling
+            // is filtered below and AddFormField recreates it.)
+            var bookmarkNamesPresent = fieldEntries
+                .Where(e => e.Type == "bookmark"
+                    && e.Format.TryGetValue("name", out var bnm) && bnm != null)
+                .Select(e => e.Format["name"]!.ToString() ?? "")
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var ffSynth in fieldEntries.Where(e => e.Type == "formfield"
+                         && e.Format.TryGetValue("ffName", out _)))
+            {
+                var ffn = ffSynth.Format["ffName"]?.ToString() ?? "";
+                if (!string.IsNullOrEmpty(ffn) && !bookmarkNamesPresent.Contains(ffn))
+                    ffSynth.Format["_noBookmark"] = true;
+            }
             if (ctx != null)
                 foreach (var ffn in formFieldNames) ctx.FormFieldBookmarkNames.Add(ffn);
             fieldEntries = fieldEntries
@@ -1869,6 +1895,11 @@ public static partial class WordBatchEmitter
                 // placeholder and every empty form row gains a glyph.
                 props["text"] = "";
         }
+        // BUG-DUMP-FFCHECKBOX-BOOKMARK: the source field had no wrapping
+        // bookmark (marked by EmitParagraph when no matching bookmark sibling
+        // exists). Pin noBookmark so AddFormField does NOT fabricate one.
+        if (run.Format.TryGetValue("_noBookmark", out var nbObj) && nbObj is bool nbB && nbB)
+            props["noBookmark"] = "true";
         items.Add(new BatchItem
         {
             Command = "add",
