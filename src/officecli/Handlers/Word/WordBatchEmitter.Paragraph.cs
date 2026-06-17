@@ -3604,6 +3604,17 @@ public static partial class WordBatchEmitter
                 props[$"part{pi}.child{ci}.data"] =
                     $"data:{child.ContentType};base64,{Convert.ToBase64String(child.Bytes)}";
             }
+            // Per-part external rels (e.g. a chart's <c:externalData r:id> ->
+            // external oleObject workbook). Recreated on the part itself, with
+            // the original id, since the verbatim part bytes reference it.
+            int pei = 0;
+            foreach (var ext in part.Externals)
+            {
+                pei++;
+                props[$"part{pi}.ext{pei}.relId"] = ext.RelId;
+                props[$"part{pi}.ext{pei}.type"] = ext.Type;
+                props[$"part{pi}.ext{pei}.target"] = ext.Target;
+            }
         }
         int ei = 0;
         foreach (var ext in data.Externals)

@@ -508,9 +508,13 @@ public partial class WordHandler : IDocumentHandler
     // and that part's nested binary blob); AddActiveX rebuilds the parts and
     // rewrites the run's r:id refs, so the control needs no external files.
     internal sealed record ActiveXPartData(
-        string RelId, byte[] Bytes, string ContentType, List<ActiveXPartData> Children);
+        string RelId, byte[] Bytes, string ContentType, List<ActiveXPartData> Children,
+        List<ActiveXExternalData> Externals);
     // Externals: relationships with TargetMode=External (hyperlinks inside a
     // VML textbox, linked content) — no part bytes, just type + target URI.
+    // Appear both at run level (ActiveXEmitData.Externals) and per collected
+    // part (ActiveXPartData.Externals) — e.g. a carried chart part whose
+    // <c:externalData r:id> points at an external oleObject workbook.
     internal sealed record ActiveXExternalData(string RelId, string Type, string Target);
     internal sealed record ActiveXEmitData(
         string RunXml, List<ActiveXPartData> Parts, List<ActiveXExternalData> Externals);
@@ -662,7 +666,8 @@ public partial class WordHandler : IDocumentHandler
             try { bytes = ReadPartBytes(rel.OpenXmlPart); }
             catch { return null; }
             parts.Add(new ActiveXPartData(
-                rel.RelationshipId, bytes, rel.OpenXmlPart.ContentType, new List<ActiveXPartData>()));
+                rel.RelationshipId, bytes, rel.OpenXmlPart.ContentType,
+                new List<ActiveXPartData>(), new List<ActiveXExternalData>()));
         }
         var externals = new List<ActiveXExternalData>();
         foreach (var ext in cdp.ExternalRelationships)
@@ -788,9 +793,22 @@ public partial class WordHandler : IDocumentHandler
                 try { cb = ReadPartBytes(child.OpenXmlPart); }
                 catch { return null; }
                 children.Add(new ActiveXPartData(
-                    child.RelationshipId, cb, child.OpenXmlPart.ContentType, new List<ActiveXPartData>()));
+                    child.RelationshipId, cb, child.OpenXmlPart.ContentType,
+                    new List<ActiveXPartData>(), new List<ActiveXExternalData>()));
             }
-            parts.Add(new ActiveXPartData(relId, bytes, part.ContentType, children));
+            // A collected part can carry its OWN external relationships — e.g. a
+            // chart part whose <c:externalData r:id> links an external oleObject
+            // workbook (TargetMode=External). Capture them so the apply side
+            // recreates the rel on the part; otherwise the verbatim part bytes
+            // reference a now-dangling id and the host app refuses to render.
+            var partExternals = new List<ActiveXExternalData>();
+            foreach (var hyper in part.HyperlinkRelationships)
+                partExternals.Add(new ActiveXExternalData(
+                    hyper.Id, hyper.RelationshipType, hyper.Uri.OriginalString));
+            foreach (var ext in part.ExternalRelationships)
+                partExternals.Add(new ActiveXExternalData(
+                    ext.Id, ext.RelationshipType, ext.Uri.OriginalString));
+            parts.Add(new ActiveXPartData(relId, bytes, part.ContentType, children, partExternals));
 
             // A collected XML part's CONTENT can reference further host-part
             // relationships via bare relId="…" attributes — SmartArt's data

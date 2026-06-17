@@ -1056,6 +1056,23 @@ public partial class WordHandler
                 using var cms = new MemoryStream(cbytes);
                 childPart.FeedData(cms);
             }
+
+            // Per-part external rels (e.g. a chart's <c:externalData r:id> ->
+            // external oleObject workbook). The part's bytes reference these
+            // ids verbatim (RewriteRelIds only touches host-part ids), so
+            // recreate each ON the created part with its ORIGINAL id.
+            for (int xi = 1; properties.TryGetValue($"part{pi}.ext{xi}.relId", out var pExtId); xi++)
+            {
+                var pExtType = properties.GetValueOrDefault($"part{pi}.ext{xi}.type");
+                var pExtTarget = properties.GetValueOrDefault($"part{pi}.ext{xi}.target");
+                if (string.IsNullOrEmpty(pExtId) || string.IsNullOrEmpty(pExtType) || string.IsNullOrEmpty(pExtTarget))
+                    throw new ArgumentException($"{opName} part{pi}.ext{xi} requires relId, type and target");
+                var pExtUri = new Uri(pExtTarget, UriKind.RelativeOrAbsolute);
+                if (pExtType == HyperlinkRelType)
+                    created.AddHyperlinkRelationship(pExtUri, true, pExtId!);
+                else
+                    created.AddExternalRelationship(pExtType, pExtUri, pExtId!);
+            }
         }
 
         return RewriteRelIds;
