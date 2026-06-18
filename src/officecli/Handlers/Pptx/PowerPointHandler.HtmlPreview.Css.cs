@@ -549,17 +549,26 @@ public partial class PowerPointHandler
     /// indexed effect style's <a:effectLst>. Returns the shadow CSS, or "" if none.
     /// </summary>
     private static string GetStyleEffectRefCss(ShapeStyle? style, OpenXmlPart part, Dictionary<string, string> themeColors)
+        => EffectListToShadowCss(ResolveStyleEffectRefList(style, part), themeColors);
+
+    /// <summary>
+    /// Resolve the <a:effectLst> from a shape's <p:style>/<a:effectRef idx=N>
+    /// against the theme FormatScheme.EffectStyleList[N] (1-based). Returns null
+    /// when there is no effectRef or no matching style entry. Callers can pass the
+    /// result to the shadow/glow/reflection converters so effectRef-only shapes
+    /// surface all three effect kinds (R14-1), not just shadow.
+    /// </summary>
+    private static Drawing.EffectList? ResolveStyleEffectRefList(ShapeStyle? style, OpenXmlPart part)
     {
         var effectRef = style?.EffectReference;
         var idx = effectRef?.Index?.Value ?? 0;
-        if (effectRef == null || idx == 0) return "";
+        if (effectRef == null || idx == 0) return null;
 
         var fmtScheme = ResolveFormatScheme(part);
         var effectStyle = fmtScheme?.EffectStyleList?.ChildElements
             .OfType<Drawing.EffectStyle>()
             .ElementAtOrDefault((int)idx - 1);
-        var effectList = effectStyle?.GetFirstChild<Drawing.EffectList>();
-        return EffectListToShadowCss(effectList, themeColors);
+        return effectStyle?.GetFirstChild<Drawing.EffectList>();
     }
 
     private static string OutlineToCss(Drawing.Outline outline, Dictionary<string, string> themeColors)

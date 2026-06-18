@@ -17,7 +17,8 @@ public partial class PowerPointHandler
     // Chart text color — set per-chart, also used by SvgPreview
     private string _chartValueColor = "#D0D8E0";
 
-    private void RenderChart(StringBuilder sb, GraphicFrame gf, SlidePart slidePart, Dictionary<string, string> themeColors, string? dataPath = null)
+    private void RenderChart(StringBuilder sb, GraphicFrame gf, SlidePart slidePart, Dictionary<string, string> themeColors, string? dataPath = null,
+        (long x, long y, long cx, long cy)? overridePos = null)
     {
         var dataPathAttr = string.IsNullOrEmpty(dataPath) ? "" : $" data-path=\"{HtmlEncode(dataPath)}\"";
         // Position and size from p:xfrm
@@ -26,10 +27,17 @@ public partial class PowerPointHandler
         var ext = pxfrm?.GetFirstChild<Drawing.Extents>();
         if (off == null || ext == null) return;
 
-        var x = Units.EmuToPt(off.X?.Value ?? 0);
-        var y = Units.EmuToPt(off.Y?.Value ?? 0);
-        var w = Units.EmuToPt(ext.Cx?.Value ?? 0);
-        var h = Units.EmuToPt(ext.Cy?.Value ?? 0);
+        // R14-2: when nested in a group, position/size are re-projected into the
+        // group's child coordinate system by the caller (CalcGroupChildPos).
+        var posX = overridePos?.x ?? off.X?.Value ?? 0;
+        var posY = overridePos?.y ?? off.Y?.Value ?? 0;
+        var posCx = overridePos?.cx ?? ext.Cx?.Value ?? 0;
+        var posCy = overridePos?.cy ?? ext.Cy?.Value ?? 0;
+
+        var x = Units.EmuToPt(posX);
+        var y = Units.EmuToPt(posY);
+        var w = Units.EmuToPt(posCx);
+        var h = Units.EmuToPt(posCy);
 
         // Get chart part
         var chartEl = gf.Descendants().FirstOrDefault(e => e.LocalName == "chart" && e.NamespaceUri.Contains("chart"));
@@ -86,8 +94,8 @@ public partial class PowerPointHandler
         };
 
         // SVG dimensions (scale EMU to reasonable SVG units)
-        var widthEmu = ext.Cx?.Value ?? 3600000;
-        var heightEmu = ext.Cy?.Value ?? 2520000;
+        var widthEmu = posCx != 0 ? posCx : 3600000;
+        var heightEmu = posCy != 0 ? posCy : 2520000;
         var svgW = (int)(widthEmu / 10000.0);
         var svgH = (int)(heightEmu / 10000.0);
         var titleH = string.IsNullOrEmpty(info.Title) ? 0 : 20;

@@ -268,13 +268,15 @@ public partial class PowerPointHandler
 
         // Shadow + Glow → combine into single filter property
         var effectList = shape.ShapeProperties?.GetFirstChild<Drawing.EffectList>();
-        var shadowCss = EffectListToShadowCss(effectList, themeColors);
-        // Style-matrix fallback (R11-4): when spPr carries no <a:effectLst>, resolve the
-        // shape's <p:style>/<a:effectRef> against the theme FormatScheme.EffectStyleList.
+        // Style-matrix fallback (R11-4 / R14-1): when spPr carries no <a:effectLst>,
+        // resolve the shape's <p:style>/<a:effectRef> against the theme
+        // FormatScheme.EffectStyleList and emit shadow + glow + reflection from it.
         // Explicit spPr effects always win — only consult effectRef when none present.
-        if (string.IsNullOrEmpty(shadowCss) && effectList == null)
-            shadowCss = GetStyleEffectRefCss(shape.ShapeStyle, part, themeColors);
-        var glowCss = EffectListToGlowCss(effectList, themeColors);
+        var effectFor = effectList;
+        if (effectList == null)
+            effectFor = ResolveStyleEffectRefList(shape.ShapeStyle, part);
+        var shadowCss = EffectListToShadowCss(effectFor, themeColors);
+        var glowCss = EffectListToGlowCss(effectFor, themeColors);
         // Merge multiple filter:drop-shadow into one filter property
         var filterParts = new List<string>();
         if (!string.IsNullOrEmpty(shadowCss))
@@ -285,7 +287,7 @@ public partial class PowerPointHandler
             styles.Add($"filter:{string.Join(" ", filterParts)}");
 
         // Reflection → CSS -webkit-box-reflect
-        var reflectionCss = EffectListToReflectionCss(effectList);
+        var reflectionCss = EffectListToReflectionCss(effectFor);
         if (!string.IsNullOrEmpty(reflectionCss))
             styles.Add(reflectionCss);
 
@@ -1673,10 +1675,43 @@ public partial class PowerPointHandler
                         RenderConnector(sb, cxn, themeColors, dataPath: null, overridePos: pos);
                     break;
                 }
+                case GraphicFrame gf:
+                {
+                    // R14-2: chart/table inside a group. Re-project the graphicFrame's
+                    // <p:xfrm> into the group's child coordinate system, then route to
+                    // RenderTable / RenderChart like the slide-level dispatch does.
+                    var pos = CalcGraphicFramePos(gf, offX, offY, scaleX, scaleY);
+                    if (pos.HasValue)
+                    {
+                        if (gf.Descendants<Drawing.Table>().Any())
+                            RenderTable(sb, gf, themeColors, dataPath: null, overridePos: pos);
+                        else if (slidePart is SlidePart sp)
+                            RenderChart(sb, gf, sp, themeColors, dataPath: null, overridePos: pos);
+                    }
+                    break;
+                }
             }
         }
 
         sb.AppendLine("    </div>");
+    }
+
+    /// <summary>
+    /// Pure calculation: re-project a grouped GraphicFrame's <p:xfrm> into the
+    /// group's child coordinate system. Returns null if the frame has no xfrm.
+    /// </summary>
+    private static (long x, long y, long cx, long cy)? CalcGraphicFramePos(
+        GraphicFrame gf, long offX, long offY, double scaleX, double scaleY)
+    {
+        var off = gf.Transform?.Offset;
+        var ext = gf.Transform?.Extents;
+        if (off == null || ext == null) return null;
+        return (
+            (long)(((off.X?.Value ?? 0) - offX) * scaleX),
+            (long)(((off.Y?.Value ?? 0) - offY) * scaleY),
+            (long)((ext.Cx?.Value ?? 0) * scaleX),
+            (long)((ext.Cy?.Value ?? 0) * scaleY)
+        );
     }
 
     /// <summary>
@@ -1766,6 +1801,19 @@ public partial class PowerPointHandler
                     var pos = CalcGroupChildPos(cxn.ShapeProperties?.Transform2D, offX, offY, scaleX, scaleY);
                     if (pos.HasValue)
                         RenderConnector(sb, cxn, themeColors, dataPath: null, overridePos: pos);
+                    break;
+                }
+                case GraphicFrame gf:
+                {
+                    // R14-2: see RenderGroup GraphicFrame branch.
+                    var pos = CalcGraphicFramePos(gf, offX, offY, scaleX, scaleY);
+                    if (pos.HasValue)
+                    {
+                        if (gf.Descendants<Drawing.Table>().Any())
+                            RenderTable(sb, gf, themeColors, dataPath: null, overridePos: pos);
+                        else if (slidePart is SlidePart sp)
+                            RenderChart(sb, gf, sp, themeColors, dataPath: null, overridePos: pos);
+                    }
                     break;
                 }
             }

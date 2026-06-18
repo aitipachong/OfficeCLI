@@ -14,7 +14,8 @@ public partial class PowerPointHandler
 {
     // ==================== Table Rendering ====================
 
-    private static void RenderTable(StringBuilder sb, GraphicFrame gf, Dictionary<string, string> themeColors, string? dataPath = null)
+    private static void RenderTable(StringBuilder sb, GraphicFrame gf, Dictionary<string, string> themeColors, string? dataPath = null,
+        (long x, long y, long cx, long cy)? overridePos = null)
     {
         var dataPathAttr = string.IsNullOrEmpty(dataPath) ? "" : $" data-path=\"{HtmlEncode(dataPath)}\"";
         var table = gf.Descendants<Drawing.Table>().FirstOrDefault();
@@ -24,10 +25,12 @@ public partial class PowerPointHandler
         var extents = gf.Transform?.Extents;
         if (offset == null || extents == null) return;
 
-        var x = offset.X?.Value ?? 0;
-        var y = offset.Y?.Value ?? 0;
-        var cx = extents.Cx?.Value ?? 0;
-        var cy = extents.Cy?.Value ?? 0;
+        // R14-2: when nested in a group, the caller re-projects position/size into
+        // the group's child coordinate system (CalcGroupChildPos).
+        var x = overridePos?.x ?? offset.X?.Value ?? 0;
+        var y = overridePos?.y ?? offset.Y?.Value ?? 0;
+        var cx = overridePos?.cx ?? extents.Cx?.Value ?? 0;
+        var cy = overridePos?.cy ?? extents.Cy?.Value ?? 0;
 
         // PowerPoint stores the graphicFrame's declared layout height in <p:xfrm>,
         // but tables auto-grow vertically to fit explicit row heights — declared cy
