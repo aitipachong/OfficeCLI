@@ -297,14 +297,9 @@ public partial class PowerPointHandler
                     var scheme = schemeEl?.Val?.InnerText;
                     if (scheme != null && themeColors.TryGetValue(scheme, out var tc))
                     {
-                        var alpha = schemeEl!.GetFirstChild<Drawing.Alpha>()?.Val?.Value;
-                        if (alpha.HasValue && alpha.Value < 100000)
-                        {
-                            var (r, g, b) = ColorMath.HexToRgb(tc);
-                            color = $"rgba({r},{g},{b},{alpha.Value / 100000.0:0.##})";
-                        }
-                        else
-                            color = $"#{tc}";
+                        // Apply lumMod/lumOff/tint/shade/alpha transforms (same as
+                        // ResolveFillColor); without this the stops collapse to the base hex.
+                        color = ApplyColorTransforms(tc, schemeEl!);
                     }
                     else
                         color = "transparent";
@@ -475,41 +470,86 @@ public partial class PowerPointHandler
         if (effectList == null) return "";
 
         var shadow = effectList.GetFirstChild<Drawing.OuterShadow>();
-        if (shadow == null) return "";
+        if (shadow != null)
+        {
+            var color = ResolveShadowColor(shadow, themeColors);
+            var blurPt = shadow.BlurRadius?.HasValue == true ? shadow.BlurRadius.Value / EmuConverter.EmuPerPointF : 0;
+            var distPt = shadow.Distance?.HasValue == true ? shadow.Distance.Value / EmuConverter.EmuPerPointF : 0;
+            var angleDeg = shadow.Direction?.HasValue == true ? shadow.Direction.Value / 60000.0 : 0;
+            var angleRad = angleDeg * Math.PI / 180;
+            var offsetX = distPt * Math.Cos(angleRad);
+            var offsetY = distPt * Math.Sin(angleRad);
+            return $"filter:drop-shadow({offsetX:0.##}pt {offsetY:0.##}pt {blurPt:0.##}pt {color})";
+        }
 
+        // a:innerShdw has no CSS filter equivalent; render as an inset box-shadow.
+        var inner = effectList.GetFirstChild<Drawing.InnerShadow>();
+        if (inner != null)
+        {
+            var color = ResolveShadowColor(inner, themeColors);
+            var blurPt = inner.BlurRadius?.HasValue == true ? inner.BlurRadius.Value / EmuConverter.EmuPerPointF : 0;
+            var distPt = inner.Distance?.HasValue == true ? inner.Distance.Value / EmuConverter.EmuPerPointF : 0;
+            var angleDeg = inner.Direction?.HasValue == true ? inner.Direction.Value / 60000.0 : 0;
+            var angleRad = angleDeg * Math.PI / 180;
+            var offsetX = distPt * Math.Cos(angleRad);
+            var offsetY = distPt * Math.Sin(angleRad);
+            return $"box-shadow:inset {offsetX:0.##}pt {offsetY:0.##}pt {blurPt:0.##}pt {color}";
+        }
+
+        return "";
+    }
+
+    /// <summary>
+    /// Resolve a shadow's color (rgba) from its srgbClr/schemeClr child, applying
+    /// lumMod/lumOff/tint/shade/alpha transforms (default 50% opacity when no alpha).
+    /// </summary>
+    private static string ResolveShadowColor(OpenXmlCompositeElement shadow, Dictionary<string, string> themeColors)
+    {
         var alpha = shadow.Descendants<Drawing.Alpha>().FirstOrDefault()?.Val?.Value ?? 50000;
         var opacity = alpha / 100000.0;
-        var rgb = shadow.GetFirstChild<Drawing.RgbColorModelHex>()?.Val?.Value;
-        string color;
-        if (rgb != null)
+        var rgbEl = shadow.GetFirstChild<Drawing.RgbColorModelHex>();
+        var rgb = rgbEl?.Val?.Value;
+        if (rgb != null && rgb.Length >= 6 && rgb[..6].All(char.IsAsciiHexDigit))
         {
-            var (r, g, b) = ColorMath.HexToRgb(rgb);
-            color = $"rgba({r},{g},{b},{opacity:0.##})";
-        }
-        else
-        {
-            // Try scheme color
-            var schemeColor = shadow.GetFirstChild<Drawing.SchemeColor>()?.Val?.InnerText;
-            var resolved = schemeColor != null && themeColors.TryGetValue(schemeColor, out var sc) ? sc : null;
-            if (resolved != null)
-            {
-                var (r, g, b) = ColorMath.HexToRgb(resolved);
-                color = $"rgba({r},{g},{b},{opacity:0.##})";
-            }
-            else
-            {
-                color = $"rgba(0,0,0,{opacity:0.##})";
-            }
+            var transformed = ApplyRgbColorTransforms(rgb[..6], rgbEl!);
+            var (r, g, b) = ColorMath.HexToRgb(transformed.StartsWith('#') ? transformed[1..] : transformed);
+            return $"rgba({r},{g},{b},{opacity:0.##})";
         }
 
-        var blurPt = shadow.BlurRadius?.HasValue == true ? shadow.BlurRadius.Value / EmuConverter.EmuPerPointF : 0;
-        var distPt = shadow.Distance?.HasValue == true ? shadow.Distance.Value / EmuConverter.EmuPerPointF : 0;
-        var angleDeg = shadow.Direction?.HasValue == true ? shadow.Direction.Value / 60000.0 : 0;
-        var angleRad = angleDeg * Math.PI / 180;
-        var offsetX = distPt * Math.Cos(angleRad);
-        var offsetY = distPt * Math.Sin(angleRad);
+        var schemeEl = shadow.GetFirstChild<Drawing.SchemeColor>();
+        var schemeName = schemeEl?.Val?.InnerText;
+        if (schemeName != null && themeColors.TryGetValue(schemeName, out var sc))
+        {
+            // ApplyTransforms returns #RRGGBB (or rgba when alpha given); strip to hex
+            // then re-apply the shadow opacity uniformly. Read by local name so both
+            // typed and OpenXmlUnknownElement transform children resolve.
+            var transformed = ColorMath.ApplyTransforms(sc,
+                tint: ReadTransformVal(schemeEl!, "tint"),
+                shade: ReadTransformVal(schemeEl!, "shade"),
+                lumMod: ReadTransformVal(schemeEl!, "lumMod"),
+                lumOff: ReadTransformVal(schemeEl!, "lumOff"));
+            var hex = transformed.StartsWith('#') ? transformed[1..] : transformed;
+            var (r, g, b) = ColorMath.HexToRgb(hex);
+            return $"rgba({r},{g},{b},{opacity:0.##})";
+        }
 
-        return $"filter:drop-shadow({offsetX:0.##}pt {offsetY:0.##}pt {blurPt:0.##}pt {color})";
+        return $"rgba(0,0,0,{opacity:0.##})";
+    }
+
+    /// <summary>
+    /// Apply lumMod/lumOff/tint/shade transforms (if present as children) to an
+    /// srgbClr hex. Returns a #RRGGBB hex (alpha handled separately by callers).
+    /// </summary>
+    private static string ApplyRgbColorTransforms(string hex, Drawing.RgbColorModelHex rgbEl)
+    {
+        // Alpha is handled by the caller; pass only lum/tint/shade so the result
+        // stays a #RRGGBB hex. Reads by local name to support both typed and
+        // OpenXmlUnknownElement children (see ApplyColorTransforms remarks).
+        return ColorMath.ApplyTransforms(hex,
+            tint: ReadTransformVal(rgbEl, "tint"),
+            shade: ReadTransformVal(rgbEl, "shade"),
+            lumMod: ReadTransformVal(rgbEl, "lumMod"),
+            lumOff: ReadTransformVal(rgbEl, "lumOff"));
     }
 
     // ==================== CSS Helper: Glow ====================
@@ -940,7 +980,11 @@ public partial class PowerPointHandler
         if (rgb != null && rgb.Length >= 6 && rgb[..6].All(char.IsAsciiHexDigit))
         {
             var hexPart = rgb[..6]; // Only use first 6 hex chars, ignore any trailing data
-            var alpha = solidFill.GetFirstChild<Drawing.RgbColorModelHex>()?.GetFirstChild<Drawing.Alpha>()?.Val?.Value;
+            var rgbEl = solidFill.GetFirstChild<Drawing.RgbColorModelHex>()!;
+            // Apply lumMod/lumOff/tint/shade if present (same transforms as schemeClr).
+            var transformed = ApplyRgbColorTransforms(hexPart, rgbEl);
+            hexPart = transformed.StartsWith('#') ? transformed[1..] : transformed;
+            var alpha = rgbEl.GetFirstChild<Drawing.Alpha>()?.Val?.Value;
             if (alpha.HasValue && alpha.Value < 100000)
             {
                 var (r, g, b) = ColorMath.HexToRgb(hexPart);
@@ -966,13 +1010,33 @@ public partial class PowerPointHandler
     }
 
     private static string ApplyColorTransforms(string hex, Drawing.SchemeColor schemeColor)
+        => ApplyColorTransforms(hex, (OpenXmlElement)schemeColor);
+
+    /// <summary>
+    /// Apply lumMod/lumOff/tint/shade/alpha child transforms on any color element
+    /// (schemeClr or srgbClr). Reads by local name so it works for both strongly-typed
+    /// children (round-tripped from disk) AND OpenXmlUnknownElement children (built
+    /// in-memory by DrawingColorBuilder, which appends transforms as unknown elements).
+    /// </summary>
+    private static string ApplyColorTransforms(string hex, OpenXmlElement colorEl)
     {
         return ColorMath.ApplyTransforms(hex,
-            tint: schemeColor.GetFirstChild<Drawing.Tint>()?.Val?.Value,
-            shade: schemeColor.GetFirstChild<Drawing.Shade>()?.Val?.Value,
-            lumMod: schemeColor.GetFirstChild<Drawing.LuminanceModulation>()?.Val?.Value,
-            lumOff: schemeColor.GetFirstChild<Drawing.LuminanceOffset>()?.Val?.Value,
-            alpha: schemeColor.GetFirstChild<Drawing.Alpha>()?.Val?.Value);
+            tint: ReadTransformVal(colorEl, "tint"),
+            shade: ReadTransformVal(colorEl, "shade"),
+            lumMod: ReadTransformVal(colorEl, "lumMod"),
+            lumOff: ReadTransformVal(colorEl, "lumOff"),
+            alpha: ReadTransformVal(colorEl, "alpha"));
+    }
+
+    private static int? ReadTransformVal(OpenXmlElement colorEl, string localName)
+    {
+        foreach (var child in colorEl.ChildElements)
+        {
+            if (!child.LocalName.Equals(localName, StringComparison.Ordinal)) continue;
+            var raw = child.GetAttributes().FirstOrDefault(a => a.LocalName == "val").Value;
+            if (int.TryParse(raw, out var v)) return v;
+        }
+        return null;
     }
 
     /// <summary>
