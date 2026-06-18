@@ -1022,6 +1022,36 @@ public partial class WordHandler
         // Consume paragraph-mark tracked-change namespaces up front so the per-key
         // loop below doesn't reject them as unsupported (add-set-symmetry).
         var markRevConsumed = ApplyParagraphMarkRevisionNamespaces(pProps, properties);
+        // BUG-DUMP-MARKRPR-VERBATIM (Set parity / add-set-symmetry): when the dump
+        // emits the WHOLE ¶-mark <w:rPr> verbatim (markRPr.xml), apply it as the
+        // authoritative mark rPr ONCE here and skip the redundant per-property
+        // markRPr.* dotted keys below. AddParagraph already did this, but the dump
+        // round-trips a table-cell paragraph via `set` (the table build creates
+        // the paragraph, then sets its props), and Set previously had no
+        // markRPr.xml handler — so the key fell into the dotted markrpr.* case as
+        // sub="xml" and was dropped, losing every mark-rPr child that no dotted key
+        // covers. Most consequentially a paragraph-mark <w:vanish/> (a hidden ¶
+        // that merges the paragraph with the next) was lost, so the hidden break
+        // re-appeared as a visible blank line and pushed content down.
+        bool markRPrVerbatimApplied = false;
+        if ((properties.TryGetValue("markRPr.xml", out var setMarkRPrXml)
+                || properties.TryGetValue("markrpr.xml", out setMarkRPrXml))
+            && !string.IsNullOrEmpty(setMarkRPrXml) && setMarkRPrXml.StartsWith("<"))
+        {
+            try
+            {
+                var pmRprVerbatim = new ParagraphMarkRunProperties(setMarkRPrXml);
+                pProps.RemoveAllChildren<ParagraphMarkRunProperties>();
+                // CT_PPr schema order: ParagraphMarkRunProperties precedes
+                // sectPr / pPrChange — insert before the first of those, else append.
+                OpenXmlElement? pmSuccessor = pProps.ChildElements
+                    .FirstOrDefault(c => c is SectionProperties || c is ParagraphPropertiesChange);
+                if (pmSuccessor != null) pmSuccessor.InsertBeforeSelf(pmRprVerbatim);
+                else pProps.AppendChild(pmRprVerbatim);
+                markRPrVerbatimApplied = true;
+            }
+            catch { /* malformed fragment — fall back to the dotted keys below */ }
+        }
         // CONSISTENCY(markRPr-pre-existed-snapshot): captured ONCE before
         // the property iteration starts. The per-iteration pmrpExisting
         // check inside the bare-key case below otherwise flipped to non-
@@ -1122,6 +1152,10 @@ public partial class WordHandler
                 // form by stripping the prefix.
                 case var mk when mk.StartsWith("markrpr.", StringComparison.OrdinalIgnoreCase):
                 {
+                    // Verbatim ¶-mark subtree already applied (markRPr.xml) — the
+                    // dotted keys (and the markRPr.xml key itself) are redundant
+                    // with it; skip to avoid double-apply / clobbering.
+                    if (markRPrVerbatimApplied) break;
                     var sub = key.Substring("markRPr.".Length);
                     var markOnlyRPr = EnsureMarkRunProperties(pProps);
                     // CONSISTENCY(markRPr-explicit-false): the dotted markRPr.*
