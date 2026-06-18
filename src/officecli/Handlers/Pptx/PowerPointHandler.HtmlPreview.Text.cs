@@ -557,6 +557,23 @@ public partial class PowerPointHandler
                 }
             }
 
+            // R9-3: image (blip) text fill — clip the image to the glyphs, mirroring
+            // the gradFill text-fill approach above.
+            var runBlipFill = rp.GetFirstChild<Drawing.BlipFill>();
+            if (runBlipFill != null && part != null)
+            {
+                var dataUri = BlipToDataUri(runBlipFill, part);
+                if (!string.IsNullOrEmpty(dataUri))
+                {
+                    styles.Add($"background-image:url('{dataUri}')");
+                    styles.Add("background-size:cover");
+                    styles.Add("-webkit-background-clip:text");
+                    styles.Add("background-clip:text");
+                    styles.Add("color:transparent");
+                    styles.Add("-webkit-text-fill-color:transparent");
+                }
+            }
+
             // Run-level text outline (a:rPr/a:ln). PowerPoint strokes each glyph
             // edge; Chromium renders this via -webkit-text-stroke. Width is the
             // a:ln @w in EMU (12700 EMU = 1pt); convert to px (1pt = 4/3 px) so a
