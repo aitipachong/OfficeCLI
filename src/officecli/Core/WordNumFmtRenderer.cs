@@ -62,6 +62,25 @@ public static class WordNumFmtRenderer
                 return ToKoreanLegal(n);
             case "japaneselegal":
                 return ToJapaneseLegal(n);
+            case "ideographlegaltraditional":
+                // Traditional Chinese financial/capital glyphs 壹貳參…拾佰仟萬.
+                // Identical to ToChineseCounting(formal:true) — same digit and
+                // unit tables Word uses for the traditional legal format.
+                // (ECMA-376 §17.18.59 "ideographLegalTraditional".)
+                return ToChineseCounting(n, formal: true);
+            // Japanese kana enumeration. Word renders aiueo/aiueoFullWidth as
+            // full-width katakana in gojūon order, and iroha/irohaFullWidth as
+            // full-width katakana in iroha order. The bare and *FullWidth
+            // tokens produce identical full-width glyphs in Word.
+            case "aiueo":
+            case "aiueofullwidth":
+                return ToRecycledTable(n, KatakanaAiueo);
+            case "iroha":
+            case "irohafullwidth":
+                return ToRecycledTable(n, KatakanaIroha);
+            // Korean leading consonants (초성), Hangul Compatibility Jamo block.
+            case "chosung":
+                return ToRecycledTable(n, KoreanChosung);
             case "ideographtraditional":
                 return ToHeavenlyStems(n);
             case "ideographzodiac":
@@ -72,7 +91,7 @@ public static class WordNumFmtRenderer
             case "decimalenclosedfullstop":
                 return ToEnclosedFullStop(n);
             case "decimalenclosedparen":
-                return $"({n})";
+                return ToEnclosedParen(n);
             case "decimalfullwidth":
             case "decimalfullwidth2":
                 return ToFullWidthDigits(n);
@@ -160,12 +179,38 @@ public static class WordNumFmtRenderer
         "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"
     };
 
-    private static string ToEnglishCardinal(int n)
+    // Short-scale group names, largest first. Each entry's divisor is a
+    // power of one thousand. int caps at ~2.1e9 so Billion is the largest
+    // reachable group, but Trillion/Quadrillion are listed for clarity and
+    // in case the input type ever widens.
+    private static readonly (long Divisor, string Name)[] EnglishScales =
+    {
+        (1_000_000_000_000_000_000L, "Quintillion"),
+        (1_000_000_000_000_000L, "Quadrillion"),
+        (1_000_000_000_000L, "Trillion"),
+        (1_000_000_000L, "Billion"),
+        (1_000_000L, "Million"),
+        (1_000L, "Thousand"),
+    };
+
+    private static string ToEnglishCardinal(int n) => ToEnglishCardinal((long)n);
+
+    private static string ToEnglishCardinal(long n)
     {
         if (n == 0) return "Zero";
         if (n < 0) return $"Negative {ToEnglishCardinal(-n)}";
         var sb = new StringBuilder();
-        if (n >= 1000) { sb.Append(ToEnglishCardinal(n / 1000)).Append(" Thousand"); n %= 1000; if (n > 0) sb.Append(' '); }
+        // Emit each thousand-power group with its scale word (One Million,
+        // Two Thousand, …) instead of recursively re-appending "Thousand".
+        foreach (var (divisor, name) in EnglishScales)
+        {
+            if (n >= divisor)
+            {
+                sb.Append(ToEnglishCardinal(n / divisor)).Append(' ').Append(name);
+                n %= divisor;
+                if (n > 0) sb.Append(' ');
+            }
+        }
         if (n >= 100) { sb.Append(EnglishOnes[n / 100]).Append(" Hundred"); n %= 100; if (n > 0) sb.Append(' '); }
         if (n >= 20) { sb.Append(EnglishTens[n / 10]); n %= 10; if (n > 0) sb.Append('-').Append(EnglishOnes[n]); }
         else if (n > 0) sb.Append(EnglishOnes[n]);
@@ -282,6 +327,16 @@ public static class WordNumFmtRenderer
         // 21..35 at U+3251..U+325F (Word uses similar enclosed glyphs); fallback to (n)
         if (n >= 21 && n <= 35) return ((char)(0x3251 + n - 21)).ToString();
         if (n >= 36 && n <= 50) return ((char)(0x32B1 + n - 36)).ToString();
+        return $"({n})";
+    }
+
+    // Parenthesized digit glyphs ⑴⑵⑶ … U+2474..U+2487 cover 1..20 (U+2474 is
+    // "PARENTHESIZED DIGIT ONE"). Real Word renders decimalEnclosedParen with
+    // these single glyphs, consistent with decimalEnclosedCircle (①) and
+    // decimalEnclosedFullstop (⒈). Beyond 20 fall back to "(n)".
+    private static string ToEnclosedParen(int n)
+    {
+        if (n >= 1 && n <= 20) return ((char)(0x2473 + n)).ToString();
         return $"({n})";
     }
 
@@ -453,6 +508,45 @@ public static class WordNumFmtRenderer
     {
         char[] vowels = { 'अ','आ','इ','ई','उ','ऊ','ऋ','ए','ऐ','ओ','औ' };
         return vowels[(n - 1) % vowels.Length].ToString();
+    }
+
+    // Japanese full-width katakana, gojūon (あいうえお) order — 46 glyphs.
+    private static readonly char[] KatakanaAiueo =
+    {
+        'ア','イ','ウ','エ','オ','カ','キ','ク','ケ','コ',
+        'サ','シ','ス','セ','ソ','タ','チ','ツ','テ','ト',
+        'ナ','ニ','ヌ','ネ','ノ','ハ','ヒ','フ','ヘ','ホ',
+        'マ','ミ','ム','メ','モ','ヤ','ユ','ヨ','ラ','リ',
+        'ル','レ','ロ','ワ','ヲ','ン'
+    };
+
+    // Japanese full-width katakana, iroha order — 48 glyphs (includes archaic
+    // ヰ/ヱ).
+    private static readonly char[] KatakanaIroha =
+    {
+        'イ','ロ','ハ','ニ','ホ','ヘ','ト','チ','リ','ヌ',
+        'ル','ヲ','ワ','カ','ヨ','タ','レ','ソ','ツ','ネ',
+        'ナ','ラ','ム','ウ','ヰ','ノ','オ','ク','ヤ','マ',
+        'ケ','フ','コ','エ','テ','ア','サ','キ','ユ','メ',
+        'ミ','シ','ヱ','ヒ','モ','セ','ス','ン'
+    };
+
+    // Korean leading consonants (초성), Hangul Compatibility Jamo — 14 glyphs.
+    private static readonly char[] KoreanChosung =
+    {
+        'ㄱ','ㄴ','ㄷ','ㄹ','ㅁ','ㅂ','ㅅ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'
+    };
+
+    /// <summary>Single-symbol enumeration that recycles to repeated glyphs past
+    /// the table end (1→A, table.Length→last, +1→AA, …), matching Word's
+    /// symbol-recycling behavior. Mirrors <see cref="ToAlpha"/>'s repeat
+    /// model with the same DoS cap.</summary>
+    private static string ToRecycledTable(int n, char[] table)
+    {
+        if (n < 1) n = 1;
+        var glyph = table[(n - 1) % table.Length];
+        var repeat = Math.Min(((n - 1) / table.Length) + 1, 64);
+        return new string(glyph, repeat);
     }
 
     private static string ToRussianAlpha(int n, bool uppercase)
