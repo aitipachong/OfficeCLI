@@ -830,6 +830,8 @@ public partial class WordHandler
         if (directNid != null && directNid != 0)
         {
             var ilvl = directNumPr!.NumberingLevelReference?.Val?.Value ?? 0;
+            // CONSISTENCY(ilvl-clamp): same guard as GetListPrefix.
+            if (ilvl < 0) ilvl = 0; else if (ilvl > 8) ilvl = 8;
             var numFmt = GetNumberingFormat(directNid.Value, ilvl);
             return numFmt.ToLowerInvariant() == "bullet" ? "bullet" : "ordered";
         }
@@ -851,7 +853,9 @@ public partial class WordHandler
         if (resolved == null) return null;
         var (numId, ilvlR) = resolved.Value;
         if (numId == 0) return null;
-        var numFmtR = GetNumberingFormat(numId, ilvlR);
+        // CONSISTENCY(ilvl-clamp): same guard as GetListPrefix.
+        var ilvlRc = ilvlR < 0 ? 0 : ilvlR > 8 ? 8 : ilvlR;
+        var numFmtR = GetNumberingFormat(numId, ilvlRc);
         return numFmtR.ToLowerInvariant() == "bullet" ? "bullet" : "ordered";
     }
 
