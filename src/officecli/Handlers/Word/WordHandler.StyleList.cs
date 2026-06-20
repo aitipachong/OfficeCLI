@@ -916,6 +916,28 @@ public partial class WordHandler
     /// </summary>
     private void AdvanceOrderedCounter(OrderedListNumberingState st, int numId, int? absId, int ilvl)
     {
+        // ECMA-376 §17.9: jumping to a deeper level auto-initializes every
+        // shallower level that was never visited to its start value. Word
+        // renders a skipped intermediate level as its start (0->2 yields
+        // "1.1.1.", not "1.0.1.") AND treats the implicit init as a visit, so a
+        // later explicit visit to that level increments from start ("1.2.").
+        // Seed each un-visited shallower level before advancing the current one.
+        for (int j = 0; j < ilvl; j++)
+        {
+            if (st.OlCountPerLevel.ContainsKey(j)) continue;
+            var sj = SeedOrderedStart(st, numId, absId, j) + 1;
+            st.OlCountPerLevel[j] = sj;
+            st.MultiLevelCounters[j] = sj;
+            if (absId.HasValue)
+            {
+                if (!st.AbsNumLevelCounters.TryGetValue(absId.Value, out var bi))
+                {
+                    bi = new Dictionary<int, int>();
+                    st.AbsNumLevelCounters[absId.Value] = bi;
+                }
+                bi[j] = sj;
+            }
+        }
         var seed = SeedOrderedStart(st, numId, absId, ilvl);
         var prev = st.OlCountPerLevel.GetValueOrDefault(ilvl, seed);
         // Saturate at int.MaxValue to avoid overflow when w:start is INT_MAX.
