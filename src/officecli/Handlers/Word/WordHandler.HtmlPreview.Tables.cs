@@ -108,8 +108,7 @@ public partial class WordHandler
         // Apply base table style rPr (font-size, color, alignment) to the <table>
         if (styleId != null)
         {
-            var baseStyle = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == styleId);
+            var baseStyle = FindStyleById(styleId);
             var baseRPr = baseStyle?.StyleRunProperties;
             if (baseRPr?.FontSize?.Val?.Value is string bsz && int.TryParse(bsz, out var bhp))
                 tableStyles.Add($"font-size:{bhp / 2.0:0.##}pt");
@@ -462,8 +461,7 @@ public partial class WordHandler
         var currentId = styleId;
         while (currentId != null && visited.Add(currentId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentId);
+            var style = FindStyleById(currentId);
             if (style == null) break;
             var borders = style.StyleTableProperties?.TableBorders;
             if (borders != null) return borders;
@@ -536,8 +534,7 @@ public partial class WordHandler
         var chainStyles = new List<Style>();
         while (currentId != null && visited.Add(currentId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentId);
+            var style = FindStyleById(currentId);
             if (style == null) break;
             chainStyles.Add(style);
             currentId = style.BasedOn?.Val?.Value;

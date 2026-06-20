@@ -107,6 +107,7 @@ public partial class WordHandler
             if (target == null) return null; // soft success on missing
             target.Remove();
             stylesPart!.Save();
+            InvalidateStyleIndex(); // removed StyleId must drop out of FindStyleById
             return null;
         }
 

@@ -63,8 +63,7 @@ public partial class WordHandler
             var currentStyleId = styleId;
             while (currentStyleId != null && visited.Add(currentStyleId))
             {
-                var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                    ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+                var style = FindStyleById(currentStyleId);
                 if (style == null) break;
                 chain.Add(style);
                 currentStyleId = style.BasedOn?.Val?.Value;
@@ -113,8 +112,7 @@ public partial class WordHandler
             var curRStyleId = rStyleId;
             while (curRStyleId != null && rVisited.Add(curRStyleId))
             {
-                var rStyle = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                    ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == curRStyleId);
+                var rStyle = FindStyleById(curRStyleId);
                 if (rStyle == null) break;
                 rStyleChain.Add(rStyle);
                 curRStyleId = rStyle.BasedOn?.Val?.Value;
@@ -523,8 +521,7 @@ public partial class WordHandler
         var currentStyleId = styleId;
         while (currentStyleId != null && visited.Add(currentStyleId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+            var style = FindStyleById(currentStyleId);
             if (style == null) break;
             chain.Add(style);
             currentStyleId = style.BasedOn?.Val?.Value;
@@ -650,8 +647,7 @@ public partial class WordHandler
             var tblStyleId = tbl?.GetFirstChild<TableProperties>()?.TableStyle?.Val?.Value;
             if (tblStyleId != null)
             {
-                var tblStyle = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                    ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == tblStyleId);
+                var tblStyle = FindStyleById(tblStyleId);
                 var tblPpr = tblStyle?.StyleParagraphProperties;
                 var tblBidi = tblPpr?.GetFirstChild<BiDi>();
                 if (tblBidi != null)
@@ -802,14 +798,12 @@ public partial class WordHandler
         var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
         if (styleId == null) return null;
 
-        var stylesPart = _doc.MainDocumentPart?.StyleDefinitionsPart;
-        if (stylesPart?.Styles == null) return null;
+        if (_doc.MainDocumentPart?.StyleDefinitionsPart?.Styles == null) return null;
 
         var visited = new HashSet<string>();
         while (styleId != null && visited.Add(styleId))
         {
-            var style = stylesPart.Styles.Elements<Style>()
-                .FirstOrDefault(s => s.StyleId?.Value == styleId);
+            var style = FindStyleById(styleId);
             if (style == null) break;
 
             var styleNumPr = style.StyleParagraphProperties?.NumberingProperties;
@@ -911,9 +905,10 @@ public partial class WordHandler
 
     /// <summary>
     /// Advance the counter for an ordered item at (numId, ilvl): increment this
-    /// level, reset every deeper level (Word restarts sub-levels when a
-    /// shallower one ticks), and mirror the running count into the per-abstractNum
-    /// store so a later sibling num can continue from it.
+    /// level, then reset deeper levels per each deeper level's
+    /// <c>&lt;w:lvlRestart&gt;</c> (ECMA-376 §17.9.6), and mirror the running
+    /// count into the per-abstractNum store so a later sibling num can continue
+    /// from it.
     /// </summary>
     private void AdvanceOrderedCounter(OrderedListNumberingState st, int numId, int? absId, int ilvl)
     {
@@ -922,6 +917,7 @@ public partial class WordHandler
         st.MultiLevelCounters[ilvl] = st.OlCountPerLevel[ilvl];
         for (int lk = ilvl + 1; lk <= 8; lk++)
         {
+            if (!ShouldRestartDeeperLevel(numId, ilvl, lk)) continue;
             if (st.OlCountPerLevel.ContainsKey(lk)) st.OlCountPerLevel[lk] = 0;
             if (st.MultiLevelCounters.ContainsKey(lk)) st.MultiLevelCounters[lk] = 0;
         }
@@ -934,8 +930,32 @@ public partial class WordHandler
             }
             byIlvl[ilvl] = st.OlCountPerLevel[ilvl];
             for (int lk = ilvl + 1; lk <= 8; lk++)
+            {
+                if (!ShouldRestartDeeperLevel(numId, ilvl, lk)) continue;
                 if (byIlvl.ContainsKey(lk)) byIlvl[lk] = 0;
+            }
         }
+    }
+
+    /// <summary>
+    /// ECMA-376 §17.9.6 &lt;w:lvlRestart&gt;: a deeper level restarts its counter
+    /// whenever a level numbered R (1-based) <em>or any shallower (lower-numbered)
+    /// level</em> increments. So when the level at <paramref name="ilvl"/> (0-based)
+    /// increments, deeper level <paramref name="deeperIlvl"/> restarts iff its
+    /// lvlRestart value R satisfies (ilvl+1) &gt;= R.
+    ///   • R absent → default R = 1: any shallower level increment restarts it
+    ///     (preserves the historic always-restart-on-parent-tick outline default).
+    ///   • R == 0   → never restart.
+    /// Verified against real Word: lvlRestart="2" on a 3rd level + sequence
+    /// 0,2,2,0,2 (the 2nd level never used) yields 1,1,2,2,3 — the deepest level
+    /// continues because only level 1 (1-based) ever incremented and 1 &lt; 2.
+    /// </summary>
+    private bool ShouldRestartDeeperLevel(int numId, int ilvl, int deeperIlvl)
+    {
+        var restart = GetLevel(numId, deeperIlvl)?.GetFirstChild<LevelRestart>()?.Val?.Value;
+        var r = restart ?? 1;
+        if (r == 0) return false;               // val="0": never restart
+        return (ilvl + 1) >= r;
     }
 
     /// <summary>

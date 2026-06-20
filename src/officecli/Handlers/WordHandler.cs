@@ -15,6 +15,64 @@ public partial class WordHandler : IDocumentHandler
     private HashSet<string> _usedParaIds = new(StringComparer.OrdinalIgnoreCase);
     private int _nextParaId = 0x100000;
     public int LastFindMatchCount { get; internal set; }
+
+    // StyleId → Style index, lazily built to make style-chain resolution O(1)
+    // per hop. Before this, ResolveNumPrFromStyle / ResolveEffectiveRunProperties
+    // / GetParagraphListStyle and the HtmlPreview/Query style walks each did a
+    // LINEAR Elements<Style>().FirstOrDefault(StyleId==id) PER basedOn hop —
+    // O(paragraphs × chainDepth × totalStyles), which HANGS on heavily templated
+    // docs (deep basedOn chains × thousands of styles).
+    //
+    // MUTATION-SAFE: the cache validates against the live <w:styles> element's
+    // reference identity ONLY (O(1) — a child-element COUNT check would be O(n)
+    // in the SDK's linked-list ChildElements and re-introduce the per-hop O(n)
+    // we are eliminating). A freshly created/rebuilt StyleDefinitionsPart swaps
+    // the reference and self-invalidates. Same-instance mutations (Add appends a
+    // Style, Remove drops one) keep the reference, so those two sites explicitly
+    // call InvalidateStyleIndex(). `set /styles/X` only mutates a style's
+    // PROPERTIES (never its id), so it needs no invalidation — the index maps
+    // StyleId→Style by reference and the same object is still the right target.
+    private Dictionary<string, Style>? _styleByIdCache;
+    private Styles? _styleByIdCacheOwner;
+
+    /// <summary>Drop the StyleId→Style index. Called by the (few) paths that add
+    /// or remove a &lt;w:style&gt; on the EXISTING styles element.</summary>
+    private void InvalidateStyleIndex()
+    {
+        _styleByIdCache = null;
+        _styleByIdCacheOwner = null;
+    }
+
+    /// <summary>
+    /// O(1) StyleId lookup through a lazily-built, reference-validated index.
+    /// Replaces the per-hop linear <c>Elements&lt;Style&gt;().FirstOrDefault(
+    /// s =&gt; s.StyleId?.Value == id)</c> scan used throughout style-chain
+    /// resolution. Returns null when no styles part exists or no style matches.
+    /// On a duplicate StyleId (malformed doc) the FIRST in document order wins —
+    /// matching the original FirstOrDefault semantics.
+    /// </summary>
+    private Style? FindStyleById(string? styleId)
+    {
+        if (styleId == null) return null;
+        var styles = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles;
+        if (styles == null) return null;
+
+        if (_styleByIdCache == null || !ReferenceEquals(styles, _styleByIdCacheOwner))
+        {
+            var dict = new Dictionary<string, Style>(StringComparer.Ordinal);
+            foreach (var s in styles.Elements<Style>())
+            {
+                var id = s.StyleId?.Value;
+                // First-wins on duplicate id (FirstOrDefault parity).
+                if (id != null && !dict.ContainsKey(id)) dict[id] = s;
+            }
+            _styleByIdCache = dict;
+            _styleByIdCacheOwner = styles;
+        }
+
+        return _styleByIdCache.TryGetValue(styleId, out var found) ? found : null;
+    }
+
     // Number of elements a no-slash selector Set matched and mutated (Sheet1!row[...]).
     // Read by the CLI/resident to echo the multi-element change count.
     public int LastSelectorSetCount { get; internal set; }

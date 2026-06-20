@@ -1784,6 +1784,7 @@ public partial class WordHandler
 
         stylesPart.Styles.AppendChild(newStyle);
         stylesPart.Styles.Save();
+        InvalidateStyleIndex(); // new StyleId must be visible to FindStyleById
 
         var resultPath = $"/styles/{styleId}";
         return resultPath;

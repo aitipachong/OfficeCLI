@@ -801,8 +801,7 @@ public partial class WordHandler
         var currentStyleId = styleId;
         while (currentStyleId != null && visited.Add(currentStyleId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+            var style = FindStyleById(currentStyleId);
             if (style == null) break;
 
             var shading = style.StyleParagraphProperties?.Shading;
@@ -824,8 +823,7 @@ public partial class WordHandler
         var currentStyleId = styleId;
         while (currentStyleId != null && visited.Add(currentStyleId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+            var style = FindStyleById(currentStyleId);
             if (style == null) break;
             var jc = style.StyleParagraphProperties?.Justification?.Val;
             if (jc != null) return jc;
@@ -845,8 +843,7 @@ public partial class WordHandler
         var currentStyleId = styleId;
         while (currentStyleId != null && visited.Add(currentStyleId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+            var style = FindStyleById(currentStyleId);
             if (style == null)
             {
                 // Word built-in TOCHeading has pageBreakBefore=true by default
@@ -871,8 +868,7 @@ public partial class WordHandler
         var currentStyleId = styleId;
         while (currentStyleId != null && visited.Add(currentStyleId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+            var style = FindStyleById(currentStyleId);
             if (style == null) break;
             var tabs = style.StyleParagraphProperties?.Tabs?.Elements<TabStop>();
             if (tabs != null && tabs.Any()) return tabs;
@@ -927,8 +923,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) return null;  // Undefined style → no built-in inheritance.
             if (BuiltInStyleDefaults.TryGetValue(current, out var defaults))
                 return defaults;
@@ -1163,8 +1158,7 @@ public partial class WordHandler
         var currentStyleId = styleId;
         while (currentStyleId != null && visited.Add(currentStyleId))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == currentStyleId);
+            var style = FindStyleById(currentStyleId);
             if (style == null) break;
 
             var pPr = style.StyleParagraphProperties;
@@ -2559,8 +2553,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) break;
             var sz = style.StyleRunProperties?.FontSize?.Val?.Value;
             if (sz != null && int.TryParse(sz, out var halfPts))
@@ -2576,8 +2569,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) break;
             var rf = style.StyleRunProperties?.RunFonts;
             var name = rf?.Ascii?.Value
@@ -2596,8 +2588,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) break;
             var cv = style.StyleRunProperties?.Color?.Val?.Value;
             if (cv != null && cv != "auto" && IsHexColor(cv)) return $"#{cv}";
@@ -2615,8 +2606,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) break;
             // GetFirstChild — Open XML SDK doesn't always surface less-common
             // pPr children as typed properties on StyleParagraphProperties.
@@ -2639,8 +2629,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) break;
             var b = style.StyleRunProperties?.Bold;
             if (b != null) return b.Val == null || b.Val.Value;
@@ -2655,8 +2644,7 @@ public partial class WordHandler
         var current = styleId;
         while (current != null && visited.Add(current))
         {
-            var style = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles
-                ?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == current);
+            var style = FindStyleById(current);
             if (style == null) break;
             var ind = style.StyleParagraphProperties?.Indentation;
             if (ind?.Left?.Value is string lv && int.TryParse(lv, out var twips))

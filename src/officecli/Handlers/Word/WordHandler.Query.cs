@@ -3494,7 +3494,7 @@ public partial class WordHandler
         var nb = _doc.MainDocumentPart?.NumberingDefinitionsPart?.Numbering;
         if (nb == null) return null;
         var styles = _doc.MainDocumentPart?.StyleDefinitionsPart?.Styles;
-        var style = styles?.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == styleId);
+        var style = FindStyleById(styleId);
         var styleNumId = style?.StyleParagraphProperties?.NumberingProperties?.NumberingId?.Val?.Value;
         if (styleNumId == null) return null;
         var inst = nb.Elements<NumberingInstance>().FirstOrDefault(n => n.NumberID?.Value == styleNumId);
