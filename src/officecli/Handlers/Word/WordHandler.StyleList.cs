@@ -894,22 +894,54 @@ public partial class WordHandler
     /// using the four-way precedence Word follows: in-run running count →
     /// explicit startOverride → abstractNum continuation → level start value.
     /// </summary>
-    private int SeedOrderedStart(OrderedListNumberingState st, int numId, int? absId, int forIlvl)
+    // INT_MIN guard: seed - 1 would wrap (unchecked) to int.MaxValue, which then
+    // permanently triggers the saturation branch in AdvanceOrderedCounter and
+    // freezes every item at int.MaxValue. Seed at INT_MIN instead so the counter
+    // still advances upward (graceful for an absurd start).
+    private static int SeedBelow(int v) => v == int.MinValue ? int.MinValue : v - 1;
+
+    private int SeedOrderedStart(OrderedListNumberingState st, int numId, int? absId, int forIlvl, bool autoInit = false)
     {
         if (st.OlCountPerLevel.TryGetValue(forIlvl, out var prev) && prev > 0)
             return prev;
-        var ovr = GetNumStartOverride(numId, forIlvl);
-        if (ovr.HasValue) return ovr.Value - 1;
+        // <w:startOverride> is a restart marker that applies only when the level
+        // is explicitly visited. When a deeper level auto-initializes a skipped
+        // shallower level (autoInit), Word ignores startOverride and uses the
+        // level's intrinsic <w:start> — verified vs real Word.
+        if (!autoInit)
+        {
+            var ovr = GetNumStartOverride(numId, forIlvl);
+            if (ovr.HasValue) return SeedBelow(ovr.Value);
+        }
         if (absId.HasValue
             && st.AbsNumLevelCounters.TryGetValue(absId.Value, out var byIlvl)
             && byIlvl.TryGetValue(forIlvl, out var running) && running > 0)
             return running;
-        var rawStart = GetStartValue(numId, forIlvl) ?? 1;
-        // Guard INT_MIN: rawStart - 1 would wrap to int.MaxValue, which then
-        // permanently triggers the saturation branch in AdvanceOrderedCounter
-        // and freezes every item at int.MaxValue. Seed at INT_MIN instead so
-        // the counter still advances upward (graceful for an absurd start).
-        return rawStart == int.MinValue ? int.MinValue : rawStart - 1;
+        var rawStart = autoInit
+            ? GetLevelDefinedStart(numId, forIlvl)
+            : (GetStartValue(numId, forIlvl) ?? 1);
+        return SeedBelow(rawStart);
+    }
+
+    // The level's intrinsic start value, EXCLUDING <w:startOverride> (which is a
+    // restart marker, not part of the level definition). An embedded <w:lvl>
+    // override replaces the level definition, so its own <w:start> governs;
+    // otherwise the abstractNum level's <w:start>. Default 1.
+    private int GetLevelDefinedStart(int numId, int ilvl)
+    {
+        var numbering = _doc.MainDocumentPart?.NumberingDefinitionsPart?.Numbering;
+        var inst = numbering?.Elements<NumberingInstance>()
+            .FirstOrDefault(n => n.NumberID?.Value == numId);
+        var lvlOverride = inst?.Elements<LevelOverride>()
+            .FirstOrDefault(o => o.LevelIndex?.Value == ilvl);
+        if (lvlOverride?.GetFirstChild<Level>() is Level emb)
+            return emb.StartNumberingValue?.Val?.Value ?? 1;
+        var absId = inst?.AbstractNumId?.Val?.Value;
+        var abs = numbering?.Elements<AbstractNum>()
+            .FirstOrDefault(a => a.AbstractNumberId?.Value == absId);
+        var lvl = abs?.Elements<Level>()
+            .FirstOrDefault(l => l.LevelIndex?.Value == ilvl);
+        return lvl?.StartNumberingValue?.Val?.Value ?? 1;
     }
 
     /// <summary>
@@ -930,7 +962,7 @@ public partial class WordHandler
         for (int j = 0; j < ilvl; j++)
         {
             if (st.OlCountPerLevel.ContainsKey(j)) continue;
-            var sj = SeedOrderedStart(st, numId, absId, j) + 1;
+            var sj = SeedOrderedStart(st, numId, absId, j, autoInit: true) + 1;
             st.OlCountPerLevel[j] = sj;
             st.MultiLevelCounters[j] = sj;
             if (absId.HasValue)
