@@ -946,8 +946,20 @@ public partial class WordHandler
     /// </summary>
     private string RenderOrderedMarker(OrderedListNumberingState st, int numId, int ilvl, string? lvlText)
     {
-        var template = string.IsNullOrEmpty(lvlText) ? $"%{ilvl + 1}" : lvlText!;
-        return System.Text.RegularExpressions.Regex.Replace(template, @"%(\d)", m =>
+        // Distinguish "no lvlText element" (null → legit %N fallback) from a
+        // present-but-empty <w:lvlText w:val=""/> (intentional no-marker; Word
+        // renders nothing). Only null defaults to the %N template; an explicit
+        // "" yields an empty marker. GetLevelText returns null when the level
+        // or its lvlText is absent and "" when val="" is present, so the
+        // distinction is clean at this layer.
+        var template = lvlText ?? $"%{ilvl + 1}";
+        // Only %1..%9 are valid Word level placeholders (CT_LevelText / lvlText
+        // references 1-based level indices 1-9). %0 is not a placeholder — Word
+        // leaves it literal — and matching it here produced k=-1 →
+        // GetNumberingFormat(numId,-1) → no level → "bullet" → a • glyph
+        // emitted inside an ordered marker. Restrict to %1-%9 so any other %x
+        // stays literal in both views.
+        return System.Text.RegularExpressions.Regex.Replace(template, @"%([1-9])", m =>
         {
             var k = int.Parse(m.Groups[1].Value) - 1;
             var lvlFmt = GetNumberingFormat(numId, k);
@@ -964,6 +976,14 @@ public partial class WordHandler
         var numId = numProps.NumberingId?.Val?.Value;
         var ilvl = numProps.NumberingLevelReference?.Val?.Value ?? 0;
         if (numId == null || numId == 0) return "";
+
+        // Clamp ilvl to the OOXML-legal range [0, 8] ONCE before any use.
+        // Malformed docs (raw-zip fuzz) carry ilvl negative (→ new string(' ',
+        // neg) throws) or huge (~1e9 → ilvl*2 int overflow → negative → throws;
+        // 10000 → a 20000-space line). Matches the HTML preview path
+        // (WordHandler.HtmlPreview.cs, "ilvl > 8") so text == html marker.
+        if (ilvl < 0) ilvl = 0;
+        else if (ilvl > 8) ilvl = 8;
 
         var indent = new string(' ', ilvl * 2);
         var numFmt = GetNumberingFormat(numId.Value, ilvl);
