@@ -468,11 +468,14 @@ public static class WordNumFmtRenderer
         return sb.ToString();
     }
 
+    // Word's Cyrillic enumeration set is 29 letters: the full 33-letter alphabet
+    // minus ё, й, ъ and ь. ы IS included (between щ and э) — only the soft/hard
+    // signs and ё/й are dropped. (26 → ы, 27 → э, 28 → ю, 29 → я.)
     private static readonly string[] RussianAlphaLower =
     {
         "а", "б", "в", "г", "д", "е", "ж", "з", "и", "к",
         "л", "м", "н", "о", "п", "р", "с", "т", "у", "ф",
-        "х", "ц", "ч", "ш", "щ", "э", "ю", "я"
+        "х", "ц", "ч", "ш", "щ", "ы", "э", "ю", "я"
     };
     // Korean numerals ------------------------------------------------------
 
