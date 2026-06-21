@@ -1030,6 +1030,23 @@ public partial class WordHandler
                     throw new ArgumentException($"{opName} part{pi}.child{ci} requires relId and a non-empty data: URI");
                 var childPart = CreateInlinedChildPart(created, cct, childRelId!)
                     ?? throw new ArgumentException($"{opName} part{pi}.child{ci}: unsupported content type '{cct}'");
+                // BUG-DUMP-R71-USERSHAPES-IMG: recreate the child's OWN parts (a
+                // chart userShapes drawing -> its image) BEFORE feeding the child
+                // bytes, using the ORIGINAL rel id so the child's verbatim r:embed
+                // resolves without rewriting. Without this the rebuilt drawing's
+                // r:embed dangles ("relationship does not exist").
+                for (int gi = 1; properties.TryGetValue($"part{pi}.child{ci}.gc{gi}.relId", out var gcRelId); gi++)
+                {
+                    var gcUri = properties.GetValueOrDefault($"part{pi}.child{ci}.gc{gi}.data");
+                    if (string.IsNullOrEmpty(gcRelId)
+                        || !OfficeCli.Core.OleHelper.TryDecodeDataUri(gcUri, out var gcbytes, out var gcct)
+                        || gcbytes.Length == 0)
+                        throw new ArgumentException($"{opName} part{pi}.child{ci}.gc{gi} requires relId and a non-empty data: URI");
+                    var gcPart = CreateInlinedChildPart(childPart, gcct, gcRelId!)
+                        ?? throw new ArgumentException($"{opName} part{pi}.child{ci}.gc{gi}: unsupported content type '{gcct}'");
+                    using var gcms = new MemoryStream(gcbytes);
+                    gcPart.FeedData(gcms);
+                }
                 using var cms = new MemoryStream(cbytes);
                 childPart.FeedData(cms);
             }

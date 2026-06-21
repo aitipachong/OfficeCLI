@@ -957,9 +957,27 @@ public partial class WordHandler : IDocumentHandler
                 byte[] cb;
                 try { cb = ReadPartBytes(child.OpenXmlPart); }
                 catch { return null; }
+                // BUG-DUMP-R71-USERSHAPES-IMG: a child part can own its OWN parts
+                // — a chart's <c:userShapes> ChartDrawingPart references an image
+                // (drawingN.xml r:embed -> media/imageN). Without capturing that
+                // grandchild the rebuilt drawing's r:embed dangles ("relationship
+                // does not exist"). Collect one more nesting level so the image
+                // (and any other child-of-child) round-trips. Grandchildren are
+                // recreated under the child with their ORIGINAL rel id, so the
+                // child's verbatim XML refs resolve without rewriting.
+                var grandchildren = new List<ActiveXPartData>();
+                foreach (var gc in child.OpenXmlPart.Parts)
+                {
+                    byte[] gcb;
+                    try { gcb = ReadPartBytes(gc.OpenXmlPart); }
+                    catch { return null; }
+                    grandchildren.Add(new ActiveXPartData(
+                        gc.RelationshipId, gcb, gc.OpenXmlPart.ContentType,
+                        new List<ActiveXPartData>(), new List<ActiveXExternalData>()));
+                }
                 children.Add(new ActiveXPartData(
                     child.RelationshipId, cb, child.OpenXmlPart.ContentType,
-                    new List<ActiveXPartData>(), new List<ActiveXExternalData>()));
+                    grandchildren, new List<ActiveXExternalData>()));
             }
             // A collected part can carry its OWN external relationships — e.g. a
             // chart part whose <c:externalData r:id> links an external oleObject

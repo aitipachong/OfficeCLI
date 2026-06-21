@@ -3831,6 +3831,17 @@ public static partial class WordBatchEmitter
                 props[$"part{pi}.child{ci}.relId"] = child.RelId;
                 props[$"part{pi}.child{ci}.data"] =
                     $"data:{child.ContentType};base64,{Convert.ToBase64String(child.Bytes)}";
+                // BUG-DUMP-R71-USERSHAPES-IMG: a child can own further parts (a
+                // chart userShapes drawing -> its image). Emit that grandchild
+                // level so the drawing's r:embed isn't left dangling on replay.
+                int gi = 0;
+                foreach (var gc in child.Children)
+                {
+                    gi++;
+                    props[$"part{pi}.child{ci}.gc{gi}.relId"] = gc.RelId;
+                    props[$"part{pi}.child{ci}.gc{gi}.data"] =
+                        $"data:{gc.ContentType};base64,{Convert.ToBase64String(gc.Bytes)}";
+                }
             }
             // Per-part external rels (e.g. a chart's <c:externalData r:id> ->
             // external oleObject workbook). Recreated on the part itself, with
