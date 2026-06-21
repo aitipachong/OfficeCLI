@@ -1098,10 +1098,44 @@ public partial class WordHandler
     /// </summary>
     private bool ShouldRestartDeeperLevel(int numId, int ilvl, int deeperIlvl)
     {
-        var restart = GetLevel(numId, deeperIlvl)?.GetFirstChild<LevelRestart>()?.Val?.Value;
+        var restart = GetEffectiveLvlRestart(numId, deeperIlvl);
         if (restart == 0) return false;          // val="0": never restart
         var r = restart ?? deeperIlvl;           // default: restart on any strictly shallower level
         return (ilvl + 1) <= r;
+    }
+
+    /// <summary>
+    /// lvlRestart for a level, honoring the embedded-&lt;w:lvl&gt;-override MERGE
+    /// model: an embedded override redefines the properties it specifies but
+    /// INHERITS those it omits from the base abstractNum level. GetLevel returns
+    /// the override lvl (which may omit lvlRestart), so fall back to the base
+    /// abstractNum level's lvlRestart when the override does not set one — Word
+    /// keeps the original restart rule (e.g. lvlRestart="1") rather than reverting
+    /// to the default "restart on any parent tick".
+    /// </summary>
+    private int? GetEffectiveLvlRestart(int numId, int ilvl)
+    {
+        var r = GetLevel(numId, ilvl)?.GetFirstChild<LevelRestart>()?.Val?.Value;
+        if (r.HasValue) return r;
+        return GetAbstractLevel(numId, ilvl)?.GetFirstChild<LevelRestart>()?.Val?.Value;
+    }
+
+    /// <summary>
+    /// The level definition straight from the abstractNum, IGNORING any
+    /// per-instance lvlOverride (the opposite of <see cref="GetLevel"/>, which
+    /// prefers an embedded override lvl). Used to recover properties the override
+    /// omits under the merge model.
+    /// </summary>
+    private Level? GetAbstractLevel(int numId, int ilvl)
+    {
+        var numbering = _doc.MainDocumentPart?.NumberingDefinitionsPart?.Numbering;
+        var inst = numbering?.Elements<NumberingInstance>()
+            .FirstOrDefault(n => n.NumberID?.Value == numId);
+        var absId = inst?.AbstractNumId?.Val?.Value;
+        if (absId == null) return null;
+        var abs = numbering!.Elements<AbstractNum>()
+            .FirstOrDefault(a => a.AbstractNumberId?.Value == absId);
+        return abs?.Elements<Level>().FirstOrDefault(l => l.LevelIndex?.Value == ilvl);
     }
 
     /// <summary>
