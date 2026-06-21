@@ -124,7 +124,7 @@ public static partial class WordBatchEmitter
         // `runs` filter sees only the cached display run and emits the field
         // value as static text — PAGE/REF/SEQ/HYPERLINK/NUMPAGES degrade to
         // their evaluated string and stop auto-updating (BUG-X2-05 / X2-1).
-        var fieldEntries = CollapseFieldChains(pNode.Children ?? new List<DocumentNode>());
+        var fieldEntries = CollapseFieldChains(pNode.Children ?? new List<DocumentNode>(), word);
         // R14-bug1+2: a legacy form field MAY embed a BookmarkStart/End of its
         // own name (Word wraps form fields in a bookmark so REF fields can target
         // them, but a plain FORMCHECKBOX/FORMTEXT authored without that wrap has
