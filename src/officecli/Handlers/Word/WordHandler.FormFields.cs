@@ -498,9 +498,16 @@ public partial class WordHandler
                 {
                     foreach (var item in items.Split(','))
                     {
-                        var trimmed = item.Trim();
-                        entries.Add(trimmed);
-                        ddl.AppendChild(new ListEntryFormField { Val = trimmed });
+                        // BUG-DUMP-FORMDROPDOWN-LISTENTRY-WS: do NOT trim listEntry
+                        // values. The dump joins them with a bare "," (no padding,
+                        // see GetFormField), so Split(',') already yields the exact
+                        // source values. Trimming destroyed significant whitespace
+                        // ("  LE  " → "LE") and — worse — turned an all-spaces entry
+                        // ("      ") into an EMPTY <w:listEntry w:val=""/>, which makes
+                        // Word REFUSE TO OPEN the document. Form-field dropdown entries
+                        // are whitespace-significant; preserve them verbatim.
+                        entries.Add(item);
+                        ddl.AppendChild(new ListEntryFormField { Val = item });
                     }
                 }
                 ffData.AppendChild(ddl);
