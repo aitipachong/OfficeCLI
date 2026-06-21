@@ -385,6 +385,46 @@ public static partial class WordBatchEmitter
         if (string.IsNullOrEmpty(xml) || !xml.StartsWith("<")) return;
         xml = CanonicalizeRawXml(xml);
 
+        // BUG-DUMP-NOTE-RAWREF-WONTOPEN: the per-reference `add footnote`/`add
+        // endnote` body walk only fires for references the walk actually visits.
+        // When EVERY reference to a body note lives inside a raw-emitted region
+        // — an SDT content-control carrier, a verbatim field/textbox block —
+        // the walk never sees it, so NO `add <kind>` is emitted and the rebuild
+        // never creates the FootnotesPart/EndnotesPart. The raw region still
+        // carries the verbatim `<w:footnoteReference w:id="N"/>`, so the rebuilt
+        // body references a note id that does not exist → Word reports the file
+        // is corrupt and refuses to open. (The targeted per-note raw-sets below
+        // would also fail: their child XPath matches nothing in the missing
+        // part.) Recover by emitting the WHOLE notes part verbatim: RawSet on
+        // "/w:footnotes" lazily creates the part with the source's exact note
+        // bodies. Because nothing was added, no body renumbering happened, so
+        // every raw reference keeps its original id and resolves cleanly.
+        int emittedAdds = items.Count(it =>
+            it.Command == "add"
+            && string.Equals(it.Type, queryKind, StringComparison.OrdinalIgnoreCase));
+        if (emittedAdds == 0)
+        {
+            bool rawHasRef = items.Any(it =>
+                it.Command == "raw-set"
+                && it.Xml != null
+                && it.Xml.Contains($"{queryKind}Reference", StringComparison.Ordinal));
+            if (rawHasRef)
+            {
+                items.Add(new BatchItem
+                {
+                    Command = "raw-set",
+                    Part = semanticPart,
+                    Xpath = $"/w:{queryKind}s",
+                    Action = "replace",
+                    Xml = xml
+                });
+            }
+            // No `add <kind>` AND no raw reference → genuine orphan note bodies;
+            // WarnOrphanNotes already surfaced the drop. Either way the targeted
+            // per-note fixup below cannot run (no part to patch), so stop here.
+            return;
+        }
+
         System.Xml.Linq.XDocument doc;
         try { doc = System.Xml.Linq.XDocument.Parse(xml); }
         catch { return; }

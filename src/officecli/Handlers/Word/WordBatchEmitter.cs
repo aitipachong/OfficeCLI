@@ -318,6 +318,17 @@ public static partial class WordBatchEmitter
             && string.Equals(it.Type, kind, StringComparison.OrdinalIgnoreCase));
         if (emitted >= notes.Count) return;
 
+        // BUG-DUMP-NOTE-RAWREF-WONTOPEN: a note whose only reference lives inside
+        // a raw-emitted region (SDT carrier, verbatim field/textbox) is NOT an
+        // orphan — EmitNoteSpecialNotesFixup recovers it by emitting the whole
+        // notes part verbatim (fires only when no `add <kind>` ran, i.e.
+        // emitted == 0). Don't warn "dropped" for notes that path restores.
+        if (emitted == 0
+            && items.Any(it => it.Command == "raw-set"
+                && it.Xml != null
+                && it.Xml.Contains($"{kind}Reference", StringComparison.Ordinal)))
+            return;
+
         // The first `emitted` notes are the ones a reference recovered (Query
         // and the body walk both run in document order); the remainder are
         // orphans. Report each so its lost text is visible.
