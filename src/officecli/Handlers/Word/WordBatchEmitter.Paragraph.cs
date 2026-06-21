@@ -137,7 +137,11 @@ public static partial class WordBatchEmitter
             .Select(e => e.Format["ffName"]?.ToString() ?? "")
             .Where(n => !string.IsNullOrEmpty(n))
             .ToHashSet(StringComparer.Ordinal);
-        if (formFieldNames.Count > 0)
+        // Gate on ANY form field, not only named ones: a paragraph holding only
+        // nameless fields still needs the noBookmark pin pass below, else each
+        // nameless field gains a fabricated ff_<guid> bookmark on rebuild
+        // (BUG-DUMP-R72-FF-BOOKMARK-COUNT).
+        if (fieldEntries.Any(e => e.Type == "formfield"))
         {
             // BUG-DUMP-FFCHECKBOX-BOOKMARK: a form field whose SOURCE had no
             // wrapping bookmark must NOT gain a fabricated one on rebuild.
@@ -172,12 +176,18 @@ public static partial class WordBatchEmitter
             // remaining budget (row-level / other-paragraph source bookmarks) lasts;
             // an unnamed field — which cannot carry a named bookmark — and a field
             // whose budget is exhausted are pinned noBookmark.
-            foreach (var ffSynth in fieldEntries.Where(e => e.Type == "formfield"
-                         && e.Format.TryGetValue("ffName", out _)))
+            foreach (var ffSynth in fieldEntries.Where(e => e.Type == "formfield"))
             {
-                var ffn = ffSynth.Format["ffName"]?.ToString() ?? "";
+                var ffn = ffSynth.Format.TryGetValue("ffName", out var ffnObj)
+                    ? (ffnObj?.ToString() ?? "")
+                    : "";
                 if (string.IsNullOrEmpty(ffn))
                 {
+                    // A nameless source field had no wrapping bookmark (a bookmark
+                    // needs a name), yet AddFormField would auto-generate an
+                    // ff_<guid> name + bookmark for it (the interactive default).
+                    // Pin noBookmark on round-trip so a bookmark-less field stays
+                    // bookmark-less instead of gaining a fabricated ff_<guid> one.
                     ffSynth.Format["_noBookmark"] = true;
                     continue;
                 }
