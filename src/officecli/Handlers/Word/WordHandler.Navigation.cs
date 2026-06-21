@@ -3600,13 +3600,25 @@ public partial class WordHandler
             // foreign producers). Probe both.
             var prevExt = pPrChange.GetFirstChild<ParagraphPropertiesExtended>();
             var prevPpr = pPrChange.GetFirstChild<PreviousParagraphProperties>();
-            OpenXmlElement? prevPpEl = (prevExt != null && prevExt.HasChildren)
-                ? prevExt
-                : (prevPpr != null && prevPpr.HasChildren) ? prevPpr : null;
             // BUG-DUMP-R43-8: carry the verbatim prior-pPr snapshot so the
             // emitter restores it via revision.beforeXml instead of stamping an
             // empty <w:pPr/> marker. The inner element's OuterXml round-trips
             // through AddParagraph's pPrChange InnerXml assignment.
+            // BUG-DUMP-PPRCHANGE-CS-EMPTYSNAP: emit beforeXml even when the prior
+            // snapshot is EMPTY (the element exists but has no children — Word's
+            // "format changed from the default" marker). Prefer the populated
+            // element, but fall back to an empty one so the key is still present.
+            // Without it, an empty-snapshot pPrChange on a paragraph that also
+            // carries complex-script (.cs) run props made the replayed `set` hit
+            // the "RTL cascade properties not supported with trackChange" guard
+            // (which is bypassed only when revision.beforeXml is supplied) — the
+            // op failed and the cell's content was dropped. An empty snapshot
+            // round-trips as an empty <w:pPr/> via ApplyBeforeXmlSnapshot, so no
+            // smearing occurs.
+            OpenXmlElement? prevPpEl =
+                  (prevExt != null && prevExt.HasChildren) ? prevExt
+                : (prevPpr != null && prevPpr.HasChildren) ? prevPpr
+                : (OpenXmlElement?)prevExt ?? prevPpr;
             if (prevPpEl != null)
                 node.Format["revision.beforeXml"] = prevPpEl.OuterXml;
         }
