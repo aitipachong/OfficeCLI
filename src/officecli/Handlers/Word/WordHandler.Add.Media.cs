@@ -1245,7 +1245,7 @@ public partial class WordHandler
         // 1. Create the embedded binary payload part and rel id on the host part.
         // 2. Resolve ProgID.
         string embedRelId;
-        string progId;
+        string? progId;
         if (OfficeCli.Core.OleHelper.TryDecodeDataUri(srcPath, out var embedBytes, out var dataCt))
         {
             // dump→batch round-trip: src is a data: URI carrying the embedded
@@ -1264,13 +1264,16 @@ public partial class WordHandler
                 ?? properties.GetValueOrDefault("embedext");
             (embedRelId, _) = OfficeCli.Core.OleHelper.AddEmbeddedPartFromBytes(
                 hostPart, embedBytes, oleKind, contentType, embedExt);
-            // No file extension to sniff ProgID from — the dump always forwards
-            // it, so require it explicitly rather than guessing.
+            // BUG-DUMP-OLE-NOPROGID: ProgID is OPTIONAL in OOXML (an <o:OLEObject>
+            // may omit it), so the dump omits the progId prop when the source has
+            // none. Requiring it here threw on that valid input, failing the batch
+            // op and silently dropping the OLE object. Accept a missing progId and
+            // emit the <o:OLEObject> WITHOUT a ProgID attribute, mirroring the
+            // source. (An explicit progId is still validated.)
             progId = properties.GetValueOrDefault("progId")
-                ?? properties.GetValueOrDefault("progid")
-                ?? throw new ArgumentException(
-                    "inline ole payload (data: src) requires an explicit --prop progId");
-            OfficeCli.Core.OleHelper.ValidateProgId(progId);
+                ?? properties.GetValueOrDefault("progid");
+            if (!string.IsNullOrEmpty(progId))
+                OfficeCli.Core.OleHelper.ValidateProgId(progId);
         }
         else
         {
@@ -1408,12 +1411,17 @@ public partial class WordHandler
             imageCropAttrs = cropSb.ToString();
         }
 
+        // ProgID is optional (BUG-DUMP-OLE-NOPROGID): omit the attribute entirely
+        // when the source had none, rather than emitting ProgID="".
+        var progIdAttr = string.IsNullOrEmpty(progId)
+            ? ""
+            : $" ProgID=\"{System.Security.SecurityElement.Escape(progId)}\"";
         var oleXml = $"""
 <w:object xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" w:dxaOrig="{cxTwips}" w:dyaOrig="{cyTwips}">
 {shapetypeXml}<v:shape id="{shapeId}" type="#_x0000_t75" style="{shapeStyleAttr}"{oleAttr}{shapeAltAttr}>
 <v:imagedata r:id="{iconRelId}" o:title=""{imageCropAttrs}/>
 </v:shape>
-<o:OLEObject Type="Embed" ProgID="{System.Security.SecurityElement.Escape(progId)}" ShapeID="{shapeId}" DrawAspect="{drawAspect}" ObjectID="{objectId}" r:id="{embedRelId}"/>
+<o:OLEObject Type="Embed"{progIdAttr} ShapeID="{shapeId}" DrawAspect="{drawAspect}" ObjectID="{objectId}" r:id="{embedRelId}"/>
 </w:object>
 """;
         var oleObject = new EmbeddedObject(oleXml);
