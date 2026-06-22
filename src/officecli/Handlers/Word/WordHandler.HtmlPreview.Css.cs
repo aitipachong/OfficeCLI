@@ -209,7 +209,25 @@ public partial class WordHandler
         var w = ln.GetAttributes().FirstOrDefault(a => a.LocalName == "w").Value;
         var widthPx = w != null && long.TryParse(w, out var emu) ? Math.Max(1, emu / EmuConverter.EmuPerPointF) : 1;
 
-        return $"border:{widthPx:0.#}px solid {color ?? "#000"}";
+        var style = ResolveBorderDashStyle(ln);
+        return $"border:{widthPx:0.#}px {style} {color ?? "#000"}";
+    }
+
+    /// <summary>
+    /// Map an a:ln's a:prstDash preset to a CSS border-style. CSS has only
+    /// solid/dashed/dotted; the OOXML dash family collapses accordingly.
+    /// </summary>
+    private static string ResolveBorderDashStyle(OpenXmlElement ln)
+    {
+        var prstDash = ln.Elements().FirstOrDefault(e => e.LocalName == "prstDash");
+        var val = prstDash?.GetAttributes().FirstOrDefault(a => a.LocalName == "val").Value;
+        return val switch
+        {
+            "dot" or "sysDot" => "dotted",
+            "dash" or "sysDash" or "lgDash"
+                or "dashDot" or "lgDashDot" or "sysDashDot" or "sysDashDotDot" or "lgDashDotDot" => "dashed",
+            _ => "solid", // "solid", null, or unknown
+        };
     }
 
     // ==================== Color Math Helpers ====================
