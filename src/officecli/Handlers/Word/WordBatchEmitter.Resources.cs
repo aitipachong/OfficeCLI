@@ -2899,7 +2899,14 @@ public static partial class WordBatchEmitter
             // the SDT round-trips verbatim via raw-set (no rels involved).
             || sdtXml.Contains("<w:br", StringComparison.Ordinal)
             || sdtXml.Contains("<w:tab", StringComparison.Ordinal)
-            || sdtXml.Contains("<w:cr", StringComparison.Ordinal);
+            || sdtXml.Contains("<w:cr", StringComparison.Ordinal)
+            // BUG-DUMP-EQUATION-SDT: an equation content control's math content
+            // (<m:oMath>/<m:oMathPara>) lives in m: runs, not <w:r>, so the run
+            // checks above miss it and the typed path dropped the equation. Treat
+            // math content or the <w:equation/> sdtPr marker as rich → raw-set
+            // verbatim. (Block-level equation SDTs mirror the inline fix.)
+            || sdtXml.Contains("<m:oMath", StringComparison.Ordinal)
+            || sdtXml.Contains("<w:equation", StringComparison.Ordinal);
     }
 
     // Raw injection of an <w:sdt> into the blank target preserves the element

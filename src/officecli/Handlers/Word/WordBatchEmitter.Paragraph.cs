@@ -4476,7 +4476,16 @@ public static partial class WordBatchEmitter
             || sdtXml.Contains("<w:drawing", StringComparison.Ordinal)
             || sdtXml.Contains("<w:br", StringComparison.Ordinal)
             || sdtXml.Contains("<w:tab", StringComparison.Ordinal)
-            || sdtXml.Contains("<w:cr", StringComparison.Ordinal);
+            || sdtXml.Contains("<w:cr", StringComparison.Ordinal)
+            // BUG-DUMP-EQUATION-SDT: an EQUATION content control (<w:sdtPr><w:equation/>
+            // … <w:sdtContent><m:oMathPara>/<m:oMath>) carries its math in m: runs
+            // (<m:r>/<m:t>), not <w:r>/<w:t>, so none of the run checks above fire and
+            // the typed `add sdt` path silently dropped the entire equation (wrapper +
+            // math). Treat any SDT carrying math content — or the <w:equation/> sdtPr
+            // type marker — as rich so it raw-sets verbatim, preserving the control
+            // type and the equation.
+            || sdtXml.Contains("<m:oMath", StringComparison.Ordinal)
+            || sdtXml.Contains("<w:equation", StringComparison.Ordinal);
     }
 
     // Collapse OOXML complex field chains (fldChar(begin) + instrText + …
