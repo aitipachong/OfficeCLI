@@ -4113,8 +4113,18 @@ public static partial class WordBatchEmitter
         var raw = word.GetElementXml(run.Path);
         if (!string.IsNullOrEmpty(raw))
         {
-            if (raw.Contains("footnoteReference", StringComparison.Ordinal)) return NoteRefKind.Footnote;
-            if (raw.Contains("endnoteReference", StringComparison.Ordinal)) return NoteRefKind.Endnote;
+            // BUG-DUMP-NOTEREF-LITERAL: match the <w:footnoteReference> ELEMENT
+            // open tag, not the bare token. A run whose visible text literally
+            // contains the word "footnoteReference"/"endnoteReference" (common in
+            // docs that describe OOXML/Word internals) is NOT a note anchor — the
+            // old substring probe matched the word inside <w:t>…</w:t> and replaced
+            // the whole run with a synthesized note reference, silently dropping all
+            // its text. Require the element open-tag form `<[prefix:]footnoteReference`
+            // followed by a tag-terminating char so text content can never match.
+            if (System.Text.RegularExpressions.Regex.IsMatch(raw, @"<\w*:?footnoteReference[\s/>]"))
+                return NoteRefKind.Footnote;
+            if (System.Text.RegularExpressions.Regex.IsMatch(raw, @"<\w*:?endnoteReference[\s/>]"))
+                return NoteRefKind.Endnote;
             return NoteRefKind.None;
         }
         if (string.Equals(rStyle, "FootnoteReference", StringComparison.OrdinalIgnoreCase)) return NoteRefKind.Footnote;
