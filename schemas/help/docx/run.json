@@ -423,6 +423,31 @@
       "readback": "n/a (surfaces as superscript/subscript flag)",
       "enforcement": "report"
     },
+    "kern": {
+      "type": "int",
+      "description": "kerning activation threshold (<w:kern w:val=.../>): font sizes at or above this point size get automatic pair kerning. Value is an integer in half-points (28 = 14pt threshold); a 'pt' suffix is NOT accepted (unlike pptx kern). Valid range 0-3277 half-points (~164pt); an empty value clears it.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop kern=28"
+      ],
+      "readback": "integer half-points, e.g. \"28\"",
+      "enforcement": "report"
+    },
+    "position": {
+      "type": "length",
+      "description": "vertical baseline shift (<w:position w:val=.../>): positive raises text above the baseline, negative lowers it, 0 = baseline. Keeps the full glyph size (distinct from vertAlign=super|sub, which also shrinks the glyph). Accepts a 'pt' value (e.g. 6pt) or a bare integer in half-points; an empty value clears it.",
+      "add": true,
+      "set": true,
+      "get": true,
+      "examples": [
+        "--prop position=6pt",
+        "--prop position=-3pt"
+      ],
+      "readback": "unit-qualified pt, e.g. \"6pt\"",
+      "enforcement": "report"
+    },
     "charSpacing": {
       "type": "length",
       "description": "character spacing (letter spacing) in points. Stored as twips × 20.",
