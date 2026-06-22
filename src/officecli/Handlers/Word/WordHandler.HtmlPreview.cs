@@ -2497,10 +2497,14 @@ public partial class WordHandler
                     var pTag = HasBlockLevelDrawing(para) ? "div" : "p";
                     sb.Append("<").Append(pTag);
                     sb.Append($" data-path=\"/body/p[{wParaCount}]\"");
-                    // Add CSS class for TOC paragraphs (suppress hyperlink styling, enable dot leaders)
+                    // Add CSS class for TOC paragraphs (suppress hyperlink styling, enable dot leaders).
+                    // Match by resolved style NAME too, not just styleId prefix: WPS / localized
+                    // Word emit numeric styleIds (e.g. "28") whose display name is "toc 1", so a
+                    // styleId-only test silently misses their TOC entries and leaks the Hyperlink
+                    // character-style color. See IsTocParagraphStyle in HtmlPreview.Text.cs.
                     var paraStyleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
                     var classNames = new List<string>();
-                    if (paraStyleId != null && paraStyleId.StartsWith("TOC", StringComparison.OrdinalIgnoreCase))
+                    if (IsTocParagraphStyle(paraStyleId, GetStyleName(para)))
                         classNames.Add("toc");
                     // CONSISTENCY(run-special-content): body-path render must
                     // also flag has-ptab so the paragraph becomes a flex

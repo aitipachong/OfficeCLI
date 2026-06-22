@@ -2930,6 +2930,15 @@ public partial class WordHandler
         .toc {{ display: flex; text-indent: 0 !important; }}
         .toc a {{ color: inherit; text-decoration: none; display: flex; flex: 1; }}
         .toc a span {{ color: inherit !important; text-decoration: none !important; }}
+        /* TOC entries authored as a fldChar field (HYPERLINK \l ... between
+           begin/separate/end) render as plain spans, NOT wrapped in <a>. Word
+           does not apply the Hyperlink character-style color/underline to a
+           TOC field's internal links — entries take the toc-N paragraph color
+           (black/auto by default). Mirror the .toc a span suppression for the
+           un-wrapped case so the Hyperlink rStyle blue does not leak through.
+           color:inherit recovers an explicit toc-N paragraph/style color (e.g.
+           a styled toc2) since that color lands on the .toc <p> itself. */
+        .toc > span {{ color: inherit !important; text-decoration: none !important; }}
         .dot-leader {{ flex: 1; border-bottom: 1px dotted #000; margin: 0 4px; min-width: 2em; align-self: flex-end; margin-bottom: 0.25em; }}
         .hyphen-leader {{ flex: 1; border-bottom: 1px dashed #000; margin: 0 4px; min-width: 2em; align-self: flex-end; margin-bottom: 0.25em; }}
         .underscore-leader {{ flex: 1; border-bottom: 1px solid #000; margin: 0 4px; min-width: 2em; align-self: flex-end; margin-bottom: 0.25em; }}
