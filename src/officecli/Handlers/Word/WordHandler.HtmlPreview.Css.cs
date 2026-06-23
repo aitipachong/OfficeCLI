@@ -3114,6 +3114,12 @@ public partial class WordHandler
         .page-body {{ flex: 1; display: flex; flex-direction: column; text-autospace: ideograph-alpha ideograph-numeric; overflow-wrap: break-word; {hyphensCss} }}
         /* Multi-column sections: flex ignores column-count; switch to block. */
         .page-body[style*=""column-count""] {{ display: block; }}
+        /* A table is typically full text-column width; inside a multi-column
+           section it cannot fit one narrow column and would overflow into and
+           overprint the adjacent column. Let tables span all columns (Word
+           renders a full-width table across the section, with body text
+           flowing in columns above/below it). */
+        [style*=""column-count""] > table {{ column-span: all; }}
         /* Continuation page-bodies (created by pagination JS when content
            overflows): the segment leader was already at its computed offset
            in the source body, so its server-rendered margin-top must be

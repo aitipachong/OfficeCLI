@@ -346,9 +346,12 @@ public partial class WordHandler
         // original behavior.
         var firstSection = CollectSections(body).FirstOrDefault()
             ?? _doc.MainDocumentPart?.Document?.Body?.GetFirstChild<SectionProperties>();
-        // CSS columns need a bounded height to balance — min-height alone
-        // leaves the body unbounded so all content stacks in column 1 and
-        // overflows the page. Use the doc-level pgLayout body height.
+        // CSS columns need a height floor to balance — with no height the body
+        // is unbounded so all content stacks in column 1 and overflows the page.
+        // BuildColBodyStyle applies this as `min-height` (not fixed `height`) so
+        // a section whose content exceeds two columns can grow the box downward
+        // instead of overprinting a wrapped-back third column (BUG(cols-overprint,
+        // R85)). Use the doc-level pgLayout body height as the floor.
         var colBodyHeightPt = pgLayout.HeightPt - pgLayout.MarginTopPt - pgLayout.MarginBottomPt;
 
         // Per-section page layout (#7a00): each page carries one or more
@@ -1370,8 +1373,21 @@ public partial class WordHandler
             return justify != null ? $" style=\"justify-content:{justify}\"" : "";
         var colSep = sectCols?.Separator?.Value == true;
         var colSpacing = sectCols?.Space?.Value;
+        // BUG(cols-overprint, R85): use min-height (not fixed height) so the
+        // multi-column box can GROW past the page body height when the section's
+        // content exceeds two columns worth. With a fixed `height`, CSS
+        // multi-column has no page break to flow into — once both columns fill
+        // to that height, the overflow opens a THIRD column that wraps back to
+        // the top of the SAME bounded box and visually overprints the existing
+        // columns (right ~40% became unreadable). min-height keeps the same
+        // balanced height for short content (columns still balance at the
+        // minimum) but lets tall content extend the box downward so later
+        // columns stack below instead of overlapping. HTML has no true
+        // page break, so this multi-column block renders taller than Word's
+        // real paginated layout — accepted (content-visible > exact height,
+        // same no-clip principle as the rest of this campaign).
         return $" style=\"column-count:{colCount}"
-            + $";height:{colBodyHeightPt.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}pt"
+            + $";min-height:{colBodyHeightPt.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}pt"
             + (colSep ? ";column-rule:1px solid #000" : "")
             + (int.TryParse(colSpacing, out var csp) && csp > 0 ? $";column-gap:{csp / 20.0:0.##}pt" : "")
             + "\"";
