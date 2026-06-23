@@ -49,7 +49,7 @@ If in doubt, `view text` after writing and compare character-for-character.
 
 ## Requirements for Outputs
 
-Before reaching for a command, know what a good docx looks like. These are the deliverable standards every document MUST meet.
+Deliverable standards every document MUST meet — know these before reaching for a command.
 
 **Clear hierarchy.** Every non-trivial document has Title → Heading 1 → Heading 2 → body, not a wall of unstyled `Normal` paragraphs. If `view outline` shows one flat list, the hierarchy is missing.
 
@@ -107,7 +107,7 @@ officecli close "$FILE"
 officecli validate "$FILE"
 ```
 
-Verified: `validate` returns `no errors found`; `get /footer[1] --depth 3` shows the 5-run PAGE field chain (begin / instrText / separate / cached value / end). Shape of every build: open → structure → content → format → footer/fields → close → validate.
+Verified: `validate` returns `no errors found`; `get /footer[1] --depth 3` shows the 5-run PAGE field chain (begin / instrText / separate / cached value / end).
 
 ## Reading & Analysis
 
@@ -428,7 +428,7 @@ Borders use the format `style;size;color;space`: `single;4;FF0000;1`. Hex colors
 
 ## QA (Required)
 
-**Assume there are problems. Your job is to find them.** Your first document is almost never correct — treat QA as a bug hunt, not a confirmation step. If you found zero issues on first inspection, you weren't looking hard enough. Headings look fine until `view outline` shows an H3 directly under an H1; the footer shows "Page 1" until `get --depth 3` reveals a static run, not a field.
+**Assume there are problems — QA is a bug hunt, not a confirmation step.** Your first document is almost never correct; zero issues on first inspection means you weren't looking hard enough. Headings look fine until `view outline` shows an H3 directly under an H1; the footer shows "Page 1" until `get --depth 3` reveals a static run, not a field.
 
 ### Minimum cycle before "done"
 
@@ -436,7 +436,7 @@ Borders use the format `style;size;color;space`: `single;4;FF0000;1`. Hex colors
 2. `officecli view "$FILE" outline` — heading hierarchy (no H1 → H3 skips), TOC presence, section count.
 3. `officecli view "$FILE" text --max-lines 400` — typos, stray `\$`/`\t`/`\n` literals, placeholder tokens.
 4. `officecli validate "$FILE"` — schema check (`close` any resident first — `validate` + open resident conflict and report spurious `drawing`/`tableParts` errors).
-5. **Visual pass — see the whole document as a contact sheet:** `officecli view "$FILE" screenshot --grid auto -o /tmp/sheet.png`, then Read `/tmp/sheet.png`. `--grid auto` tiles **every page** into one rasterized image, picking a column count that keeps the sheet roughly square (pass a number like `--grid 4` to force columns) — you actually *see* pagination, blank pages, broken heading rhythm, lopsided margins, and where the TOC/cover land, not just the DOM. On Windows with Word installed, the grid (like single-page shots) renders each page through real Word; elsewhere it uses the HTML preview. If `screenshot` errors (no headless browser: needs Chrome/Edge/Chromium/Firefox or `playwright`), fall back to `view html` + Read the path — but the DOM can't prove cross-page breaks, column alignment, or visual rhythm, so flag those as "not visually verified". The contact sheet is for **locating** problems, not judging them: its thumbnails are downscaled, so confirm any fine-layout call (table column alignment, line spacing, indents, dark-on-dark, caption/figure placement) on the suspect page at full resolution with `officecli view "$FILE" screenshot --page N` (no `--grid`; renders through real Word on Windows) before trusting it. "validate pass" is not delivery; "the contact sheet looks like a real document" is.
+5. **Visual pass — whole document as a contact sheet:** `officecli view "$FILE" screenshot --grid auto -o /tmp/sheet.png`, then Read it. `--grid auto` tiles **every page** into one image (auto column count; `--grid 4` to force) — you *see* pagination, blank pages, heading rhythm, lopsided margins, and TOC/cover placement, not just the DOM. Windows+Word renders each page through real Word; elsewhere HTML. No headless browser (needs Chrome/Edge/Chromium/Firefox or `playwright`)? Fall back to `view html` and flag cross-page breaks / alignment / rhythm as "not visually verified". Thumbnails only **locate**: confirm any fine call (column alignment, line spacing, indents, dark-on-dark, caption placement) on the suspect page at full resolution with `screenshot --page N` (no `--grid`; real Word on Windows). "validate pass" is not delivery; "looks like a real document" is.
 6. If anything failed, fix, then **rerun the full cycle** — one fix commonly creates another problem.
 
 ### Delivery Gate (run before handing off — any failure = REJECT, do NOT deliver)
