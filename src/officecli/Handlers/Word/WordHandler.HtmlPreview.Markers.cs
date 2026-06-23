@@ -356,11 +356,13 @@ public partial class WordHandler
         // ::marker font-family, so the browser draws the symbol font's glyph at
         // that slot. The disc/circle/square keyword switch maps low ASCII by its
         // LATIN meaning (e.g. "o" → circle), which is wrong for a symbol font
-        // where the 'o' slot is a checkbox ☐. PUA bullets (≥ U+F000 — U+F0B7 •,
-        // U+F0A7 ▪, U+F0FE ☑) keep the existing mapping: their keyword entries
-        // were authored for exactly these Wingdings/Symbol slots, and routing
-        // them to disc/square is intentional (cleaner marker metrics). So only
-        // skip the keyword early-return for a low-code symbol-font bullet.
+        // where the 'o' slot is a checkbox ☐. PUA bullets that HAVE a keyword
+        // entry (U+F0B7 • → disc, U+F0A7 ▪ → square) keep that mapping: routing
+        // them to disc/square is intentional (cleaner marker metrics). PUA
+        // checkbox/checkmark slots with no keyword (U+F0A8/F0FE/F0FD/F0FC/F0FB)
+        // fall through to TranslateSymbolPuaGlyph below and become portable
+        // Unicode ☐/☒/☑/✓/✗. So only skip the keyword early-return for a
+        // low-code symbol-font bullet.
         var symbolLowCode = text![0] < 0xF000
                             && IsSymbolBulletFont(GetBulletFontName(numId, ilvl));
         if (!symbolLowCode)
@@ -458,14 +460,39 @@ public partial class WordHandler
     // points that resolve to a real Unicode glyph with NO CSS list-style-type
     // keyword (so they can't go through BulletGlyphToCssKeyword). Word renders
     // the font's glyph at that slot; the HTML preview must substitute the
-    // matching Unicode char or the raw PUA code point renders as tofu (□).
-    //   - U+F02D = Symbol font slot 0x2D (minus/hyphen) → en-dash "–" (U+2013),
-    //     which is what Word draws for this common second-level dash bullet.
+    // matching Unicode char or the raw PUA code point lands in the CSS string
+    // literal / plain text and renders as tofu (□) on any host without the
+    // symbol font installed (Wingdings/Symbol are not web-safe).
+    //
+    // Mappings follow Microsoft's published Wingdings/Symbol -> Unicode glyph
+    // tables. The PUA slots (U+F0xx) are the F000-shifted form of the font's
+    // 8-bit code (e.g. Wingdings 0xFE -> U+F0FE); the low-code slot is the bare
+    // 8-bit code under a symbol font (Wingdings 'o' = U+006F = empty box).
+    //   - U+F02D = Symbol font slot 0x2D (minus/hyphen) -> en-dash (U+2013).
+    //   - Wingdings checkbox/checkmark slots used by "to-do" list markers, so a
+    //     host with no Wingdings font still shows a real box/check, not tofu:
+    //       0xA8 / U+F0A8 -> U+2610 empty ballot box
+    //       'o'  / U+006F -> U+2610 empty ballot box (Wingdings 'o' slot)
+    //       0xFE / U+F0FE -> U+2612 ballot box with X
+    //       0xFD / U+F0FD -> U+2611 ballot box with check
+    //       0xFC / U+F0FC -> U+2713 check mark
+    //       0xFB / U+F0FB -> U+2717 ballot X
+    // (Wingdings 0xA7 / U+F0A7 square and 0xB7 / U+F0B7 round bullet already
+    //  resolve to the square/disc CSS keyword via BulletGlyphToCssKeyword, so
+    //  they never reach here and need no entry.)
     // Single source of truth, applied by GetCustomListStyleString (HTML ::marker
-    // string literal) and BulletGlyphForText (plain-text walker).
+    // string literal) and BulletGlyphForText (plain-text walker). Real Unicode
+    // equivalents are preferred (most portable); a slot with no equivalent keeps
+    // the raw char and the caller adds font-family:'Wingdings' as fallback.
     private static string TranslateSymbolPuaGlyph(string lvlText) => lvlText switch
     {
-        "" => "–", // Symbol 0x2D minus → en-dash bullet
+        "\uf02d" => "\u2013", // Symbol 0x2D minus -> en-dash bullet
+        "\uf0a8" => "\u2610", // Wingdings 0xA8 -> empty ballot box
+        "o" => "\u2610",      // Wingdings 'o' (low-code) -> empty ballot box
+        "\uf0fe" => "\u2612", // Wingdings 0xFE -> ballot box with X
+        "\uf0fd" => "\u2611", // Wingdings 0xFD -> ballot box with check
+        "\uf0fc" => "\u2713", // Wingdings 0xFC -> check mark
+        "\uf0fb" => "\u2717", // Wingdings 0xFB -> ballot X
         _ => lvlText
     };
 
