@@ -27,7 +27,13 @@ public partial class WordHandler
                     "default" or "none" => DocGridValues.Default,
                     "lines" => DocGridValues.Lines,
                     "linesandchars" or "linesandcharacters" => DocGridValues.LinesAndChars,
-                    "snaptocharacters" or "snapchars" => DocGridValues.SnapToChars,
+                    // BUG-DUMP-H88: the Get readback emits docGrid.type from
+                    // grid.Type.InnerText, whose OOXML literal for SnapToChars is
+                    // "snapToChars" → lowercases to "snaptochars". Without this alias
+                    // the dump produced a value its own batch rejected: a CJK
+                    // snap-to-character grid round-tripped to type="default" with
+                    // linePitch + charSpace silently lost (the failed op was skipped).
+                    "snaptocharacters" or "snapchars" or "snaptochars" => DocGridValues.SnapToChars,
                     _ => throw new ArgumentException($"Invalid docGrid.type: '{value}'. Valid: default, lines, linesAndChars, snapToCharacters")
                 };
                 return true;
