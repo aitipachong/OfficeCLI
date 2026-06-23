@@ -328,6 +328,16 @@ public partial class WordHandler
                     if (emittedRuns.Contains(innerRun)) continue;
                     RenderRunHtml(sb, innerRun, para);
                 }
+                // Legacy Office 2003 smart tags (<w:smartTag>) parse as an
+                // OpenXmlUnknownElement whose nested <w:r> are also unknown, so
+                // Descendants<Run>() finds none and the wrapped text would be
+                // dropped. Fall back to the raw text when no run/hyperlink was
+                // rendered so smart-tagged content (e.g. "CALIFORNIA") survives.
+                if (!child.Descendants<Hyperlink>().Any() && !child.Descendants<Run>().Any()
+                    && !string.IsNullOrEmpty(child.InnerText))
+                {
+                    sb.Append(System.Net.WebUtility.HtmlEncode(child.InnerText));
+                }
             }
         }
 
