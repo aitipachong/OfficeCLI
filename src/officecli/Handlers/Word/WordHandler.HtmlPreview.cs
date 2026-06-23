@@ -382,6 +382,14 @@ public partial class WordHandler
         {
             var pgContent = pageList[i];
             var sectMatches = sectRegex.Matches(pgContent);
+            // BUG(trailing-continuous-cols, R87): remember the FIRST section
+            // marker on this page before the markers are stripped below — the
+            // page-body column decision needs it to detect a fewer-col→multi-col
+            // continuous transition within one page (trailing 2-col leaking onto
+            // earlier 1-col content). -1 = no marker (inherits previous page).
+            int firstSectIdxOnPage = sectMatches.Count > 0
+                ? int.Parse(sectMatches[0].Groups[1].Value)
+                : -1;
             if (sectMatches.Count > 0)
             {
                 var lastIdx = int.Parse(sectMatches[^1].Groups[1].Value);
@@ -492,6 +500,26 @@ public partial class WordHandler
             var colSectionForPage = (activeSectionIdx >= 0 && activeSectionIdx < sections.Count)
                 ? sections[activeSectionIdx]
                 : firstSection;
+            // BUG(trailing-continuous-cols, R87): when this page CONTAINS a
+            // continuous section transition from a fewer-col section into a
+            // multi-col one (e.g. a 1-col paper body whose trailing body sectPr
+            // is 2-col References), the multi-col content is already wrapped in
+            // its own scoped <div column-count> by RenderBodyHtml. Applying the
+            // active (last) section's multi-col to the WHOLE page-body here would
+            // reverse-leak it onto the earlier 1-col content. So when the page's
+            // FIRST section has fewer columns than the active section, the
+            // page-body keeps the FIRST section's column count and lets the inner
+            // scoped wrapper own the multi-col region. Single-section pages (first
+            // marker == active) and inline-multi-col pages (R85, active is already
+            // the multi-col inline section appearing first on its page) are
+            // unaffected.
+            if (firstSectIdxOnPage >= 0 && firstSectIdxOnPage < sections.Count
+                && firstSectIdxOnPage != activeSectionIdx
+                && GetSectionColumnCount(sections[firstSectIdxOnPage])
+                     < GetSectionColumnCount(colSectionForPage))
+            {
+                colSectionForPage = sections[firstSectIdxOnPage];
+            }
             var colBodyStyle = BuildColBodyStyle(colSectionForPage, colBodyHeightPt);
             sb.Append($"<div class=\"page-body\"{colBodyStyle}>");
             sb.Append(pageList[i]);
@@ -2183,6 +2211,46 @@ public partial class WordHandler
                 currentSectionIdx++;
                 sb.Append($"<!--SECT:{currentSectionIdx}-->");
                 ApplySectionFnSettings(allSections, currentSectionIdx);
+
+                // BUG(trailing-continuous-cols, R87): the TRAILING body sectPr
+                // (body.GetFirstChild<SectionProperties>(), the LAST entry of
+                // CollectSections) is never inline on a paragraph, so it never
+                // hits the inline-break multi-column branch below — that branch
+                // only fires for an inline sectPr ON a section-closing paragraph.
+                // When that trailing section is `continuous` AND multi-col (a
+                // 2-col References tail under a 1-col paper body), its multi-col
+                // layout otherwise falls through ONLY to the page-body-level
+                // BuildColBodyStyle, which applies it to the WHOLE page —
+                // reverse-leaking 2 columns onto the earlier 1-col body. Scope it
+                // here with its own column-count div so only the trailing content
+                // is multi-col; the page-body decision (above) keeps the earlier
+                // section's column count for the rest of the page.
+                // Narrowly gated to: (a) entering the LAST section, (b) which is
+                // the trailing body sectPr (not inline → not handled below),
+                // (c) a true column INCREASE vs the section we left. This cannot
+                // touch the inline-multi-col path (R85, handled by the branch
+                // below) or single-section docs (no advance happens).
+                var trailingBodySectPr = body.GetFirstChild<SectionProperties>();
+                if (!inMultiColumn
+                    && currentSectionIdx == allSections.Count - 1
+                    && allSections.Count >= 2
+                    && ReferenceEquals(allSections[currentSectionIdx], trailingBodySectPr))
+                {
+                    var enteredCols = GetSectionColumnCount(allSections[currentSectionIdx]);
+                    var leftCols = GetSectionColumnCount(allSections[currentSectionIdx - 1]);
+                    if (enteredCols > 1 && enteredCols > leftCols)
+                    {
+                        var sc = allSections[currentSectionIdx].GetFirstChild<Columns>();
+                        var sep = sc?.Separator?.Value == true;
+                        var space = sc?.Space?.Value;
+                        var gap = int.TryParse(space, out var sp) && sp > 0
+                            ? (sp / 20.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                            : "36";
+                        sb.AppendLine($"<div style=\"column-count:{enteredCols};column-gap:{gap}pt"
+                            + (sep ? ";column-rule:1px solid #000" : "") + "\">");
+                        inMultiColumn = true;
+                    }
+                }
             }
 
             // Emit invisible anchors for watch scroll targeting. #6: a
