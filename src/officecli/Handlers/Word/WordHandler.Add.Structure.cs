@@ -609,6 +609,42 @@ public partial class WordHandler
         return resultPath;
     }
 
+    // BUG-DUMP-NOTE-DEL: a footnote/endnote/comment whose seed content run carries
+    // track-change attribution (revision.type=del|ins on the `add <kind>` op) must
+    // have that run wrapped in <w:del>/<w:ins> — otherwise a tracked DELETION
+    // resurfaces as LIVE accepted text (a silent meaning change), the same way the
+    // body run path wraps via AddRun. Returns the wrapper (or the run unchanged when
+    // no revision attribution). For w:del the run's <w:t> become <w:delText>.
+    // Nested ins⊃del on a note seed is vanishingly rare and not handled here.
+    private OpenXmlElement ApplyNoteSeedRevision(Run run, Dictionary<string, string> properties)
+    {
+        if (!properties.TryGetValue("revision.type", out var rt)
+            || (rt != "del" && rt != "ins"))
+            return run;
+        OpenXmlElement wrapper = rt == "ins" ? new InsertedRun() : new DeletedRun();
+        string? author = properties.GetValueOrDefault("revision.author");
+        if (!string.IsNullOrEmpty(author))
+        {
+            if (wrapper is InsertedRun iw) iw.Author = author;
+            else if (wrapper is DeletedRun dw) dw.Author = author;
+        }
+        if (properties.TryGetValue("revision.date", out var dstr) && !string.IsNullOrEmpty(dstr)
+            && DateTime.TryParse(dstr, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt))
+        {
+            if (wrapper is InsertedRun iw2) iw2.Date = dt;
+            else if (wrapper is DeletedRun dw2) dw2.Date = dt;
+        }
+        var id = properties.GetValueOrDefault("revision.id");
+        if (string.IsNullOrEmpty(id)) id = GenerateRevisionId();
+        if (wrapper is InsertedRun iw3) iw3.Id = id;
+        else if (wrapper is DeletedRun dw3) dw3.Id = id;
+        if (rt == "del")
+            foreach (var t in run.Elements<Text>().ToList())
+                t.Parent?.ReplaceChild(new DeletedText(t.Text ?? "") { Space = t.Space }, t);
+        wrapper.AppendChild(run);
+        return wrapper;
+    }
+
     private string AddFootnote(OpenXmlElement parent, string parentPath, int? index, Dictionary<string, string> properties)
     {
         if (!properties.TryGetValue("text", out var fnText))
@@ -703,7 +739,7 @@ public partial class WordHandler
             fnContentPara = new Paragraph(
                 new ParagraphProperties(new ParagraphStyleId { Val = "FootnoteText" }),
                 new Run(fnRefMarkRPr, new FootnoteReferenceMark()),
-                fnTextRun
+                ApplyNoteSeedRevision(fnTextRun, properties)   // BUG-DUMP-NOTE-DEL
             );
         }
         footnote.AppendChild(fnContentPara);
@@ -813,7 +849,7 @@ public partial class WordHandler
             enContentPara = new Paragraph(
                 new ParagraphProperties(new ParagraphStyleId { Val = "EndnoteText" }),
                 new Run(enRefMarkRPr, new EndnoteReferenceMark()),
-                enTextRun
+                ApplyNoteSeedRevision(enTextRun, properties)   // BUG-DUMP-NOTE-DEL
             );
         }
         endnote.AppendChild(enContentPara);

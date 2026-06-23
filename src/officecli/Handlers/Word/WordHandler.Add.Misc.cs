@@ -120,7 +120,9 @@ public partial class WordHandler
         {
             var cmtRun = new Run();
             AppendTextWithBreaks(cmtRun, commentText);
-            commentBody = new Paragraph(cmtRun);
+            // BUG-DUMP-NOTE-DEL: honor track-change attribution on the comment seed
+            // run too (no-op when absent), mirroring the footnote/endnote seed.
+            commentBody = new Paragraph(ApplyNoteSeedRevision(cmtRun, properties));
         }
         // BUG-DUMP-R40-2: a Word-authored comment body opens with the comment
         // reference mark run — <w:r><w:rPr><w:rStyle w:val="CommentReference"/>
