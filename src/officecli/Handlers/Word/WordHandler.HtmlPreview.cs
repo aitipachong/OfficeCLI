@@ -1403,14 +1403,14 @@ public partial class WordHandler
         var rPr = defs?.RunPropertiesDefault?.RunPropertiesBaseStyle;
         var defaultRPr = defaultStyle?.StyleRunProperties;
 
-        // Font: docDefaults rFonts → Normal style rFonts → theme minor font → fallback
+        // Font: Normal style rFonts → docDefaults rFonts → theme minor font → fallback.
+        // OOXML cascade: the default paragraph (Normal) style overrides docDefaults,
+        // so Normal's rFonts must win when present (matches ResolveEffectiveRunPropertiesCore).
         var fonts = rPr?.RunFonts;
-        var font = NonEmpty(fonts?.EastAsia?.Value) ?? NonEmpty(fonts?.Ascii?.Value) ?? NonEmpty(fonts?.HighAnsi?.Value);
+        var nFonts = defaultRPr?.RunFonts;
+        var font = NonEmpty(nFonts?.EastAsia?.Value) ?? NonEmpty(nFonts?.Ascii?.Value) ?? NonEmpty(nFonts?.HighAnsi?.Value);
         if (font == null)
-        {
-            var nFonts = defaultRPr?.RunFonts;
-            font = NonEmpty(nFonts?.EastAsia?.Value) ?? NonEmpty(nFonts?.Ascii?.Value) ?? NonEmpty(nFonts?.HighAnsi?.Value);
-        }
+            font = NonEmpty(fonts?.EastAsia?.Value) ?? NonEmpty(fonts?.Ascii?.Value) ?? NonEmpty(fonts?.HighAnsi?.Value);
         if (font == null)
         {
             try
@@ -1421,12 +1421,13 @@ public partial class WordHandler
             catch (System.Xml.XmlException) { }
         }
 
-        // Size: docDefaults → Normal style → fallback (half-points → pt)
+        // Size: Normal style → docDefaults → fallback (half-points → pt).
+        // Same cascade rationale as font above — Normal's sz overrides docDefaults.
         double sizePt = 0;
-        if (rPr?.FontSize?.Val?.Value is string sz && int.TryParse(sz, out var hp))
-            sizePt = hp / 2.0;
-        if (sizePt == 0 && defaultRPr?.FontSize?.Val?.Value is string nsz && int.TryParse(nsz, out var nhp))
+        if (defaultRPr?.FontSize?.Val?.Value is string nsz && int.TryParse(nsz, out var nhp))
             sizePt = nhp / 2.0;
+        if (sizePt == 0 && rPr?.FontSize?.Val?.Value is string sz && int.TryParse(sz, out var hp))
+            sizePt = hp / 2.0;
         // OOXML §17.7.4.5 default: 20 half-points = 10pt when neither
         // rPrDefault nor Normal carries a size.
         if (sizePt == 0) sizePt = 10.0;
