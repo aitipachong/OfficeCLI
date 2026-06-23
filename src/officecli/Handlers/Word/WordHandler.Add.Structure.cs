@@ -692,11 +692,20 @@ public partial class WordHandler
                 new Run(fnRefMarkRPr, new Text(fnText) { Space = SpaceProcessingModeValues.Preserve })
             );
         else
+        {
+            // BUG-DUMP-NOTE-TAB: build the content run via AppendTextWithBreaks so a
+            // tab/newline in the seed text becomes a structural <w:tab/> / <w:br/>
+            // (mirrors `add r`), not a literal U+0009/U+000A glyph. A footnote ref
+            // mark is commonly followed by a <w:tab/> separating the number from the
+            // text; the verbatim Text node dropped that structural tab.
+            var fnTextRun = new Run();
+            AppendTextWithBreaks(fnTextRun, fnText);
             fnContentPara = new Paragraph(
                 new ParagraphProperties(new ParagraphStyleId { Val = "FootnoteText" }),
                 new Run(fnRefMarkRPr, new FootnoteReferenceMark()),
-                new Run(new Text(fnText) { Space = SpaceProcessingModeValues.Preserve })
+                fnTextRun
             );
+        }
         footnote.AppendChild(fnContentPara);
         // i18n: route remaining keys (direction, font.cs, bold.cs, etc.)
         // through the same paragraph + run helpers SetFootnotePath uses.
@@ -796,11 +805,17 @@ public partial class WordHandler
                 new Run(enRefMarkRPr, new Text(enText) { Space = SpaceProcessingModeValues.Preserve })
             );
         else
+        {
+            // BUG-DUMP-NOTE-TAB: see AddFootnote — split tab/newline in the seed
+            // text into structural <w:tab/> / <w:br/> instead of a literal glyph.
+            var enTextRun = new Run();
+            AppendTextWithBreaks(enTextRun, enText);
             enContentPara = new Paragraph(
                 new ParagraphProperties(new ParagraphStyleId { Val = "EndnoteText" }),
                 new Run(enRefMarkRPr, new EndnoteReferenceMark()),
-                new Run(new Text(enText) { Space = SpaceProcessingModeValues.Preserve })
+                enTextRun
             );
+        }
         endnote.AppendChild(enContentPara);
         // i18n: route remaining keys through the same helper as footnote.
         var enUnsupported = new List<string>();

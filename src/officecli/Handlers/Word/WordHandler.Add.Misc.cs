@@ -110,9 +110,18 @@ public partial class WordHandler
 
         // BUG-R6B(BUG1): empty text -> empty paragraph (no run); non-empty ->
         // a run carrying the text. Both are valid OOXML comment bodies.
-        var commentBody = string.IsNullOrEmpty(commentText)
-            ? new Paragraph()
-            : new Paragraph(new Run(new Text(commentText) { Space = SpaceProcessingModeValues.Preserve }));
+        // BUG-DUMP-NOTE-TAB: build the seed run via AppendTextWithBreaks so a tab /
+        // newline in the comment text becomes a structural <w:tab/> / <w:br/> rather
+        // than a literal U+0009/U+000A glyph (mirrors `add r` and AddFootnote).
+        Paragraph commentBody;
+        if (string.IsNullOrEmpty(commentText))
+            commentBody = new Paragraph();
+        else
+        {
+            var cmtRun = new Run();
+            AppendTextWithBreaks(cmtRun, commentText);
+            commentBody = new Paragraph(cmtRun);
+        }
         // BUG-DUMP-R40-2: a Word-authored comment body opens with the comment
         // reference mark run — <w:r><w:rPr><w:rStyle w:val="CommentReference"/>
         // </w:rPr><w:annotationRef/></w:r>. The dump emitter rides this run on
