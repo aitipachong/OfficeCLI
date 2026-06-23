@@ -2992,10 +2992,19 @@ public partial class WordHandler
         .page-body-cont > :first-child {{ margin-top: 0 !important; }}
         .page-body > img + h1, .page-body > img + img + h1 {{ margin-top: 0 !important; }}
         .doc-header, .doc-footer {{ font-size: {dd.SizePt:0.##}pt; }}
+        /* Word paints the header/footer in a layer BEHIND the main body text
+           (they are background bands, not foreground content). The header/footer
+           is position:absolute, so without a z-index it would paint ABOVE the
+           in-flow .page-body (positioned elements paint over non-positioned
+           siblings at the same z-auto level). A full-bleed cover banner floated
+           into the header would then occlude the body text on every page. Pin
+           the band to z-index:-1 so body text (z-auto) paints on top of it, yet
+           it stays ABOVE the white page fill (.page::before at z-index:-2). This
+           also makes the cover-page white title overlay the banner correctly. */
         .doc-header {{ position: absolute; top: {pg.HeaderDistancePt:0.#}pt; left: {mL}; right: {mR};
-            padding-bottom: 0.3em; }}
+            padding-bottom: 0.3em; z-index: -1; }}
         .doc-footer {{ position: absolute; bottom: {pg.FooterDistancePt:0.#}pt; left: {mL}; right: {mR};
-            padding-top: 0.3em; }}
+            padding-top: 0.3em; z-index: -1; }}
         h1, h2, h3, h4, h5, h6 {{ line-height: {FontMetricsReader.GetRatio(dd.Font) * dd.LineHeight:0.####}; }}
         p {{ margin: 0; margin-bottom: {(dd.SpaceAfterPt > 0 ? $"{dd.SpaceAfterPt:0.##}pt" : "0")}; line-height: {FontMetricsReader.GetRatio(dd.Font) * dd.LineHeight:0.####}; text-align: {dd.DefaultAlign};{(dd.DefaultAlign == "justify" ? " text-justify: inter-character;" : "")} text-autospace: ideograph-alpha ideograph-numeric; }}
         a {{ color: #2B579A; }} a:hover {{ color: #1a3c6e; }}
