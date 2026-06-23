@@ -482,7 +482,16 @@ public partial class WordHandler
 
         var widthAttr = widthPx > 0 ? $" width=\"{widthPx}\"" : "";
         var heightAttr = heightPx > 0 ? $" height=\"{heightPx}\"" : "";
-        var style = $"position:absolute;left:{leftPt:0.#}pt;top:{topPt:0.#}pt;z-index:{zIndex}";
+        // Absolutely-positioned overlay: write the declared px dimensions (from
+        // the EMU extent) into inline style + max-width:none so the global
+        // img{max-width:100%} rule can't clamp the image to the .page width.
+        // A behindDoc full-page cover (declared wider than the page) must bleed
+        // past the page edges to cover everything; clamping shrank it to ~61%.
+        // Both dims come from the same extent, so aspect ratio is preserved.
+        var sizeCss = "";
+        if (widthPx > 0) sizeCss += $";width:{widthPx}px;max-width:none";
+        if (heightPx > 0) sizeCss += $";height:{heightPx}px";
+        var style = $"position:absolute;left:{leftPt:0.#}pt;top:{topPt:0.#}pt;z-index:{zIndex}{sizeCss}";
 
         var crop = GetCropPercents(drawing);
         if (crop.HasValue)
