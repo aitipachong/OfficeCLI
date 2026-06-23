@@ -2012,9 +2012,21 @@ public partial class WordHandler
         // Primary path: the result run was tagged with its field-kind class.
         // Replace the whole tagged span's inner content with the dynamic
         // placeholder span (keeping the renumber-loop class hooks intact).
-        var pageTag = new Regex(@"<span class=""page-num-result"">.*?</span>",
+        //
+        // The body alternation `(?:[^<]|<span[^>]*>[^<]*</span>)*` is required
+        // because RenderRunHtml wraps a formatted result run (e.g. the cached
+        // PAGE digit carrying the Footer style's color) in its OWN inner
+        // `<span style=...>…</span>`. A naive `.*?</span>` (non-greedy) would
+        // stop at that INNER `</span>`, replace only up to it, and leak the
+        // cached digit out as a stray span — rendering "Page 2" as "Page 22"
+        // (live number + leftover cache). Matching the wrapper's balanced
+        // close (allowing zero-or-more nested formatting spans) consumes the
+        // whole result run so the cached digit never survives.
+        var pageTag = new Regex(
+            @"<span class=""page-num-result"">(?:[^<]|<span[^>]*>[^<]*</span>)*</span>",
             RegexOptions.Singleline);
-        var numPagesTag = new Regex(@"<span class=""num-pages-result"">.*?</span>",
+        var numPagesTag = new Regex(
+            @"<span class=""num-pages-result"">(?:[^<]|<span[^>]*>[^<]*</span>)*</span>",
             RegexOptions.Singleline);
         bool didPage = false, didNumPages = false;
         if (hasPage && pageTag.IsMatch(html))
