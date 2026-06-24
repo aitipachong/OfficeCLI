@@ -125,7 +125,7 @@ public partial class WordHandler
             // twips -> pt = w / 20. pct/auto types skipped (dxa is the common case).
             var tblInd = tblPr?.TableIndentation;
             if (tblInd?.Type?.InnerText is null or "dxa"
-                && tblInd?.Width?.Value is int indW && indW > 0)
+                && LenientDxa(tblInd?.Width) is int indW && indW > 0)
                 tableStyles.Add($"margin-left:{indW / 20.0:0.#}pt");
         }
 
