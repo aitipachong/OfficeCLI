@@ -210,6 +210,26 @@ internal partial class FormulaEvaluator
             "OFFSET" => EvalOffset(args),
             "INDIRECT" => EvalIndirect(args),
 
+            // ===== Dynamic arrays / spill (W6) =====
+            "SEQUENCE" => EvalSequence(args),
+            "TRANSPOSE" => EvalTranspose(args),
+            "SORT" => EvalSort(args),
+            "SORTBY" => EvalSortBy(args),
+            "UNIQUE" => EvalUnique(args),
+            "FILTER" => EvalFilter(args),
+            "TAKE" => EvalTake(args),
+            "DROP" => EvalDrop(args),
+            "CHOOSEROWS" => EvalChooseRowsCols(args, rowsMode: true),
+            "CHOOSECOLS" => EvalChooseRowsCols(args, rowsMode: false),
+            "TOCOL" => EvalToColRow(args, toCol: true),
+            "TOROW" => EvalToColRow(args, toCol: false),
+            "EXPAND" => EvalExpand(args),
+            "HSTACK" => EvalStack(args, horizontal: true),
+            "VSTACK" => EvalStack(args, horizontal: false),
+            "WRAPROWS" => EvalWrap(args, byRows: true),
+            "WRAPCOLS" => EvalWrap(args, byRows: false),
+            "TEXTSPLIT" => EvalTextSplit(args),
+
             // ===== Date & Time =====
             "TODAY" => FR(DateTime.Today.ToOADate()), "NOW" => FR(DateTime.Now.ToOADate()),
             "DATE" => FR(new DateTime((int)num(0), (int)num(1), (int)num(2)).ToOADate()),

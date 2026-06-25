@@ -58,6 +58,7 @@ public static class ModernFunctionQualifier
         "TOCOL", "TOROW",
         "WRAPCOLS", "WRAPROWS",
         "EXPAND",
+        "HSTACK", "VSTACK",
         "ANCHORARRAY",
     };
 
@@ -81,6 +82,7 @@ public static class ModernFunctionQualifier
         "LET", "LAMBDA",
         "TAKE", "DROP", "CHOOSECOLS", "CHOOSEROWS",
         "TOCOL", "TOROW", "WRAPCOLS", "WRAPROWS", "EXPAND",
+        "HSTACK", "VSTACK", "TRANSPOSE",
         "TEXTSPLIT",
         "ANCHORARRAY",
     };
