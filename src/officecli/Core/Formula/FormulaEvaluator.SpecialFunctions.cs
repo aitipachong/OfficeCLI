@@ -187,6 +187,28 @@ internal partial class FormulaEvaluator
         return 1 - Math.Exp(Math.Log(1 - x) * b + Math.Log(x) * a - lbeta) / b * BetaCF(1 - x, b, a);
     }
 
+    // Inverse of I_x(a,b)=p in x, by bisection (monotonic in x on [0,1]).
+    internal static double InvRegIncBeta(double p, double a, double b)
+    {
+        if (p <= 0) return 0;
+        if (p >= 1) return 1;
+        double lo = 0, hi = 1;
+        for (int i = 0; i < 200; i++)
+        {
+            double mid = 0.5 * (lo + hi);
+            if (RegIncBeta(mid, a, b) < p) lo = mid; else hi = mid;
+            if (hi - lo < 1e-15) break;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    // Binomial coefficient C(n,k) via log-gamma (stable for large n).
+    internal static double Binom(double n, double k)
+    {
+        if (k < 0 || k > n) return 0;
+        return Math.Round(Math.Exp(GammaLn(n + 1) - GammaLn(k + 1) - GammaLn(n - k + 1)));
+    }
+
     private static double BetaCF(double x, double a, double b)
     {
         const double tiny = 1e-300;

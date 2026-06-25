@@ -104,4 +104,195 @@ internal partial class FormulaEvaluator
         if (x < 0 || lambda <= 0) return FormulaResult.Error("#NUM!");
         return FR(Cumulative(args, 2) ? 1 - Math.Exp(-lambda * x) : lambda * Math.Exp(-lambda * x));
     }
+
+    // ==================== Incomplete-beta family ====================
+
+    // BETA.DIST(x, alpha, beta, cumulative, [A], [B]) / BETADIST (always CDF).
+    private static FormulaResult? EvalBetaDist(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double x = N(args, 0), a = N(args, 1), b = N(args, 2);
+        bool legacy = args.Count < 4 || args[3] is not FormulaResult;     // BETADIST has no cumulative flag
+        bool cum = legacy || Cumulative(args, 3);
+        double lo = N(args, legacy ? 3 : 4, 0), hi = N(args, legacy ? 4 : 5, 1);
+        if (a <= 0 || b <= 0 || hi <= lo || x < lo || x > hi) return FormulaResult.Error("#NUM!");
+        double z = (x - lo) / (hi - lo);
+        if (cum) return FR(RegIncBeta(z, a, b));
+        double pdf = Math.Exp((a - 1) * Math.Log(z) + (b - 1) * Math.Log(1 - z)
+            - (GammaLn(a) + GammaLn(b) - GammaLn(a + b))) / (hi - lo);
+        return FR(pdf);
+    }
+
+    // BETA.INV(p, alpha, beta, [A], [B]) / BETAINV.
+    private static FormulaResult? EvalBetaInv(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double p = N(args, 0), a = N(args, 1), b = N(args, 2), lo = N(args, 3, 0), hi = N(args, 4, 1);
+        if (a <= 0 || b <= 0 || p < 0 || p > 1 || hi <= lo) return FormulaResult.Error("#NUM!");
+        return FR(lo + (hi - lo) * InvRegIncBeta(p, a, b));
+    }
+
+    // Student-t CDF and tails via the incomplete beta.
+    private static double TDistCdf(double t, double df)
+    {
+        double x = df / (df + t * t);
+        double tail = 0.5 * RegIncBeta(x, df / 2, 0.5);
+        return t >= 0 ? 1 - tail : tail;
+    }
+    private static double TDistRightTail(double t, double df) => 1 - TDistCdf(t, df);
+
+    // T.DIST(x, df, cumulative).
+    private static FormulaResult? EvalTDist(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double t = N(args, 0), df = N(args, 1);
+        if (df < 1) return FormulaResult.Error("#NUM!");
+        if (Cumulative(args, 2)) return FR(TDistCdf(t, df));
+        double pdf = Math.Exp(GammaLn((df + 1) / 2) - GammaLn(df / 2)) / Math.Sqrt(df * Math.PI)
+            * Math.Pow(1 + t * t / df, -(df + 1) / 2);
+        return FR(pdf);
+    }
+
+    // T.DIST.2T(x, df) — two-tailed (x ≥ 0).
+    private static FormulaResult? EvalTDist2T(List<object> args)
+    {
+        if (args.Count < 2) return null;
+        double t = N(args, 0), df = N(args, 1);
+        if (t < 0 || df < 1) return FormulaResult.Error("#NUM!");
+        return FR(RegIncBeta(df / (df + t * t), df / 2, 0.5));
+    }
+
+    // TDIST(x, df, tails) — legacy; x ≥ 0, tails ∈ {1,2}.
+    private static FormulaResult? EvalTDistLegacy(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double t = N(args, 0), df = N(args, 1); int tails = (int)N(args, 2);
+        if (t < 0 || df < 1 || (tails != 1 && tails != 2)) return FormulaResult.Error("#NUM!");
+        double oneTail = TDistRightTail(t, df);
+        return FR(tails == 1 ? oneTail : 2 * oneTail);
+    }
+
+    private static double TInv(double p, double df)
+    {
+        // invert the CDF; CDF is monotonic so bisect over a wide range
+        double lo = -1e6, hi = 1e6;
+        for (int i = 0; i < 200; i++)
+        {
+            double mid = 0.5 * (lo + hi);
+            if (TDistCdf(mid, df) < p) lo = mid; else hi = mid;
+            if (hi - lo < 1e-12) break;
+        }
+        return 0.5 * (lo + hi);
+    }
+    private static double TInv2T(double p, double df) => TInv(1 - p / 2, df);   // two-tailed prob → positive t
+
+    // F-distribution CDF via the incomplete beta.
+    private static double FDistCdf(double x, double d1, double d2)
+    {
+        if (x <= 0) return 0;
+        return RegIncBeta(d1 * x / (d1 * x + d2), d1 / 2, d2 / 2);
+    }
+
+    // F.DIST(x, df1, df2, cumulative).
+    private static FormulaResult? EvalFDist(List<object> args)
+    {
+        if (args.Count < 4) return null;
+        double x = N(args, 0), d1 = N(args, 1), d2 = N(args, 2);
+        if (x < 0 || d1 < 1 || d2 < 1) return FormulaResult.Error("#NUM!");
+        if (Cumulative(args, 3)) return FR(FDistCdf(x, d1, d2));
+        double pdf = Math.Sqrt(Math.Pow(d1 * x, d1) * Math.Pow(d2, d2) / Math.Pow(d1 * x + d2, d1 + d2))
+            / (x * Math.Exp(GammaLn(d1 / 2) + GammaLn(d2 / 2) - GammaLn((d1 + d2) / 2)));
+        return FR(pdf);
+    }
+
+    private static double FInv(double p, double d1, double d2)
+    {
+        double lo = 0, hi = 1e7;
+        for (int i = 0; i < 200; i++)
+        {
+            double mid = 0.5 * (lo + hi);
+            if (FDistCdf(mid, d1, d2) < p) lo = mid; else hi = mid;
+            if (hi - lo < 1e-10) break;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    // BINOM.DIST(k, n, p, cumulative) / BINOMDIST.
+    private static FormulaResult? EvalBinomDist(List<object> args)
+    {
+        if (args.Count < 4) return null;
+        double k = Math.Floor(N(args, 0)), n = Math.Floor(N(args, 1)), p = N(args, 2);
+        if (k < 0 || k > n || p < 0 || p > 1) return FormulaResult.Error("#NUM!");
+        if (Cumulative(args, 3))
+        {
+            double sum = 0;
+            for (int i = 0; i <= k; i++) sum += Binom(n, i) * Math.Pow(p, i) * Math.Pow(1 - p, n - i);
+            return FR(sum);
+        }
+        return FR(Binom(n, k) * Math.Pow(p, k) * Math.Pow(1 - p, n - k));
+    }
+
+    // BINOM.INV(n, p, alpha) / CRITBINOM — smallest k with CDF ≥ alpha.
+    private static FormulaResult? EvalBinomInv(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double n = Math.Floor(N(args, 0)), p = N(args, 1), alpha = N(args, 2);
+        if (n < 0 || p < 0 || p > 1 || alpha <= 0 || alpha > 1) return FormulaResult.Error("#NUM!");
+        double cdf = 0;
+        for (int k = 0; k <= n; k++)
+        {
+            cdf += Binom(n, k) * Math.Pow(p, k) * Math.Pow(1 - p, n - k);
+            if (cdf >= alpha) return FR(k);
+        }
+        return FR(n);
+    }
+
+    // NEGBINOM.DIST(f, s, p, [cumulative]) / NEGBINOMDIST (pmf only).
+    private static FormulaResult? EvalNegBinom(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double f = Math.Floor(N(args, 0)), s = Math.Floor(N(args, 1)), p = N(args, 2);
+        if (f < 0 || s < 1 || p < 0 || p > 1) return FormulaResult.Error("#NUM!");
+        bool cum = args.Count >= 4 && Cumulative(args, 3);
+        if (cum)
+        {
+            double sum = 0;
+            for (int i = 0; i <= f; i++) sum += Binom(i + s - 1, i) * Math.Pow(p, s) * Math.Pow(1 - p, i);
+            return FR(sum);
+        }
+        return FR(Binom(f + s - 1, f) * Math.Pow(p, s) * Math.Pow(1 - p, f));
+    }
+
+    // WEIBULL.DIST(x, alpha, beta, cumulative) / WEIBULL.
+    private static FormulaResult? EvalWeibull(List<object> args)
+    {
+        if (args.Count < 4) return null;
+        double x = N(args, 0), a = N(args, 1), b = N(args, 2);
+        if (x < 0 || a <= 0 || b <= 0) return FormulaResult.Error("#NUM!");
+        double z = Math.Pow(x / b, a);
+        return FR(Cumulative(args, 3) ? 1 - Math.Exp(-z) : a / Math.Pow(b, a) * Math.Pow(x, a - 1) * Math.Exp(-z));
+    }
+
+    // LOGNORM.DIST(x, mean, sd, cumulative) / LOGNORMDIST (always CDF).
+    private static FormulaResult? EvalLognormDist(List<object> args)
+    {
+        if (args.Count < 3) return null;
+        double x = N(args, 0), mean = N(args, 1), sd = N(args, 2);
+        if (x <= 0 || sd <= 0) return FormulaResult.Error("#NUM!");
+        double z = (Math.Log(x) - mean) / sd;
+        bool cum = args.Count < 4 || args[3] is not FormulaResult || Cumulative(args, 3);
+        return FR(cum ? NormCdf(z) : NormPdf(z) / (x * sd));
+    }
+
+    // HYPGEOM.DIST(sample_s, sample_n, pop_s, pop_n, [cumulative]) / HYPGEOMDIST.
+    private static FormulaResult? EvalHypgeom(List<object> args)
+    {
+        if (args.Count < 4) return null;
+        double k = Math.Floor(N(args, 0)), n = Math.Floor(N(args, 1)), K = Math.Floor(N(args, 2)), Npop = Math.Floor(N(args, 3));
+        if (k < 0 || k > n || n > Npop || K > Npop || k > K || n - k > Npop - K) return FormulaResult.Error("#NUM!");
+        double Pmf(double i) => Binom(K, i) * Binom(Npop - K, n - i) / Binom(Npop, n);
+        bool cum = args.Count >= 5 && Cumulative(args, 4);
+        if (cum) { double sum = 0; for (int i = 0; i <= k; i++) sum += Pmf(i); return FR(sum); }
+        return FR(Pmf(k));
+    }
 }
